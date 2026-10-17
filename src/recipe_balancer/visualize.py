@@ -8,6 +8,8 @@
 
     绿色 = 外部输入    蓝色 = 中间产物    黄色 = 副产物
     红色 = 启动库存    紫色 = 目标产物    橙色方块 = 配方
+
+红色节点悬浮时显示所需启动量（「需要启动库存: N」）。
 """
 
 from __future__ import annotations
@@ -58,7 +60,7 @@ def _material_tooltip(
     item: str,
     target_items: Set[str],
     external_inputs: Set[str],
-    bootstrap_items: Set[str],
+    bootstrap_inventory: Dict[str, float],
     final_outputs: Set[str],
 ) -> str:
     tooltip = f"{item}"
@@ -66,8 +68,8 @@ def _material_tooltip(
         tooltip += "\n\n目标产物"
     if item in external_inputs:
         tooltip += "\n外部输入"
-    if item in bootstrap_items:
-        tooltip += "\n需要启动库存"
+    if item in bootstrap_inventory:
+        tooltip += f"\n需要启动库存: {_fmt_amount(bootstrap_inventory[item])}"
     if item in final_outputs:
         tooltip += "\n最终副产物"
     return tooltip
@@ -142,7 +144,8 @@ def draw_production_graph_pyvis(
     # ---- 特殊物质集合 ----
     external_inputs = set(solution.external_inputs.keys())
     final_outputs = set(solution.final_outputs.keys())
-    bootstrap_items = set(solution.bootstrap_inventory.keys())
+    bootstrap_inventory = dict(solution.bootstrap_inventory)
+    bootstrap_items = set(bootstrap_inventory)
     target_items = set((target_products or {}).keys())
 
     material_nodes: Set[str] = set()
@@ -155,7 +158,7 @@ def draw_production_graph_pyvis(
             item, target_items, external_inputs, bootstrap_items, final_outputs
         )
         tooltip = _material_tooltip(
-            item, target_items, external_inputs, bootstrap_items, final_outputs
+            item, target_items, external_inputs, bootstrap_inventory, final_outputs
         )
         net.add_node(
             item,

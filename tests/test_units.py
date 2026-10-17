@@ -327,6 +327,20 @@ def test_visualize_writes_html(tmp_path):
     assert out.exists() and out.stat().st_size > 1000
 
 
+def test_material_tooltip_shows_bootstrap_amount():
+    """红色（启动库存）节点的悬浮提示要带具体数量。"""
+    from recipe_balancer.visualize import _material_tooltip
+
+    tip = _material_tooltip("C", set(), set(), {"C": 2.0}, set())
+    assert "需要启动库存: 2" in tip
+    # 非启动库存物品不显示该行
+    tip = _material_tooltip("圆石", set(), set(), {}, set())
+    assert "启动库存" not in tip
+    # 小数用量用 %g 展示
+    tip = _material_tooltip("X", set(), set(), {"X": 1.25}, set())
+    assert "需要启动库存: 1.25" in tip
+
+
 def test_cli_solve(tmp_path):
     from recipe_balancer.cli import main
 
