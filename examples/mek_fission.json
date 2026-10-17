@@ -1,0 +1,221 @@
+{
+  "recipes": [
+    {
+      "sourceList": {
+        "水": 10000.0,
+        "钋": 1000.0,
+        "氟石": 1
+      },
+      "time": 10,
+      "equType": "加压反应",
+      "productList": {
+        "钋球": 1,
+        "用尽的核废料": 1000.0
+      }
+    },
+    {
+      "sourceList": {
+        "核废水": 2560
+      },
+      "time": 1,
+      "equType": "中子活化",
+      "productList": {
+        "钋": 256
+      }
+    },
+    {
+      "sourceList": {
+        "裂变燃料": 100000.0
+      },
+      "time": 1,
+      "equType": "液冷核聚变",
+      "productList": {
+        "核废水": 100000.0
+      }
+    },
+    {
+      "sourceList": {
+        "六氟化铀": 256
+      },
+      "time": 1,
+      "equType": "离心",
+      "productList": {
+        "裂变燃料": 256
+      }
+    },
+    {
+      "sourceList": {
+        "氢氟酸": 256,
+        "氧化铀": 256
+      },
+      "time": 1,
+      "equType": "化学灌注",
+      "productList": {
+        "六氟化铀": 256
+      }
+    },
+    {
+      "sourceList": {
+        "铀黄饼": 1
+      },
+      "time": 10,
+      "equType": "化学氧化",
+      "productList": {
+        "氧化铀": 250
+      }
+    },
+    {
+      "sourceList": {
+        "铀": 9
+      },
+      "time": 20,
+      "equType": "富集仓",
+      "productList": {
+        "铀黄饼": 18
+      }
+    },
+    {
+      "sourceList": {
+        "液态氢氟酸": 256
+      },
+      "time": 1,
+      "equType": "回旋",
+      "productList": {
+        "氢氟酸": 256
+      }
+    },
+    {
+      "sourceList": {
+        "氟石溶液": 333,
+        "硫酸": 500
+      },
+      "time": 13,
+      "equType": "NUC化反",
+      "productList": {
+        "液态氢氟酸": 1000,
+        "硫酸钙溶液": 333
+      }
+    },
+    {
+      "sourceList": {
+        "氟石": 1,
+        "水": 10000.0
+      },
+      "time": 10,
+      "equType": "NUC溶解器",
+      "productList": {
+        "氟石溶液": 666
+      }
+    },
+    {
+      "sourceList": {
+        "液态氧": 48000,
+        "水": 32000,
+        "硫": 32
+      },
+      "time": 960,
+      "equType": "化工复合",
+      "productList": {
+        "硫酸": 32000
+      }
+    },
+    {
+      "sourceList": {
+        "三氧化硫": 256,
+        "水蒸气": 1000.0
+      },
+      "time": 1,
+      "equType": "化学灌注",
+      "productList": {
+        "硫酸MEK": 256
+      }
+    },
+    {
+      "sourceList": {
+        "水": 256
+      },
+      "time": 1,
+      "equType": "回旋",
+      "productList": {
+        "水蒸气": 256
+      }
+    },
+    {
+      "sourceList": {
+        "二氧化硫": 512,
+        "氧气": 256
+      },
+      "time": 1,
+      "equType": "化学灌注",
+      "productList": {
+        "三氧化硫": 512
+      }
+    },
+    {
+      "sourceList": {
+        "水": 512
+      },
+      "time": 1,
+      "equType": "电解",
+      "productList": {
+        "氧气": 256,
+        "氢气": 512
+      }
+    },
+    {
+      "sourceList": {
+        "液态二氧化硫": 256
+      },
+      "time": 1,
+      "equType": "回旋",
+      "productList": {
+        "二氧化硫": 256
+      }
+    },
+    {
+      "sourceList": {
+        "熔融硫": 333,
+        "液态氧": 500
+      },
+      "time": 2.5,
+      "equType": "化工复合",
+      "productList": {
+        "液态二氧化硫": 256
+      }
+    },
+    {
+      "sourceList": {
+        "氧气": 256
+      },
+      "time": 1,
+      "equType": "回旋",
+      "productList": {
+        "液态氧": 256
+      }
+    },
+    {
+      "sourceList": {
+        "硫": 1
+      },
+      "time": 2.5,
+      "equType": "高温熔化",
+      "productList": {
+        "熔融硫": 666
+      }
+    },
+    {
+      "sourceList": {
+        "花岗岩": 1
+      },
+      "time": 7,
+      "equType": "岩石粉碎",
+      "productList": {
+        "硫": 0.6
+      }
+    }
+  ],
+  "target_products": {
+    "钋球": 0.05
+  },
+  "options": {}
+}

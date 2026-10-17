@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "recipe-balancer"
+version = "0.1.0"
+description = "MC 整合包配方树稳态配平求解器（化学计量矩阵 + LP）"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy",
+    "scipy",
+    "networkx",
+]
+
+[project.optional-dependencies]
+viz = ["pyvis"]
+test = ["pytest"]
+
+[project.scripts]
+recipe-balancer = "recipe_balancer.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,0 +1,66 @@
+{
+  "recipes": [
+    {
+      "sourceList": {
+        "空": 1
+      },
+      "time": 5,
+      "equType": "造石机",
+      "productList": {
+        "圆石": 1
+      }
+    },
+    {
+      "sourceList": {
+        "圆石": 1
+      },
+      "time": 2.2222222222222223,
+      "equType": "粉碎",
+      "productList": {
+        "沙砾": 1
+      }
+    },
+    {
+      "sourceList": {
+        "沙砾": 1
+      },
+      "time": 10,
+      "equType": "筛子",
+      "productList": {
+        "钻石": 0.1,
+        "铁锭": 0.2,
+        "金锭": 0.2,
+        "红石": 0.3
+      }
+    },
+    {
+      "sourceList": {
+        "铁锭": 4
+      },
+      "time": 2,
+      "equType": "分子装配",
+      "productList": {
+        "铁齿轮": 1
+      }
+    },
+    {
+      "sourceList": {
+        "铁齿轮": 1,
+        "铁锭": 8
+      },
+      "time": 2,
+      "equType": "分子装配",
+      "productList": {
+        "铁质机械外壳": 1
+      }
+    }
+  ],
+  "target_products": {
+    "铁质机械外壳": 64
+  },
+  "options": {
+    "raw_materials": [
+      "圆石"
+    ]
+  }
+}
