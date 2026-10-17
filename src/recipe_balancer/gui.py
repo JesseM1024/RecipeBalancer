@@ -1,42 +1,35 @@
 """tkinter 图形界面：配方卡片流 / 目标设置 / 实时结果 / 一键可视化。
 
-布局（左侧编辑 / 右侧结果）：
+设计要点：
+
+- **DPI 感知**：Windows 下启动时声明 DPI awareness 并按实际 DPI 设置
+  ``tk scaling``，避免 150% 缩放时被系统位图拉伸导致文字发虚（原生像素渲染）；
+- **明暗双主题**：``PALETTES`` 定义两套配色，切换时重建控件（ttk clam 主题可着色）；
+- **设置**：可视化输出目录、默认导出目录、主题，持久化到
+  ``~/.recipe_balancer/config.json``。
+
+布局（左侧编辑 / 右侧结果）::
 
     ┌───────────────────────────────┬───────────────┐
     │ 目标产物 / 速率 / 单位          │               │
     │ 目标列表（最多 3 行，可滚动）    │               │
-    │ 求解目标 / 循环检测             │   文本结果     │
+    │ 求解目标 / 循环检测 / 夜间模式   │   文本结果     │
     │ 外部原料                        │               │
     │ 循环亏损表                      │               │
     ├───────────────────────────────┤               │
     │ 筛选框                         │               │
-    │ ┌ 配方卡片 1（可滚动）───────┐  │               │
-    │ │ 原料（回车添加）           │  │               │
-    │ │ 产物（回车添加）           │  │               │
-    │ │ 机器类型 / 耗时 / 单位      │  │               │
-    │ └───────────────────────────┘  │               │
+    │ 配方卡片（可滚动）              │               │
     ├───────────────────────────────┤               │
-    │ 新增 / 求解 / 导入 / 导出        │ 启动浏览器按钮 │
+    │ 新增/求解/导入/导出/设置         │ 启动浏览器按钮 │
     └───────────────────────────────┴───────────────┘
-
-时间单位：
-
-- **每个耗时字段、每个目标速率各自带单位**（t / 秒 / 分 / 时），互不影响；
-- 录入后统一**归一化为 tick**，再换算成求解器使用的秒/每秒：
-  ``1 t = 0.05 s``，``速率(每秒) = 速率(/单位) ÷ (单位秒数)``；
-- 配方耗时的内部存储仍是秒（场景 JSON 契约不变）。
-
-其它约定：
-
-- 改动即时写入内存模型，合法时 600ms 后自动求解；
-- 原料允许为空（视为无输入）；产物为空则配方无效；
-- 新增配方不带占位物品。
 """
 
 from __future__ import annotations
 
 import copy
+import ctypes
 import re
+import sys
 import tempfile
 import time
 import webbrowser
@@ -45,15 +38,23 @@ import tkinter as tk
 from tkinter import filedialog, font as tkfont, messagebox, ttk
 from typing import Any, Dict, List, Optional, Set
 
+from .config import load_config, save_config
 from .io import load_scenario, save_scenario
 from .models import RecipeSolution
 from .report import format_solution
 from .solver import solve_production
 
 APP_TITLE = "配方树自动配平"
-CARD_BG = "#fbfbfb"
-LIST_BG = "#efefef"
-MUTED = "#6b6b6b"
+
+#: 结果区还没有任何报告时的引导文案
+REPORT_PLACEHOLDER = (
+    "结果区（还没有求解结果）\n"
+    "\n"
+    "  1. 在上方填写目标产物与速率，回车或点「添加目标」\n"
+    "  2. 在配方卡片里录入原料 / 产物：名称 + 数量，回车即添加\n"
+    "  3. 按 F5（或 Ctrl+Enter / 点「求解」）\n"
+    "  4. 点「启动浏览器查看可视化」生成交互流程图\n"
+)
 
 #: 新配方模板：不放占位物品；耗时 1 t；设备留空待填
 TEMPLATE_RECIPE = {
@@ -69,12 +70,79 @@ OBJECTIVE_LABELS = {
 }
 LABEL_TO_OBJECTIVE = {v: k for k, v in OBJECTIVE_LABELS.items()}
 
+THEME_LABELS = {"light": "浅色", "dark": "深色"}
+LABEL_TO_THEME = {v: k for k, v in THEME_LABELS.items()}
+
 #: 1 tick = 0.05 秒（GT 20 t/s）
 TICK_SECONDS = 0.05
 #: 显示单位 -> 若干 tick
 UNIT_TICKS = {"t": 1.0, "秒": 20.0, "分": 1200.0, "时": 72000.0}
 UNIT_CHOICES = list(UNIT_TICKS)
 DEFAULT_UNIT = "t"
+
+PALETTES: Dict[str, Dict[str, str]] = {
+    "light": {
+        "bg": "#f3f5f8",
+        "panel": "#ffffff",
+        "card": "#ffffff",
+        "card_border": "#dfe3ea",
+        "text": "#1f2430",
+        "muted": "#6b7382",
+        "accent": "#2f6fed",
+        "accent_hover": "#245bd0",
+        "accent_text": "#ffffff",
+        "entry_bg": "#ffffff",
+        "entry_border": "#c9d0da",
+        "list_bg": "#e9edf3",
+        "row_bg": "#f4f6fa",
+        "button_bg": "#eef1f6",
+        "button_hover": "#e2e7ef",
+        "danger": "#c0392b",
+        "report_bg": "#ffffff",
+        "select_bg": "#cfe0ff",
+    },
+    "dark": {
+        "bg": "#14171d",
+        "panel": "#1c2028",
+        "card": "#20242d",
+        "card_border": "#333a46",
+        "text": "#e7eaf0",
+        "muted": "#98a1b0",
+        "accent": "#5b8dff",
+        "accent_hover": "#7aa4ff",
+        "accent_text": "#0d1117",
+        "entry_bg": "#12151b",
+        "entry_border": "#3a424f",
+        "list_bg": "#0f1216",
+        "row_bg": "#1a1e26",
+        "button_bg": "#2a303b",
+        "button_hover": "#353d4a",
+        "danger": "#ef7373",
+        "report_bg": "#13161c",
+        "select_bg": "#2b3d63",
+    },
+}
+
+
+# =====================================================================
+# DPI / 字体
+# =====================================================================
+
+
+def enable_dpi_awareness() -> None:
+    """让进程按物理像素渲染（否则 Windows 会对 150% 缩放做位图拉伸，文字发虚）。
+
+    必须在创建 ``tk.Tk()`` 之前调用；重复调用会因权限被拒，忽略即可。
+    """
+    if sys.platform != "win32":
+        return
+    try:
+        ctypes.windll.shcore.SetProcessDpiAwareness(1)  # PROCESS_SYSTEM_DPI_AWARE
+    except Exception:  # noqa: BLE001 - 旧系统 / 已设置
+        try:
+            ctypes.windll.user32.SetProcessDPIAware()
+        except Exception:  # noqa: BLE001
+            pass
 
 
 def unit_seconds(unit: str) -> float:
@@ -248,19 +316,22 @@ class GuiState:
 
 
 class RecipeCard(tk.Frame):
-    """一张配方卡片：原料 / 产物 / 设备 / 耗时（自带单位）。"""
+    """一张配方卡片：原料 / 产物 / 设备 / 耗时（自带单位），条目可内联编辑。"""
 
     def __init__(self, master, app: "RecipeBalancerApp", index: int):
+        self.app = app
+        self.palette = app.palette
+        p = self.palette
         super().__init__(
             master,
-            bd=1,
-            relief="solid",
-            padx=8,
-            pady=6,
-            bg=CARD_BG,
-            highlightbackground="#d5d5d5",
+            bd=0,
+            relief="flat",
+            padx=10,
+            pady=8,
+            bg=p["card"],
+            highlightthickness=1,
+            highlightbackground=p["card_border"],
         )
-        self.app = app
         self.index = index
         self.recipe = app.model.recipes[index]
         self.item_boxes: Dict[str, tk.Frame] = {}
@@ -272,10 +343,15 @@ class RecipeCard(tk.Frame):
 
     # ---- 构建 ----
     def _build(self) -> None:
-        header = tk.Frame(self, bg=CARD_BG)
+        p = self.palette
+        header = tk.Frame(self, bg=p["card"])
         header.pack(fill="x")
         self.title = tk.Label(
-            header, text="", bg=CARD_BG, font=("Microsoft YaHei UI", 10, "bold")
+            header,
+            text="",
+            bg=p["card"],
+            fg=p["text"],
+            font=(self.app.ui_family, 10, "bold"),
         )
         self.title.pack(side="left")
         for text, command in (
@@ -290,25 +366,28 @@ class RecipeCard(tk.Frame):
                 command=command,
                 bd=0,
                 padx=6,
-                bg=CARD_BG,
-                activebackground="#e8e8e8",
+                bg=p["card"],
+                fg=p["muted"],
+                activebackground=p["button_hover"],
+                activeforeground=p["text"],
                 cursor="hand2",
             ).pack(side="right")
+
+        tk.Frame(self, bg=p["card_border"], height=1).pack(fill="x", pady=(6, 0))
 
         self._item_section("sourceList", "原料（单次消耗）")
         self._item_section("productList", "产物（单次产出）")
 
-        row = tk.Frame(self, bg=CARD_BG)
-        row.pack(fill="x", pady=(6, 0))
-        tk.Label(row, text="机器类型", bg=CARD_BG).pack(side="left")
+        row = tk.Frame(self, bg=p["card"])
+        row.pack(fill="x", pady=(8, 0))
+        tk.Label(row, text="机器类型", bg=p["card"], fg=p["text"]).pack(side="left")
         self.equ_var = tk.StringVar()
         self.equ_entry = ttk.Entry(row, textvariable=self.equ_var, width=18)
-        self.equ_entry.pack(side="left", padx=(4, 14))
-        tk.Label(row, text="耗时", bg=CARD_BG).pack(side="left")
+        self.equ_entry.pack(side="left", padx=(6, 16))
+        tk.Label(row, text="耗时", bg=p["card"], fg=p["text"]).pack(side="left")
         self.time_var = tk.StringVar()
         self.time_entry = ttk.Entry(row, textvariable=self.time_var, width=10)
         self.time_entry.pack(side="left", padx=4)
-
         self.unit_box = ttk.Combobox(
             row,
             textvariable=self.unit_var,
@@ -323,16 +402,17 @@ class RecipeCard(tk.Frame):
         self.time_var.trace_add("write", self._on_fields_changed)
 
     def _item_section(self, which: str, title: str) -> None:
-        wrap = tk.Frame(self, bg=CARD_BG)
-        wrap.pack(fill="x", pady=(6, 0))
+        p = self.palette
+        wrap = tk.Frame(self, bg=p["card"])
+        wrap.pack(fill="x", pady=(8, 0))
 
-        tk.Label(wrap, text=title, bg=CARD_BG, fg="#3a3a3a").pack(anchor="w")
-        box = tk.Frame(wrap, bg=CARD_BG)
+        tk.Label(wrap, text=title, bg=p["card"], fg=p["muted"]).pack(anchor="w")
+        box = tk.Frame(wrap, bg=p["card"])
         box.pack(fill="x")
         self.item_boxes[which] = box
 
-        row = tk.Frame(wrap, bg=CARD_BG)
-        row.pack(fill="x", pady=(2, 0))
+        row = tk.Frame(wrap, bg=p["card"])
+        row.pack(fill="x", pady=(3, 0))
         name_var = tk.StringVar()
         amount_var = tk.StringVar()
         self.item_vars[which] = {"name": name_var, "amount": amount_var}
@@ -346,9 +426,9 @@ class RecipeCard(tk.Frame):
         ttk.Button(row, text="添加", width=5, command=lambda: self.add_item(which)).pack(
             side="left"
         )
-        tk.Label(row, text="回车添加 · 条目可直接改", bg=CARD_BG, fg="#9a9a9a").pack(
-            side="left", padx=6
-        )
+        tk.Label(
+            row, text="回车添加 · 条目可直接改", bg=p["card"], fg=p["muted"]
+        ).pack(side="left", padx=8)
         self.item_entries[which] = {"name": name_entry, "amount": amount_entry}
 
     # ---- 刷新 ----
@@ -369,6 +449,7 @@ class RecipeCard(tk.Frame):
             app.syncing = False
 
     def _render_items(self, which: str) -> None:
+        p = self.palette
         box = self.item_boxes[which]
         for child in box.winfo_children():
             child.destroy()
@@ -376,20 +457,26 @@ class RecipeCard(tk.Frame):
 
         mapping = self.recipe.get(which) or {}
         if not mapping:
-            tk.Label(box, text="（空）", bg=CARD_BG, fg="#a0a0a0").pack(anchor="w")
+            hint = (
+                "（空 · 求解时按 1 个空原料处理）"
+                if which == "sourceList"
+                else "（空 · 产物为空则该配方无效）"
+            )
+            tk.Label(box, text=hint, bg=p["card"], fg=p["muted"]).pack(anchor="w")
             return
 
         for item, amount in sorted(mapping.items()):
-            row = tk.Frame(box, bg=CARD_BG)
+            # 已有条目放在凹陷底色上，与下方“新增条目”输入行区分开
+            row = tk.Frame(box, bg=p["row_bg"], padx=4, pady=2)
             row.pack(fill="x", pady=1)
 
             name_var = tk.StringVar(value=item)
             amount_var = tk.StringVar(value=_fmt(float(amount)))
             record = {"item": item, "name_var": name_var, "amount_var": amount_var}
 
-            name_entry = ttk.Entry(row, textvariable=name_var, width=16)
+            name_entry = ttk.Entry(row, textvariable=name_var, width=18)
             name_entry.pack(side="left")
-            amount_entry = ttk.Entry(row, textvariable=amount_var, width=7)
+            amount_entry = ttk.Entry(row, textvariable=amount_var, width=8)
             amount_entry.pack(side="left", padx=4)
 
             for entry in (name_entry, amount_entry):
@@ -404,8 +491,11 @@ class RecipeCard(tk.Frame):
                 row,
                 text="✕",
                 bd=0,
-                bg=CARD_BG,
-                fg="#aa3333",
+                padx=4,
+                bg=p["row_bg"],
+                fg=p["danger"],
+                activebackground=p["button_hover"],
+                activeforeground=p["danger"],
                 cursor="hand2",
                 command=lambda r=record: self.remove_item(which, r),
             ).pack(side="left", padx=4)
@@ -520,16 +610,114 @@ class RecipeCard(tk.Frame):
 
 
 # =====================================================================
+# 设置对话框
+# =====================================================================
+
+
+class SettingsDialog(tk.Toplevel):
+    def __init__(self, app: "RecipeBalancerApp") -> None:
+        super().__init__(app)
+        self.app = app
+        self.title("设置")
+        self.transient(app)
+        self.resizable(False, False)
+        self.configure(bg=app.palette["bg"])
+
+        frame = ttk.Frame(self, padding=14)
+        frame.pack(fill="both", expand=True)
+
+        ttk.Label(frame, text="主题").grid(row=0, column=0, sticky="w", pady=4)
+        self.theme_var = tk.StringVar(value=THEME_LABELS[app.theme_name])
+        ttk.Combobox(
+            frame,
+            textvariable=self.theme_var,
+            values=list(THEME_LABELS.values()),
+            state="readonly",
+            width=10,
+        ).grid(row=0, column=1, sticky="w", padx=(8, 0))
+
+        ttk.Label(frame, text="可视化输出目录").grid(
+            row=1, column=0, sticky="w", pady=4
+        )
+        self.html_var = tk.StringVar(
+            value=app.config_data.get("html_output_dir", "")
+        )
+        ttk.Entry(frame, textvariable=self.html_var, width=46).grid(
+            row=1, column=1, sticky="we", padx=(8, 4)
+        )
+        ttk.Button(frame, text="浏览…", command=self._browse_html).grid(
+            row=1, column=2
+        )
+
+        ttk.Label(frame, text="导出默认目录").grid(row=2, column=0, sticky="w", pady=4)
+        self.export_var = tk.StringVar(value=app.config_data.get("export_dir", ""))
+        ttk.Entry(frame, textvariable=self.export_var, width=46).grid(
+            row=2, column=1, sticky="we", padx=(8, 4)
+        )
+        ttk.Button(frame, text="浏览…", command=self._browse_export).grid(
+            row=2, column=2
+        )
+
+        ttk.Label(
+            frame,
+            text="目录留空时：可视化用系统临时目录，导出用上次位置。",
+            foreground=app.palette["muted"],
+        ).grid(row=3, column=0, columnspan=3, sticky="w", pady=(6, 10))
+
+        buttons = ttk.Frame(frame)
+        buttons.grid(row=4, column=0, columnspan=3, sticky="e")
+        ttk.Button(buttons, text="保存", style="Accent.TButton", command=self._save).pack(
+            side="right"
+        )
+        ttk.Button(buttons, text="取消", command=self.destroy).pack(
+            side="right", padx=(0, 8)
+        )
+
+        self.grab_set()
+        self.update_idletasks()
+        self._center_on_parent()
+
+    def _center_on_parent(self) -> None:
+        x = self.app.winfo_rootx() + (self.app.winfo_width() - self.winfo_width()) // 2
+        y = self.app.winfo_rooty() + (self.app.winfo_height() - self.winfo_height()) // 3
+        self.geometry(f"+{max(0, x)}+{max(0, y)}")
+
+    def _browse_html(self) -> None:
+        path = filedialog.askdirectory(parent=self, title="选择可视化输出目录")
+        if path:
+            self.html_var.set(path)
+
+    def _browse_export(self) -> None:
+        path = filedialog.askdirectory(parent=self, title="选择默认导出目录")
+        if path:
+            self.export_var.set(path)
+
+    def _save(self) -> None:
+        theme = LABEL_TO_THEME.get(self.theme_var.get(), "light")
+        html_output_dir = self.html_var.get().strip()
+        export_dir = self.export_var.get().strip()
+        self.destroy()
+        self.app.apply_settings(theme, html_output_dir, export_dir)
+
+
+# =====================================================================
 # 主窗口
 # =====================================================================
 
 
 class RecipeBalancerApp(tk.Tk):
     def __init__(self) -> None:
+        enable_dpi_awareness()  # 必须在创建 Tk 之前
         super().__init__()
         self.title(APP_TITLE)
-        self.geometry("1280x880")
-        self.minsize(1040, 700)
+
+        dpi = self.winfo_fpixels("1i")
+        self.dpi_scale = dpi / 96.0
+        self.tk.call("tk", "scaling", dpi / 72.0)
+
+        self.config_data = load_config()
+        self.theme_name = self.config_data["theme"]
+        self.palette = PALETTES[self.theme_name]
 
         self.model = GuiState()
         self.cards: List[RecipeCard] = []
@@ -539,20 +727,39 @@ class RecipeBalancerApp(tk.Tk):
         self.target_units: Dict[str, str] = {}
         self.syncing = False
         self._auto_job: Optional[str] = None
+        #: 结果区文本（切主题会重建控件，需要留存以便恢复）
+        self.last_report_text = ""
 
         self.filter_var = tk.StringVar()
         self.raw_var = tk.StringVar()
         self.cyc_var = tk.StringVar()
         self.objective_var = tk.StringVar(value=OBJECTIVE_LABELS["machine"])
         self.bootstrap_var = tk.BooleanVar(value=False)
+        self.dark_var = tk.BooleanVar(value=self.theme_name == "dark")
         self.status_var = tk.StringVar(value="就绪")
         self.target_name_var = tk.StringVar()
         self.target_rate_var = tk.StringVar()
         self.target_unit_var = tk.StringVar(value=DEFAULT_UNIT)
 
         self._init_fonts()
+        self._apply_ttk_style()
         self._build_ui()
         self._bind_shortcuts()
+
+        # 窗口尺寸：设计基准 1280x880 按 DPI 放大，但不能超出屏幕（150% 缩放下
+        # 1280x880 逻辑尺寸会变成 1920x1320 物理像素，比 1080p 屏幕还高）
+        screen_w = self.winfo_screenwidth()
+        screen_h = self.winfo_screenheight()
+        width = min(int(1280 * self.dpi_scale), int(screen_w * 0.94))
+        height = min(int(880 * self.dpi_scale), int(screen_h * 0.92))
+        self.geometry(
+            f"{width}x{height}+{max(0, (screen_w - width) // 2)}"
+            f"+{max(0, (screen_h - height) // 2 - 24)}"
+        )
+        self.minsize(
+            min(int(1040 * self.dpi_scale), width),
+            min(int(660 * self.dpi_scale), height - 40),
+        )
 
         self.model.add_recipe()
         self.recipe_units.append(DEFAULT_UNIT)
@@ -561,25 +768,209 @@ class RecipeBalancerApp(tk.Tk):
         self._schedule_auto_solve()
 
     # ---------------------------------------------------------------
-    # 初始化与布局
+    # 主题 / 样式
     # ---------------------------------------------------------------
 
     def _init_fonts(self) -> None:
+        families = set(tkfont.families(self))
+        ui_candidates = ("Microsoft YaHei UI", "Microsoft YaHei", "Segoe UI", "Arial")
+        mono_candidates = ("Cascadia Mono", "Consolas", "Courier New", "Courier")
+        self.ui_family = next((f for f in ui_candidates if f in families), "TkDefaultFont")
+        self.mono_family = next(
+            (f for f in mono_candidates if f in families), "TkFixedFont"
+        )
+
         for name in ("TkDefaultFont", "TkTextFont", "TkMenuFont", "TkHeadingFont"):
             try:
-                tkfont.nametofont(name).configure(family="Microsoft YaHei UI", size=10)
+                tkfont.nametofont(name).configure(family=self.ui_family, size=10)
             except tk.TclError:
                 pass
-        self.report_font = ("Consolas", 10)
+        self.report_font = (self.mono_family, 10)
+        self.ui_bold = (self.ui_family, 10, "bold")
+
+    def _apply_ttk_style(self) -> None:
+        p = self.palette
+        style = ttk.Style(self)
+        style.theme_use("clam")
+
+        style.configure(".", background=p["bg"], foreground=p["text"])
+        style.configure("TFrame", background=p["bg"])
+        style.configure("TLabel", background=p["bg"], foreground=p["text"])
+        style.configure("Muted.TLabel", background=p["bg"], foreground=p["muted"])
+        style.configure(
+            "TLabelframe",
+            background=p["bg"],
+            bordercolor=p["card_border"],
+            relief="solid",
+            borderwidth=1,
+        )
+        style.configure(
+            "TLabelframe.Label",
+            background=p["bg"],
+            foreground=p["text"],
+            font=self.ui_bold,
+        )
+        style.configure(
+            "TEntry",
+            fieldbackground=p["entry_bg"],
+            foreground=p["text"],
+            insertcolor=p["text"],
+            bordercolor=p["entry_border"],
+            lightcolor=p["entry_border"],
+            darkcolor=p["entry_border"],
+            padding=(5, 3),
+        )
+        style.configure(
+            "TButton",
+            background=p["button_bg"],
+            foreground=p["text"],
+            bordercolor=p["card_border"],
+            focuscolor=p["accent"],
+            padding=(11, 4),
+        )
+        style.map(
+            "TButton",
+            background=[("active", p["button_hover"])],
+            foreground=[("disabled", p["muted"])],
+        )
+        style.configure(
+            "Accent.TButton",
+            background=p["accent"],
+            foreground=p["accent_text"],
+            bordercolor=p["accent"],
+        )
+        style.map(
+            "Accent.TButton",
+            background=[("active", p["accent_hover"])],
+            foreground=[("disabled", p["muted"])],
+        )
+        style.configure(
+            "AccentLarge.TButton",
+            background=p["accent"],
+            foreground=p["accent_text"],
+            bordercolor=p["accent"],
+            padding=(12, 7),
+            font=self.ui_bold,
+        )
+        style.map(
+            "AccentLarge.TButton",
+            background=[("active", p["accent_hover"])],
+            foreground=[("disabled", p["muted"])],
+        )
+        style.configure("TCheckbutton", background=p["bg"], foreground=p["text"])
+        style.map(
+            "TCheckbutton",
+            background=[("active", p["bg"])],
+            indicatorcolor=[("selected", p["accent"]), ("!selected", p["entry_bg"])],
+        )
+        style.configure(
+            "TCombobox",
+            fieldbackground=p["entry_bg"],
+            background=p["button_bg"],
+            foreground=p["text"],
+            arrowcolor=p["text"],
+            bordercolor=p["entry_border"],
+            lightcolor=p["entry_border"],
+            darkcolor=p["entry_border"],
+            selectbackground=p["select_bg"],
+            selectforeground=p["text"],
+            padding=(5, 3),
+        )
+        style.map(
+            "TCombobox",
+            fieldbackground=[("readonly", p["entry_bg"])],
+            foreground=[("readonly", p["text"])],
+            bordercolor=[("focus", p["accent"])],
+        )
+        style.configure(
+            "Vertical.TScrollbar",
+            background=p["button_bg"],
+            troughcolor=p["bg"],
+            bordercolor=p["bg"],
+            arrowcolor=p["text"],
+            lightcolor=p["button_bg"],
+            darkcolor=p["button_bg"],
+            arrowsize=11,
+        )
+        style.configure(
+            "Horizontal.TScrollbar",
+            background=p["button_bg"],
+            troughcolor=p["bg"],
+            bordercolor=p["bg"],
+            arrowcolor=p["text"],
+            lightcolor=p["button_bg"],
+            darkcolor=p["button_bg"],
+            arrowsize=11,
+        )
+        style.configure(
+            "TSeparator",
+            background=p["card_border"],
+        )
+
+        # Combobox 下拉列表（Listbox 是经典控件，需用 option 数据库着色）
+        self.option_add("*TCombobox*Listbox.background", p["panel"])
+        self.option_add("*TCombobox*Listbox.foreground", p["text"])
+        self.option_add("*TCombobox*Listbox.selectBackground", p["accent"])
+        self.option_add("*TCombobox*Listbox.selectForeground", p["accent_text"])
+
+    def apply_theme(self, name: str) -> None:
+        if name not in PALETTES or name == self.theme_name:
+            return
+        self.theme_name = name
+        self.palette = PALETTES[name]
+        self.config_data["theme"] = name
+        self.dark_var.set(name == "dark")
+        self._apply_ttk_style()
+        self._rebuild_ui()
+
+    def _toggle_dark(self) -> None:
+        self.apply_settings(theme="dark" if self.dark_var.get() else "light")
+
+    def apply_settings(
+        self,
+        theme: Optional[str] = None,
+        html_output_dir: Optional[str] = None,
+        export_dir: Optional[str] = None,
+    ) -> None:
+        if theme is None:
+            theme = self.theme_name
+        if html_output_dir is None:
+            html_output_dir = self.config_data.get("html_output_dir", "")
+        if export_dir is None:
+            export_dir = self.config_data.get("export_dir", "")
+        self.config_data["html_output_dir"] = html_output_dir
+        self.config_data["export_dir"] = export_dir
+        self.config_data["theme"] = theme
+        save_config(self.config_data)
+        if theme != self.theme_name:
+            self.apply_theme(theme)
+        self.set_status("设置已保存")
+
+    def _open_settings(self) -> None:
+        SettingsDialog(self)
+
+    # ---------------------------------------------------------------
+    # 布局
+    # ---------------------------------------------------------------
 
     def _build_ui(self) -> None:
-        root = ttk.Frame(self, padding=8)
-        root.pack(fill="both", expand=True)
+        self.root_frame = ttk.Frame(self, padding=10)
+        self.root_frame.pack(fill="both", expand=True)
+        self._build_contents(self.root_frame)
 
-        status = ttk.Label(root, textvariable=self.status_var, foreground="#555555")
-        status.pack(side="bottom", fill="x", pady=(6, 0))
+    def _rebuild_ui(self) -> None:
+        self.cards.clear()
+        for child in self.root_frame.winfo_children():
+            child.destroy()
+        self._build_contents(self.root_frame)
+        self._rebuild_cards()
+        self._refresh_targets()
+        self._schedule_auto_solve()
 
-        # grid 的 uniform 保证 3:2 分栏，不受子控件请求宽度影响
+    def _build_contents(self, root) -> None:
+        status = ttk.Label(root, textvariable=self.status_var, style="Muted.TLabel")
+        status.pack(side="bottom", fill="x", pady=(8, 0))
+
         body = ttk.Frame(root)
         body.pack(fill="both", expand=True)
         body.columnconfigure(0, weight=3, uniform="cols")
@@ -587,7 +978,7 @@ class RecipeBalancerApp(tk.Tk):
         body.rowconfigure(0, weight=1)
 
         left = ttk.Frame(body)
-        left.grid(row=0, column=0, sticky="nsew", padx=(0, 8))
+        left.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
         right = ttk.Frame(body)
         right.grid(row=0, column=1, sticky="nsew")
         self.body = body
@@ -598,39 +989,41 @@ class RecipeBalancerApp(tk.Tk):
         self._build_right(right)
 
     def _build_left(self, parent) -> None:
-        self._build_left_buttons(parent)  # 先占底部
-        self._build_settings(parent)      # 再占顶部
+        self._build_left_buttons(parent)
+        self._build_settings(parent)
         self._build_filter(parent)
-        self._build_recipe_list(parent)   # 剩余空间给可滚动列表
+        self._build_recipe_list(parent)
 
     # ---- 顶部：目标与选项 ----
     def _build_settings(self, parent) -> None:
-        frame = ttk.LabelFrame(parent, text="目标与选项", padding=8)
+        frame = ttk.LabelFrame(parent, text="目标与选项", padding=10)
         frame.pack(side="top", fill="x")
 
         row = ttk.Frame(frame)
-        row.pack(fill="x", pady=(0, 4))
+        row.pack(fill="x", pady=(0, 6))
         ttk.Label(row, text="目标产物").pack(side="left")
-        ttk.Entry(row, textvariable=self.target_name_var, width=12).pack(
-            side="left", padx=(4, 6)
+        ttk.Entry(row, textvariable=self.target_name_var, width=14).pack(
+            side="left", padx=(8, 6)
         )
-        ttk.Entry(row, textvariable=self.target_rate_var, width=7).pack(side="left")
+        ttk.Entry(row, textvariable=self.target_rate_var, width=8).pack(side="left")
         ttk.Combobox(
             row,
             textvariable=self.target_unit_var,
             values=UNIT_CHOICES,
             state="readonly",
-            width=4,
-        ).pack(side="left", padx=(2, 6))
-        ttk.Button(row, text="添加目标", command=self._add_target).pack(
-            side="left", padx=4
-        )
+            width=5,
+        ).pack(side="left", padx=(4, 10))
+        ttk.Button(row, text="添加目标", command=self._add_target).pack(side="left")
 
         # 目标列表：最多显示 3 行，超出滚动
         targets_wrap = ttk.Frame(frame)
         targets_wrap.pack(fill="x")
         self.targets_canvas = tk.Canvas(
-            targets_wrap, height=84, highlightthickness=0, bd=0
+            targets_wrap,
+            height=30,
+            highlightthickness=0,
+            bd=0,
+            bg=self.palette["bg"],
         )
         targets_scroll = ttk.Scrollbar(
             targets_wrap, orient="vertical", command=self.targets_canvas.yview
@@ -658,16 +1051,16 @@ class RecipeBalancerApp(tk.Tk):
         self.targets_canvas.bind("<MouseWheel>", self._on_targets_wheel)
 
         line2 = ttk.Frame(frame)
-        line2.pack(fill="x", pady=(6, 0))
+        line2.pack(fill="x", pady=(8, 0))
         ttk.Label(line2, text="求解目标").pack(side="left")
         objective_box = ttk.Combobox(
             line2,
             textvariable=self.objective_var,
             values=list(OBJECTIVE_LABELS.values()),
             state="readonly",
-            width=12,
+            width=14,
         )
-        objective_box.pack(side="left", padx=(4, 14))
+        objective_box.pack(side="left", padx=(6, 16))
         objective_box.bind("<<ComboboxSelected>>", self._on_option_changed)
         ttk.Checkbutton(
             line2,
@@ -675,39 +1068,42 @@ class RecipeBalancerApp(tk.Tk):
             variable=self.bootstrap_var,
             command=self._on_option_changed,
         ).pack(side="left")
+        ttk.Checkbutton(
+            line2, text="夜间模式", variable=self.dark_var, command=self._toggle_dark
+        ).pack(side="right")
 
         # 外部原料、循环亏损表各占一行
         raw_line = ttk.Frame(frame)
-        raw_line.pack(fill="x", pady=(4, 0))
+        raw_line.pack(fill="x", pady=(6, 0))
         ttk.Label(raw_line, text="外部原料", width=10).pack(side="left")
         ttk.Entry(raw_line, textvariable=self.raw_var, width=8).pack(
-            side="left", fill="x", expand=True, padx=(4, 0)
+            side="left", fill="x", expand=True, padx=(6, 0)
         )
 
         cyc_line = ttk.Frame(frame)
-        cyc_line.pack(fill="x", pady=(4, 0))
+        cyc_line.pack(fill="x", pady=(6, 0))
         ttk.Label(cyc_line, text="循环亏损表", width=10).pack(side="left")
         ttk.Entry(cyc_line, textvariable=self.cyc_var, width=8).pack(
-            side="left", fill="x", expand=True, padx=(4, 0)
+            side="left", fill="x", expand=True, padx=(6, 0)
         )
 
         for var in (self.raw_var, self.cyc_var):
             var.trace_add("write", self._on_options_text_changed)
 
-        self.extra_label = ttk.Label(frame, text="", foreground="#777777")
-        self.extra_label.pack(fill="x", pady=(4, 0))
+        self.extra_label = ttk.Label(frame, text="", style="Muted.TLabel")
+        self.extra_label.pack(fill="x", pady=(6, 0))
 
     # ---- 筛选框 ----
     def _build_filter(self, parent) -> None:
         frame = ttk.Frame(parent)
-        frame.pack(side="top", fill="x", pady=(8, 4))
+        frame.pack(side="top", fill="x", pady=(10, 4))
         ttk.Label(frame, text="筛选").pack(side="left")
         ttk.Entry(frame, textvariable=self.filter_var).pack(
-            side="left", fill="x", expand=True, padx=(6, 0)
+            side="left", fill="x", expand=True, padx=(8, 0)
         )
         self.filter_var.trace_add("write", lambda *_: self._apply_filter())
-        ttk.Label(frame, text="按配方物品 / 设备过滤", foreground="#8a8a8a").pack(
-            side="left", padx=6
+        ttk.Label(frame, text="按配方物品 / 设备过滤", style="Muted.TLabel").pack(
+            side="left", padx=8
         )
 
     # ---- 配方列表（可滚动）----
@@ -715,13 +1111,18 @@ class RecipeBalancerApp(tk.Tk):
         wrap = ttk.Frame(parent)
         wrap.pack(side="top", fill="both", expand=True)
 
-        self.canvas = tk.Canvas(wrap, bg=LIST_BG, highlightthickness=0, bd=0)
+        self.canvas = tk.Canvas(
+            wrap,
+            bg=self.palette["list_bg"],
+            highlightthickness=0,
+            bd=0,
+        )
         scrollbar = ttk.Scrollbar(wrap, orient="vertical", command=self.canvas.yview)
         self.canvas.configure(yscrollcommand=scrollbar.set)
         self.canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
 
-        self.cards_frame = tk.Frame(self.canvas, bg=LIST_BG)
+        self.cards_frame = tk.Frame(self.canvas, bg=self.palette["list_bg"])
         self._canvas_window = self.canvas.create_window(
             (0, 0), window=self.cards_frame, anchor="nw"
         )
@@ -732,44 +1133,72 @@ class RecipeBalancerApp(tk.Tk):
 
     def _build_left_buttons(self, parent) -> None:
         bar = ttk.Frame(parent)
-        bar.pack(side="bottom", fill="x", pady=(6, 0))
+        bar.pack(side="bottom", fill="x", pady=(8, 0))
         ttk.Button(bar, text="新增配方", command=self.add_recipe).pack(side="left")
-        ttk.Button(bar, text="求解", command=self._on_solve).pack(side="left", padx=6)
+        ttk.Button(
+            bar, text="求解", style="Accent.TButton", command=self._on_solve
+        ).pack(side="left", padx=6)
         ttk.Button(bar, text="导入 JSON…", command=self._on_import).pack(side="left")
         ttk.Button(bar, text="导出 JSON…", command=self._on_export).pack(
             side="left", padx=6
         )
+        ttk.Button(bar, text="设置…", command=self._open_settings).pack(side="left")
+
+    def _section_title(self, parent, text: str) -> ttk.Frame:
+        """带强调色竖条的小标题，用于右侧结果区等无边框区域。"""
+        header = ttk.Frame(parent)
+        tk.Frame(header, bg=self.palette["accent"], width=3, height=13).pack(
+            side="left", padx=(0, 6)
+        )
+        ttk.Label(header, text=text, font=self.ui_bold).pack(side="left")
+        return header
 
     # ---- 右侧：结果 ----
     def _build_right(self, parent) -> None:
-        header = ttk.Frame(parent)
+        header = self._section_title(parent, "文本结果")
         header.pack(fill="x")
-        ttk.Label(header, text="文本结果").pack(side="left")
 
         wrap = ttk.Frame(parent)
-        wrap.pack(fill="both", expand=True, pady=(4, 6))
+        wrap.pack(fill="both", expand=True, pady=(6, 8))
+        p = self.palette
         self.result_text = tk.Text(
             wrap,
             wrap="none",
             font=self.report_font,
             state="disabled",
-            background="#fbfbfb",
             width=1,
             height=1,
+            bg=p["report_bg"],
+            fg=p["text"],
+            insertbackground=p["text"],
+            selectbackground=p["select_bg"],
+            selectforeground=p["text"],
+            relief="flat",
+            padx=8,
+            pady=6,
+            highlightthickness=1,
+            highlightbackground=p["card_border"],
+            highlightcolor=p["accent"],
         )
         yscroll = ttk.Scrollbar(wrap, orient="vertical", command=self.result_text.yview)
         xscroll = ttk.Scrollbar(wrap, orient="horizontal", command=self.result_text.xview)
         self.result_text.configure(
             yscrollcommand=yscroll.set, xscrollcommand=xscroll.set
         )
+        self.result_text.tag_configure("placeholder", foreground=p["muted"])
         self.result_text.grid(row=0, column=0, sticky="nsew")
         yscroll.grid(row=0, column=1, sticky="ns")
         xscroll.grid(row=1, column=0, sticky="ew")
         wrap.rowconfigure(0, weight=1)
         wrap.columnconfigure(0, weight=1)
+        # 重建（切主题）后恢复上一次的结果，没有结果时显示引导文案
+        self._render_report_text(self.last_report_text)
 
         ttk.Button(
-            parent, text="启动浏览器查看可视化", command=self._on_visualize
+            parent,
+            text="启动浏览器查看可视化",
+            style="AccentLarge.TButton",
+            command=self._on_visualize,
         ).pack(fill="x")
 
     def _bind_shortcuts(self) -> None:
@@ -802,8 +1231,8 @@ class RecipeBalancerApp(tk.Tk):
             hint = tk.Label(
                 self.cards_frame,
                 text="还没有配方。点击左下角「新增配方」，或导入 JSON 场景。",
-                bg=LIST_BG,
-                fg="#7a7a7a",
+                bg=self.palette["list_bg"],
+                fg=self.palette["muted"],
             )
             hint.grid(row=0, column=0, pady=24)
             self.bind_wheel_recursive(hint)
@@ -816,7 +1245,7 @@ class RecipeBalancerApp(tk.Tk):
         index = self.model.add_recipe()
         self.recipe_units.append(DEFAULT_UNIT)
         self._rebuild_cards()
-        self.canvas.yview_moveto(1.0)  # 新卡片在底部，滚过去
+        self.canvas.yview_moveto(1.0)
         self.cards[index].equ_entry.focus_set()
         self.on_model_changed()
 
@@ -872,21 +1301,26 @@ class RecipeBalancerApp(tk.Tk):
         self.on_model_changed()
 
     def _refresh_targets(self) -> None:
+        p = self.palette
         for child in self.targets_frame.winfo_children():
             child.destroy()
         if not self.model.targets:
             ttk.Label(
-                self.targets_frame, text="（未设置目标产物）", foreground="#999999"
-            ).pack(anchor="w")
+                self.targets_frame, text="（未设置目标产物）", style="Muted.TLabel"
+            ).pack(anchor="w", pady=2)
         else:
             for item, per_second in sorted(self.model.targets.items()):
                 unit = self.target_units.get(item, DEFAULT_UNIT)
                 row = ttk.Frame(self.targets_frame)
                 row.pack(fill="x")
-                ttk.Label(row, text=item, width=10).pack(side="left", padx=(0, 4))
+                # 名称列定宽对齐，末列留空吸收多余宽度 -> 数量/单位/删除始终紧跟名称
+                row.columnconfigure(4, weight=1)
+                ttk.Label(row, text=item, width=12, anchor="w").grid(
+                    row=0, column=0, sticky="w", padx=(2, 8), pady=2
+                )
                 var = tk.StringVar(value=_fmt(rate_to_display(per_second, unit)))
-                entry = ttk.Entry(row, textvariable=var, width=8)
-                entry.pack(side="left")
+                entry = ttk.Entry(row, textvariable=var, width=9, justify="right")
+                entry.grid(row=0, column=1, sticky="w", pady=2)
                 entry.bind(
                     "<KeyRelease>",
                     lambda _e, i=item, v=var, u=unit: self._update_target_rate(
@@ -899,26 +1333,36 @@ class RecipeBalancerApp(tk.Tk):
                     textvariable=unit_var,
                     values=UNIT_CHOICES,
                     state="readonly",
-                    width=4,
+                    width=5,
                 )
-                combo.pack(side="left", padx=(2, 6))
+                combo.grid(row=0, column=2, sticky="w", padx=(6, 8), pady=2)
                 combo.bind(
                     "<<ComboboxSelected>>",
                     lambda _e, i=item, u=unit_var: self._on_target_unit_changed(i, u),
                 )
-                ttk.Button(
-                    row, text="✕", width=2, command=lambda i=item: self._remove_target(i)
-                ).pack(side="left")
+                tk.Button(
+                    row,
+                    text="✕",
+                    bd=0,
+                    padx=4,
+                    bg=p["bg"],
+                    fg=p["danger"],
+                    activebackground=p["button_hover"],
+                    activeforeground=p["danger"],
+                    cursor="hand2",
+                    command=lambda i=item: self._remove_target(i),
+                ).grid(row=0, column=3, sticky="w")
         self.targets_frame.update_idletasks()
         # 高度随条数自适应：1~3 行按实际行数，超过 3 行固定 3 行并滚动
         visible_rows = max(1, min(3, len(self.model.targets)))
-        self.targets_canvas.configure(height=visible_rows * 28 + 2)
+        children = self.targets_frame.winfo_children()
+        row_height = max((c.winfo_reqheight() for c in children), default=28) + 1
+        self.targets_canvas.configure(height=visible_rows * row_height + 2)
         if len(self.model.targets) > 3:
             self.targets_scroll.pack(side="right", fill="y")
         else:
             self.targets_scroll.pack_forget()
         self.targets_canvas.configure(scrollregion=self.targets_canvas.bbox("all"))
-        # 布局完成后回到顶部（过早调用会被裁剪成错误的偏移）
         self.after_idle(lambda: self.targets_canvas.yview_moveto(0))
         self._bind_targets_wheel(self.targets_frame)
 
@@ -1029,12 +1473,25 @@ class RecipeBalancerApp(tk.Tk):
         )
         return solution.success
 
+    def _render_report_text(self, text: str) -> None:
+        widget = self.result_text
+        widget.configure(state="normal")
+        widget.delete("1.0", "end")
+        if text:
+            widget.insert("1.0", text)
+        else:
+            widget.insert("1.0", REPORT_PLACEHOLDER, "placeholder")
+        widget.configure(state="disabled")
+
     def _show_report(self, solution: RecipeSolution) -> None:
-        text = format_solution(solution, self.model.recipes)
-        self.result_text.configure(state="normal")
-        self.result_text.delete("1.0", "end")
-        self.result_text.insert("1.0", text)
-        self.result_text.configure(state="disabled")
+        self.last_report_text = format_solution(solution, self.model.recipes)
+        self._render_report_text(self.last_report_text)
+
+    def _html_output_dir(self) -> Path:
+        configured = (self.config_data.get("html_output_dir") or "").strip()
+        if configured:
+            return Path(configured)
+        return Path(tempfile.gettempdir()) / "recipe_balancer_ui"
 
     def _on_visualize(self) -> None:
         if not self._on_solve():
@@ -1050,8 +1507,12 @@ class RecipeBalancerApp(tk.Tk):
             )
             return
 
-        out_dir = Path(tempfile.gettempdir()) / "recipe_balancer_ui"
-        out_dir.mkdir(parents=True, exist_ok=True)
+        out_dir = self._html_output_dir()
+        try:
+            out_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            messagebox.showerror("目录不可用", f"{out_dir}\n{exc}")
+            return
         out_file = out_dir / f"production_graph_{time.strftime('%Y%m%d_%H%M%S')}.html"
         try:
             draw_production_graph_pyvis(
@@ -1113,10 +1574,12 @@ class RecipeBalancerApp(tk.Tk):
         if not self.model.recipes or not self.model.targets:
             messagebox.showwarning("无法导出", "请先填写配方与目标产物")
             return
+        initial_dir = (self.config_data.get("export_dir") or "").strip() or None
         path = filedialog.asksaveasfilename(
             title="导出场景 JSON",
             defaultextension=".json",
             initialfile="scenario.json",
+            initialdir=initial_dir,
             filetypes=[("JSON 场景", "*.json"), ("所有文件", "*.*")],
         )
         if not path:
@@ -1131,6 +1594,9 @@ class RecipeBalancerApp(tk.Tk):
         except OSError as exc:
             messagebox.showerror("导出失败", str(exc))
             return
+        # 记住本次导出目录
+        self.config_data["export_dir"] = str(Path(path).parent)
+        save_config(self.config_data)
         self.set_status(f"已导出：{path}")
 
     # ---------------------------------------------------------------
@@ -1184,6 +1650,7 @@ class RecipeBalancerApp(tk.Tk):
 
 
 def main() -> int:
+    enable_dpi_awareness()
     app = RecipeBalancerApp()
     app.mainloop()
     return 0

@@ -243,3 +243,66 @@ def test_filter_hides_non_matching_cards(app):
     app.filter_var.set("")
     app._apply_filter()
     assert app.cards[0].grid_info() != {}
+
+
+# =====================================================================
+# 主题 / 输出目录
+# =====================================================================
+
+
+def test_theme_switch_rebuilds_cards(app):
+    from recipe_balancer.gui import PALETTES
+
+    target = "light" if app.theme_name == "dark" else "dark"
+    app.apply_theme(target)
+    assert app.theme_name == target
+    assert app.palette is PALETTES[target]
+    # 重建后卡片数量与模型一致，且使用新配色
+    assert len(app.cards) == len(app.model.recipes)
+    assert app.cards[0].cget("bg") == PALETTES[target]["card"]
+
+
+def test_html_output_dir_from_config(app, tmp_path, monkeypatch):
+    import recipe_balancer.gui as gui_module
+
+    app.model.recipes = [
+        {"sourceList": {"a": 1}, "productList": {"b": 1}, "time": 1, "equType": "x"}
+    ]
+    app.model.targets = {"b": 1.0}
+    app.recipe_units = ["t"]
+    app._rebuild_cards()
+    app._refresh_targets()
+    app.config_data["html_output_dir"] = str(tmp_path)
+
+    opened = []
+    monkeypatch.setattr(gui_module.webbrowser, "open", lambda uri: opened.append(uri))
+    app._on_visualize()
+
+    files = list(tmp_path.glob("*.html"))
+    assert files, "未在配置目录生成 HTML"
+    assert opened and opened[0].endswith(".html")
+
+
+def test_report_placeholder_before_first_solve(app):
+    from recipe_balancer.gui import REPORT_PLACEHOLDER
+
+    assert app.last_report_text == ""
+    assert app.result_text.get("1.0", "end-1c") == REPORT_PLACEHOLDER
+
+
+def test_theme_switch_keeps_last_report(app):
+    app.model.recipes = [
+        {"sourceList": {"圆石": 1}, "productList": {"沙砾": 1}, "time": 2, "equType": "粉碎"}
+    ]
+    app.model.targets = {"沙砾": 10.0}
+    app.model.raw_materials = {"圆石"}
+    app.recipe_units = ["t"]
+    app._rebuild_cards()
+    app._refresh_targets()
+    assert app._on_solve()
+    assert "配方运行方案" in app.last_report_text
+
+    target = "light" if app.theme_name == "dark" else "dark"
+    app.apply_theme(target)
+    # 控件被重建，但报告文本要跟着回来（不是退回占位文案）
+    assert "配方运行方案" in app.result_text.get("1.0", "end-1c")
