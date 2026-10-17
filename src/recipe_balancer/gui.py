@@ -218,34 +218,36 @@ class RecipeBalancerApp(tk.Tk):
         root = ttk.Frame(self, padding=8)
         root.pack(fill="both", expand=True)
 
+        # 先占住底部操作条，避免被 expand 的 Panedwindow 挤掉
+        self._build_action_bar(root)
+
         paned = ttk.Panedwindow(root, orient="horizontal")
         paned.pack(fill="both", expand=True)
 
         self._build_recipe_panel(paned)
 
         notebook = ttk.Notebook(paned)
-        paned.add(notebook, weight=4)
+        paned.add(notebook, weight=1)
+        self.notebook = notebook
         self._build_editor_tab(notebook)
         self._build_target_tab(notebook)
         self._build_result_tab(notebook)
 
-        self._build_action_bar(root)
-
     # ---- 左侧：配方列表 ----
     def _build_recipe_panel(self, parent) -> None:
         frame = ttk.LabelFrame(parent, text="配方列表", padding=6)
-        parent.add(frame, weight=1)
+        parent.add(frame, weight=0)
 
         columns = ("no", "equ", "time", "src", "prod")
         self.recipe_tree = ttk.Treeview(
             frame, columns=columns, show="headings", selectmode="browse", height=24
         )
         headings = {
-            "no": ("#", 40),
-            "equ": ("设备", 110),
-            "time": ("耗时", 60),
-            "src": ("原料", 50),
-            "prod": ("产物", 50),
+            "no": ("#", 30),
+            "equ": ("设备", 86),
+            "time": ("耗时", 50),
+            "src": ("原料", 42),
+            "prod": ("产物", 42),
         }
         for key, (text, width) in headings.items():
             self.recipe_tree.heading(key, text=text)
@@ -260,20 +262,20 @@ class RecipeBalancerApp(tk.Tk):
 
         buttons = ttk.Frame(frame)
         buttons.pack(side="bottom", fill="x", pady=(6, 0))
-        ttk.Button(buttons, text="新增", width=6, command=self._on_new_recipe).pack(
-            side="left", padx=2
+        ttk.Button(buttons, text="新增", width=4, command=self._on_new_recipe).pack(
+            side="left", padx=1
         )
-        ttk.Button(buttons, text="复制", width=6, command=self._on_duplicate_recipe).pack(
-            side="left", padx=2
+        ttk.Button(buttons, text="复制", width=4, command=self._on_duplicate_recipe).pack(
+            side="left", padx=1
         )
-        ttk.Button(buttons, text="删除", width=6, command=self._on_delete_recipe).pack(
-            side="left", padx=2
+        ttk.Button(buttons, text="删除", width=4, command=self._on_delete_recipe).pack(
+            side="left", padx=1
         )
-        ttk.Button(buttons, text="↑", width=3, command=lambda: self._on_move(-1)).pack(
-            side="left", padx=2
+        ttk.Button(buttons, text="↑", width=2, command=lambda: self._on_move(-1)).pack(
+            side="left", padx=1
         )
-        ttk.Button(buttons, text="↓", width=3, command=lambda: self._on_move(1)).pack(
-            side="left", padx=2
+        ttk.Button(buttons, text="↓", width=2, command=lambda: self._on_move(1)).pack(
+            side="left", padx=1
         )
 
     # ---- 右侧：配方编辑 ----
@@ -290,17 +292,18 @@ class RecipeBalancerApp(tk.Tk):
         self.ent_time = ttk.Entry(top, textvariable=self.time_var, width=12)
         self.ent_time.pack(side="left", padx=4)
 
-        self.editor_widgets = [self.ent_equ, self.ent_time]
-
         hint = ttk.Label(
             tab,
-            text="提示：修改设备/耗时后切换到别的配方或点击求解会自动保存；物品表双击可回填到输入框。",
+            text="提示：修改设备/耗时后，切换配方或求解会自动保存；物品表双击回填。",
             foreground="#666666",
         )
         hint.pack(fill="x", pady=(4, 8))
 
         body = ttk.Frame(tab)
         body.pack(fill="both", expand=True)
+        body.columnconfigure(0, weight=1, uniform="item_section")
+        body.columnconfigure(1, weight=1, uniform="item_section")
+        body.rowconfigure(0, weight=1)
 
         self.src_tree = self._build_item_section(
             body,
@@ -308,6 +311,7 @@ class RecipeBalancerApp(tk.Tk):
             name_var=self.src_name_var,
             amount_var=self.src_amount_var,
             which="sourceList",
+            column=0,
         )
         self.prod_tree = self._build_item_section(
             body,
@@ -315,11 +319,14 @@ class RecipeBalancerApp(tk.Tk):
             name_var=self.prod_name_var,
             amount_var=self.prod_amount_var,
             which="productList",
+            column=1,
         )
 
-    def _build_item_section(self, parent, title, name_var, amount_var, which) -> ttk.Treeview:
+    def _build_item_section(
+        self, parent, title, name_var, amount_var, which, column: int
+    ) -> ttk.Treeview:
         frame = ttk.LabelFrame(parent, text=title, padding=6)
-        frame.pack(side="left", fill="both", expand=True, padx=4)
+        frame.grid(row=0, column=column, sticky="nsew", padx=4)
 
         tree = ttk.Treeview(
             frame, columns=("item", "amount"), show="headings", selectmode="browse", height=14
@@ -332,24 +339,26 @@ class RecipeBalancerApp(tk.Tk):
 
         entry_row = ttk.Frame(frame)
         entry_row.pack(fill="x", pady=(6, 0))
-        ttk.Entry(entry_row, textvariable=name_var, width=16).pack(side="left", padx=(0, 4))
-        ttk.Entry(entry_row, textvariable=amount_var, width=8).pack(side="left", padx=(0, 4))
+        entry_row.columnconfigure(0, weight=1)
+        ttk.Entry(entry_row, textvariable=name_var).grid(
+            row=0, column=0, sticky="ew", padx=(0, 4)
+        )
+        ttk.Entry(entry_row, textvariable=amount_var, width=7).grid(
+            row=0, column=1, sticky="w", padx=(0, 4)
+        )
         ttk.Button(
             entry_row, text="添加", width=5, command=lambda: self._add_item(which)
-        ).pack(side="left")
+        ).grid(row=0, column=2, sticky="w")
         ttk.Button(
             entry_row,
             text="删除",
             width=5,
             command=lambda: self._remove_item(which),
-        ).pack(side="left", padx=4)
+        ).grid(row=0, column=3, sticky="w", padx=(4, 0))
 
         tree.bind(
             "<Double-1>",
             lambda _e: self._fill_item_entries(tree, name_var, amount_var),
-        )
-        self.editor_widgets.extend(
-            [w for w in frame.winfo_children() if isinstance(w, ttk.Frame)]
         )
         return tree
 
@@ -437,7 +446,7 @@ class RecipeBalancerApp(tk.Tk):
     # ---- 底部操作条 ----
     def _build_action_bar(self, parent) -> None:
         bar = ttk.Frame(parent)
-        bar.pack(fill="x", pady=(8, 0))
+        bar.pack(side="bottom", fill="x", pady=(8, 0))
 
         ttk.Button(bar, text="求解", command=self._on_solve).pack(side="left")
         ttk.Button(
@@ -721,6 +730,7 @@ class RecipeBalancerApp(tk.Tk):
 
         self.model.last_solution = solution
         self._show_report(solution)
+        self.notebook.select(2)  # 切到「结果」页
         if solution.success:
             self.status_var.set(
                 f"求解成功：{len(self.model.recipes)} 个配方，"
