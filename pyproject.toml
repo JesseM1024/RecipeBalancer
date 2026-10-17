@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "recipe-balancer"
-version = "0.1.0"
+version = "1.0.0"
 description = "MC 整合包配方树稳态配平求解器（化学计量矩阵 + LP）"
 readme = "README.md"
 requires-python = ">=3.10"

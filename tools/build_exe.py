@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -81,6 +82,44 @@ def ensure_icon() -> Path | None:
     return ICON
 
 
+def project_version() -> str:
+    """从 pyproject.toml 读版本号（不引第三方 tomllib 依赖）。"""
+    text = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    match = re.search(r'^version\s*=\s*"([^"]+)"', text, re.MULTILINE)
+    return match.group(1) if match else "0.0.0"
+
+
+def write_version_file(version: str) -> Path:
+    """生成 PyInstaller 的版本资源，让 exe 属性页显示版本号/产品名。"""
+    numbers = [int(part) for part in re.findall(r"\d+", version)][:4]
+    numbers += [0] * (4 - len(numbers))
+    nums = tuple(numbers)
+    text = f"""# -*- coding: utf-8 -*-
+VSVersionInfo(
+  ffi=FixedFileInfo(filevers={nums}, prodvers={nums}, mask=0x3f, flags=0x0,
+                    OS=0x40004, fileType=0x1, subtype=0x0, date=(0, 0)),
+  kids=[
+    StringFileInfo([
+      StringTable('080404B0', [
+        StringStruct('CompanyName', 'JesseM1024'),
+        StringStruct('FileDescription', 'MC 配方树自动配平（RecipeBalancer）'),
+        StringStruct('FileVersion', '{version}'),
+        StringStruct('InternalName', 'RecipeBalancer'),
+        StringStruct('OriginalFilename', 'RecipeBalancer.exe'),
+        StringStruct('ProductName', 'RecipeBalancer'),
+        StringStruct('ProductVersion', '{version}')
+      ])
+    ]),
+    VarFileInfo([VarStruct('Translation', [2052, 1200])])
+  ]
+)
+"""
+    path = ROOT / "build" / "version_info.txt"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    return path
+
+
 def build(onefile: bool, name: str, console: bool, clean: bool) -> int:
     try:
         import PyInstaller  # noqa: F401
@@ -89,6 +128,8 @@ def build(onefile: bool, name: str, console: bool, clean: bool) -> int:
         return 2
 
     icon = ensure_icon()
+    version = project_version()
+    version_file = write_version_file(version)
     dist = ROOT / "dist"
     args = [
         sys.executable,
@@ -131,7 +172,9 @@ def build(onefile: bool, name: str, console: bool, clean: bool) -> int:
     if icon is not None:
         # exe 图标 + 运行时窗口图标（gui._set_window_icon 从 assets/app.ico 取）
         args += ["--icon", str(icon), "--add-data", f"{icon}{os.pathsep}assets"]
+    args += ["--version-file", str(version_file)]
 
+    print(f"版本: {version}")
     print("执行:", " ".join(args))
     result = subprocess.run(args, cwd=str(ROOT))
     if result.returncode != 0:

@@ -458,3 +458,15 @@ def test_selftest_runs_end_to_end(tmp_path, monkeypatch):
     assert "求解: 通过" in log
     assert "可视化: 通过" in log
     assert (tmp_path / "selftest_graph.html").stat().st_size > 100_000
+
+
+def test_version_matches_pyproject():
+    """`__version__` 与 pyproject 必须一致，否则 exe 属性页和自检日志会对不上。"""
+    from pathlib import Path
+
+    import recipe_balancer
+
+    text = (Path(__file__).resolve().parents[1] / "pyproject.toml").read_text(
+        encoding="utf-8"
+    )
+    assert f'version = "{recipe_balancer.__version__}"' in text

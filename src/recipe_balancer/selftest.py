@@ -79,7 +79,10 @@ def run_selftest(notify: bool = True) -> int:
     ``notify=False`` 只写日志、不弹窗（自动化/CI 用 ``--selftest --quiet``）。
     """
     base = app_dir()
+    from . import __version__
+
     lines: List[str] = [
+        f"版本: {__version__}",
         f"时间: {time.strftime('%Y-%m-%d %H:%M:%S')}",
         f"Python: {sys.version.split()[0]}",
         f"打包运行: {bool(getattr(sys, 'frozen', False))}",

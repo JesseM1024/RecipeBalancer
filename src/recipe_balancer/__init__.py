@@ -16,7 +16,7 @@ from .models import RecipeSolution
 from .report import format_solution, print_solution
 from .solver import build_augmented_lp, solve_production
 
-__version__ = "0.1.0"
+__version__ = "1.0.0"
 
 __all__ = [
     "RecipeSolution",
