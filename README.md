@@ -24,23 +24,6 @@ pip install pyvis
 
 ## 使用
 
-### 运行环境（本机）
-
-依赖装在 WorkBuddy 托管 venv（Python 3.13）。用项目根目录的启动器即可：
-
-```bat
-run.cmd solve examples/ebf_cycle.json
-```
-
-`run.cmd` 优先使用托管 venv 的解释器，并设置 `PYTHONPATH=src`。
-系统 Python 3.10 未装 numpy/scipy，直接 `python -m recipe_balancer` 会报
-`ModuleNotFoundError`。若要改用系统 3.10：
-
-```bat
-python -m pip install -i https://mirrors.aliyun.com/pypi/simple/ numpy scipy networkx pyvis setuptools wheel
-python -m pip install -e . --no-build-isolation
-```
-
 ### Python API（与 notebook 完全同构）
 
 ```python
