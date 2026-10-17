@@ -80,7 +80,7 @@ def format_solution(solution: RecipeSolution, recipe_list: List[dict]) -> str:
     else:
         out("无")
 
-    out("\n>>大循环配方启动库存\n")
+    out("\n>>完美循环物质启动量（单批次投料）\n")
     if solution.bootstrap_inventory:
         for item, amount in sorted(solution.bootstrap_inventory.items()):
             out(f"  {item}: {amount:.3f}")

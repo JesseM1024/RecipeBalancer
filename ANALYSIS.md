@@ -58,7 +58,7 @@
 | `build_target_vector` / `build_inventory_vector` | → `b`, `s` | 目标 / 库存向量 | 矩阵 |
 | `build_augmented_lp` | A,b,s,objective,白名单 → `(A_ub, b_ub, c, external_items)` | 装配主 LP：变量 = [配方速率 x, 外部输入 r] | 求解 |
 | `detect_deficit_items` | recipes+白名单 → `Set[str]` | **SCC 分解 + 每 SCC 一个子 LP**，找循环中必然亏损的物质 | 检测 |
-| `simulate_bootstrap_inventory` | recipes+rates+target → `Dict[str, float]` | 冷启动不动点模拟，估算循环系统最小启动库存 | 模拟 |
+| `detect_perfect_cycles`（2026-10-17 重定义） | recipes+rates+external → `Dict[str, float]` | **完美循环物质检测**：环内自产自耗 + 活跃配方 + 非外部输入 → 单批次启动量 | 检测 |
 | `solve_production` | 全部参数 → `RecipeSolution` | **主编排**：检测 → 白名单 → LP → 解析 | 求解 |
 | `print_solution` | solution+recipes → stdout | 文本报告（配方方案/汇总/设备统计） | 报告 |
 | `draw_production_graph_pyvis` | solution+recipes → `.html` | 交互式流程图（物品/配方双节点、力导向、hover） | 可视化 |
@@ -142,11 +142,24 @@ $$
 
 若非白名单物品在环内亏损，子 LP 不可行 → 跳过该 SCC → 该物品进不了白名单 → 主 LP 要么绕开该环、要么不可行（报错信息会体现）。
 
-### 3.6 冷启动模拟（simulate_bootstrap_inventory）
+### 3.6 完美循环物质检测（detect_perfect_cycles，2026-10-17 重定义）
 
-- 语义：LP 给的是**稳态**速率；此模块独立估算"从零库存启动"所需的最小启动库存。
-- 方法：**不做时间模拟**，做"依赖展开"式不动点迭代（≤1000 轮）：遍历活跃配方 → 不可执行则按需"赠送"缺口（记录最深负库存 `min_inventory`）→ 执行；直到无变化。
-- 性质：**遍历顺序敏感的启发式**，结果非最小、非严格物理意义（作者注释自评"由于随机生成，不太好用"，默认关闭）。
+> 取代原 `simulate_bootstrap_inventory`（顺序敏感的零库存依赖展开）。
+> 用户决策：消耗品的"零启动库存"没有规划意义（总归有外部物流输入），
+> 该功能只用于**可完美循环物质的检测**。
+
+判定条件（三者同时满足）：
+
+1. 位于环 SCC 内：该物品由环内配方产出、又被环内配方消耗（自环 A→2A 亦算）；
+2. 物流仅由**活跃配方**（LP 速率 > ε）承担——未被选中的配方不参与，杜绝"纸面循环"；
+3. **不是外部输入**：稳态下无需持续外供。
+
+启动量语义：**单批次投料量** = 消耗该物品的环内活跃配方中，单次执行消耗量的最大值
+（"让第一台机器跑一次先放多少"）。不随产线规模缩放、与遍历顺序无关；
+真实在途库存取决于管道/缓冲布局，不在求解器职责内。
+
+实测：EBF 闭环 → 6 个环内物质全报，TiO2/O2 不再出现；
+自增殖（锻造模版 / SST）→ 种子 1；无环场景（simple / MEK / UU）→ 空集。
 
 ### 3.7 后处理与设备统计
 
@@ -186,7 +199,7 @@ allowed_external = user_raw ∪ inferred_raw ∪ deficit − target键
 [解析层] rates / external_inputs / net_flow / equipment_usage
         │
         ▼ (可选 auto_bootstrap)
-[模拟层] simulate_bootstrap_inventory
+[检测层] detect_perfect_cycles（完美循环物质 + 单批次启动量）
         │
         ▼
 RecipeSolution ──► [报告] print_solution
@@ -213,7 +226,7 @@ RecipeSolution ──► [报告] print_solution
 | `total_machine_count` | `int` | $\sum_e \lceil usage(e) \rceil$ |
 | `inferred_raw_materials` | `Set[str]` | 自动检测的原料 |
 | `inferred_initial_inventory` | `Dict[str, float]` | 自动检测的自增殖种子 |
-| `bootstrap_inventory` | `Dict[str, float]` | 冷启动库存（可选） |
+| `bootstrap_inventory` | `Dict[str, float]` | 完美循环物质 → 单批次启动量（可选） |
 | `success` / `message` | `bool` / `str` | 求解状态 |
 
 ### 5.2 输出函数
@@ -243,7 +256,7 @@ RecipeSolution ──► [报告] print_solution
 | F | 死 import：`deque`、`scipy.linalg.null_space`（早期代数法的残留） | 删除 |
 | G | 机器数三种口径并存且 `print_solution` 重复计算 | `machine_detail` 进 `RecipeSolution`；字段明确命名 `machines_shared_min` / `machines_per_recipe` |
 | H | ε 常量散落：1e-12（原料）、1e-10（速率）、1e-9（亏损/bootstrap）、1e-8（外部输入/净物流） | 集中为 `SolverConfig` 中的命名常量，注释各自语义 |
-| I | `simulate_bootstrap_inventory` 顺序敏感启发式，作者自评不可靠 | 重写为离散事件模拟（确定性调度策略）或时间展开 LP（见 §7.2） |
+| I | ~~`simulate_bootstrap_inventory` 顺序敏感启发式，作者自评不可靠~~ **2026-10-17 已修复**：替换为结构性判定 `detect_perfect_cycles`（与顺序无关，只报完美循环物质） | 已解决 |
 | J | 调试 `print` 散布在 `detect_deficit_items` | 换 logging，检测结果进 `Diagnostics` 结构 |
 | K | 配方为裸 dict 无校验；`disabled_recipes` 用列表下标，插删配方即错位 | `Recipe` dataclass + pydantic 校验；配方带稳定字符串 ID，禁用按 ID |
 
@@ -278,9 +291,9 @@ RecipeSolution ──► [报告] print_solution
 2. **库存语义开关**（修 P0-A）：
    - `catalytic`（现状）：库存只出现在报告里；
    - `consumable`：$b = target$（不加库存），净物流 $= Ax + s + Er - b$（期末剩余库存）。
-3. **bootstrap 重写**：
-   - 方案 a（推荐）：离散事件模拟——机器为离散资源、配方按确定性优先级调度（如拓扑序+环内轮转），统计各物品历史最低点 → 启动库存 = $\max(0, -\min)$。确定性、可解释；
-   - 方案 b（精确）：时间展开 LP——把 $[0,T]$ 分箱，最小化 $\sum \text{seed}_i$；重但给出最优解。
+3. ~~**bootstrap 重写**~~ **（2026-10-17 已实施，见 §12 U1）**：不采用离散事件模拟/时间展开 LP，
+   改为**结构性完美循环检测**——环 SCC + 活跃配方 + 非外部输入 → 单批次启动量。
+   理由：用户需要的是"哪些物质可以完美循环"，而非"全系统零启动库存"；后者对消耗品无意义。
 4. **tie-break**（修 P2-P）：Phase 2 后追加 $\min \varepsilon \mathbf{1}^\top x$ 微目标。
 
 ### 7.3 数值层
@@ -311,7 +324,7 @@ RecipeSolution ──► [报告] print_solution
 │   ├── matrix.py             # collect_all_items, build_matrix, 向量构建           ← P2-M
 │   ├── detection.py          # raw / seed / deficit(SCC+子LP), 只见 active 集      ← P0-B/E/F/J/L/Q
 │   ├── solver.py             # 两阶段 LP + 解析 + 机器统计                          ← P0-C/P/G/H/R
-│   ├── bootstrap.py          # 离散事件冷启动模拟                                   ← P1-I
+│   ├── bootstrap.py          # 完美循环物质检测（原 bootstrap 模拟）              ← P1-I 已解决
 │   ├── report.py             # 文本报告(纯消费 solution)
 │   ├── visualize.py          # pyvis 图(重构节点创建)                               ← P2-N/O
 │   ├── io.py                 # JSON/YAML 配方加载与结果导出
@@ -345,12 +358,13 @@ RecipeSolution ──► [报告] print_solution
 
 ## 10. 转写实施状态（2026-10-17）
 
-忠实转写已完成并入库（本目录，`src/recipe_balancer/`，46 项测试全绿）：
+忠实转写已完成并入库（本目录，`src/recipe_balancer/`，54 项测试全绿）：
 
 - 行为与 notebook 完全对齐（P0-A/B/C 现状语义均保留，并有测试文档化）；
 - 八模块结构落地（models / matrix / detection / solver / bootstrap / report / visualize / io），新增 cli 与场景 JSON 格式；
 - 9 个 notebook 场景固化为 pytest 金标准（`tests/conftest.py`，数值表达式逐字转录）；
-- 转写实测新发现 P0-D（亏损检测量纲效应），见 §6。
+- 转写实测新发现 P0-D（亏损检测量纲效应），见 §6；
+- **U1 已完成**：bootstrap 重定义为"完美循环物质检测"（§12 U1），P0-D 按用户决策暂不处理。
 
 后续优化按 §12 执行。
 
@@ -379,7 +393,7 @@ RecipeSolution ──► [报告] print_solution
 | 3 | **配方数据管线**：手写 dict 不可持续 | EMI/REI 导出、KubeJS/GTCEu dump → JSON → schema 校验；`io.py` 新增导入器 | **P1** |
 | 4 | 副产物处置：当前 surplus 免费消失 | 显式 void 配方（销毁塔）；或 surplus 加惩罚成本 | P2 |
 | 5 | 设备上限/整数机器：LP 分数解 + 后置 ceil 够规划用；硬上限（"只有 2 台聚变堆"）不支持 | 先做解后校验；真需要再升 MILP（`scipy.optimize.milp`，同走 HiGHS，零新依赖） | P2 |
-| 6 | 概率产出方差：稳态期望正确，但循环内概率产出环节实际间歇卡停 | 重写 bootstrap 为 DES 的第二个动机（稳态期望 + 动态验证） | P2 |
+| 6 | 概率产出方差：稳态期望正确，但循环内概率产出环节实际间歇卡停 | 稳态期望正确；动态验证需另立 DES（bootstrap 已改为结构性检测，不再承担该职责） | P2 |
 | 7 | 库存/副产品优先级（先用库存再外购） | 两阶段 LP（§7.2）顺带覆盖 | P2 |
 
 ### 11.3 明确不做的
@@ -391,22 +405,32 @@ RecipeSolution ──► [报告] print_solution
 
 ## 12. 转写后优化清单（按执行顺序）
 
-### U1. bootstrap 重定义为「完美循环物质检测器」（用户 2026-10-17 决策，最高优先）
+### U1. ~~bootstrap 重定义为「完美循环物质检测器」~~ ✅ 已完成（2026-10-17）
 
-**动机**：现有 `simulate_bootstrap_inventory` 对全部活跃配方做零库存依赖展开，
-消耗品（TiO2、Cl2、H2O…）总归需要外部物流输入，其"零启动库存"没有规划意义，
-且结果顺序敏感。目标功能：只检测**可完美循环（守恒）的物质**——
-稳态净流量为 0、循环内自产自耗的物质——并给出最小启动种子。
+**动机**：原实现对全部活跃配方做零库存依赖展开，消耗品（TiO2、Cl2、H2O…）
+总归需要外部物流输入，其"零启动库存"没有规划意义，且结果顺序敏感。
 
-**实现建议**：
+**最终实现**（`bootstrap.detect_perfect_cycles`，替换 `simulate_bootstrap_inventory`）：
 
-1. 复用 `detect_deficit_items` 的 SCC + 子 LP：环内 `d_i ≈ 0` 的物品 = 完美循环物质；
-2. 种子上界取该物品在一个循环周期内的在途量（稳态速率 × 相关配方耗时），
-   或简化为单批次消耗量（如 1 个锻造模版 / 1 个 SST）；
-3. 消耗品（`d_i > 0` 或净流量 ≠ 0）一律不进结果；
-4. 输出 `{item: seed}` 并标注所属 SCC，替换现有 `bootstrap_inventory` 字段语义。
+判定条件（按**结构**判定，刻意不复用亏损子 LP，从而不受 P0-D 量纲效应影响）：
 
-### U2. 修复亏损检测的量纲效应（P0-D）
+1. 位于环 SCC 内：环内配方既产又耗（自环 A→2A 亦算）；
+2. 物流仅由**活跃配方**（LP 速率 > ε）承担——未选中的配方不参与，杜绝"纸面循环"；
+3. **不是外部输入**——稳态下无需持续外供。
+
+启动量：**单批次投料量** = 消耗该物品的环内活跃配方中单次执行消耗量的最大值
+（"让第一台机器跑一次先放多少"）。不随产线规模缩放、与遍历顺序无关；
+真实在途库存取决于管道/缓冲布局，明确不在求解器职责内。
+
+**实测结果**：
+
+- EBF 闭环 → `{TiCl4:1000, Mg:2, MgCl2:3, CO:1000, C:2, Cl2:4000}`，TiO2/O2 不再出现；
+- 自增殖（锻造模版 / SST）→ 各 1；deficit 场景 → 排除外部供给的 C/MgCl2；
+- 无环场景（simple / MEK / UU）→ 空集（原实现会误报一堆消耗品）。
+
+字段 `bootstrap_inventory` 语义随之变更，报告标题改为"完美循环物质启动量（单批次投料）"。
+
+### U2. 修复亏损检测的量纲效应（P0-D）—— 用户决策：**暂不处理**（2026-10-17）
 
 三选一：
 1. **行归一化**：子 LP 中每行除以该物品的主 LP 特征流量（或配方中的最大用量），使 d 无量纲；

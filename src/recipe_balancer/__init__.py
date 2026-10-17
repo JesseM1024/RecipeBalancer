@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from .bootstrap import simulate_bootstrap_inventory
+from .bootstrap import detect_perfect_cycles
 from .detection import (
     auto_detect_raw_materials,
     auto_detect_seed_inventory,
@@ -27,7 +27,7 @@ __all__ = [
     "auto_detect_raw_materials",
     "auto_detect_seed_inventory",
     "detect_deficit_items",
-    "simulate_bootstrap_inventory",
+    "detect_perfect_cycles",
     "print_solution",
     "format_solution",
     "draw_production_graph_pyvis",

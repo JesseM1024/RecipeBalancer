@@ -25,7 +25,7 @@ from typing import Dict, List, Optional, Set, Tuple
 import numpy as np
 from scipy.optimize import linprog
 
-from .bootstrap import simulate_bootstrap_inventory
+from .bootstrap import detect_perfect_cycles
 from .detection import (
     auto_detect_raw_materials,
     auto_detect_seed_inventory,
@@ -116,6 +116,8 @@ def solve_production(
     allowed_external_cyc_inputs : 循环亏损物质白名单；空/None = 不限制。
     objective : "machine"（最小化机器并行总量）或 "recipes"（最小化配方活动总量）。
     auto_detect_raw / auto_detect_seed / auto_bootstrap : 三个自动检测开关。
+        ``auto_bootstrap`` 控制"完美循环物质检测"（{物品: 单批次启动量}，
+        见 :mod:`recipe_balancer.bootstrap`）。
     """
     user_raw = set(raw_materials or set())
     user_inventory = dict(initial_inventory or {})
@@ -202,20 +204,21 @@ def solve_production(
     x = z[:num_recipes]
     r = z[num_recipes:]
 
-    # ---- 冷启动模拟（可选；重定义方向见 bootstrap 模块 docstring）----
-    bootstrap_inventory: Dict[str, float] = {}
-    if auto_bootstrap:
-        bootstrap_inventory = simulate_bootstrap_inventory(
-            recipe_list=recipe_list,
-            recipe_rates=list(x),
-            target_products=target_products,
-        )
-
     # ---- 外部输入 ----
     external_inputs: Dict[str, float] = {}
     for idx, item in enumerate(external_items):
         if r[idx] > EPS_FLOW:
             external_inputs[item] = r[idx]
+
+    # ---- 完美循环物质检测（可选）----
+    # 判定只依赖"活跃配方 + 外部输入"，在外部输入确定之后执行。
+    bootstrap_inventory: Dict[str, float] = {}
+    if auto_bootstrap:
+        bootstrap_inventory = detect_perfect_cycles(
+            recipe_list=recipe_list,
+            recipe_rates=list(x),
+            external_inputs=set(external_inputs),
+        )
 
     # ---- 净物流 ----
     external_vec = np.zeros(len(all_items))

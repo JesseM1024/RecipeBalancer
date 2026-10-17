@@ -49,6 +49,7 @@ class RecipeSolution:
     total_machine_count: int
     inferred_raw_materials: Set[str]
     inferred_initial_inventory: Dict[str, float]
+    #: 完美循环物质 -> 单批次启动量（auto_bootstrap=True 时填充）
     bootstrap_inventory: Dict[str, float]
     success: bool
     message: str

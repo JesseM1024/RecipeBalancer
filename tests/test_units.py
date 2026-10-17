@@ -12,9 +12,9 @@ from recipe_balancer import (
     build_matrix,
     collect_all_items,
     detect_deficit_items,
+    detect_perfect_cycles,
     solve_production,
 )
-from recipe_balancer.bootstrap import simulate_bootstrap_inventory
 from recipe_balancer.io import (
     RecipeSchemaError,
     load_scenario,
@@ -125,28 +125,101 @@ def test_initial_inventory_is_inert_current_behavior():
 
 
 # =====================================================================
-# bootstrap 模拟（现状文档化：消耗品也会出现在结果里）
+# 完美循环物质检测（2026-10-17 重定义，替代原 bootstrap 模拟）
 # =====================================================================
 
 
-def test_bootstrap_current_behavior_includes_consumables():
-    """现状：bootstrap 会把循环"在途量"全部算成启动库存，
-    包括 TiO2 / Cl2 这类总归由外部输入的消耗品——正是要重定义的原因。
-    """
+def test_perfect_cycle_ebf_loop():
+    """EBF 闭环：6 个环内物质全部自给；启动量 = 单批次投料量。"""
     s = sc("ebf_cycle")
     sol = solve_production(s["recipes"], s["target"])
-    b = simulate_bootstrap_inventory(s["recipes"], sol.recipe_rates, s["target"])
-    # 实测（依赖配方遍历顺序）：TiCl4 200 / Cl2 800 / Mg 0.4 / C 0.4 / TiO2 0.2
-    assert {"TiCl4", "Cl2", "Mg", "C"} <= set(b)
-    assert all(v > 0 for v in b.values())
-    assert b["TiCl4"] == pytest.approx(200.0, rel=1e-6)
-    # 消耗品 TiO2 / Cl2 也被计入（待优化点）
-    assert "TiO2" in b and "Cl2" in b
+    cycles = detect_perfect_cycles(
+        s["recipes"], sol.recipe_rates, set(sol.external_inputs)
+    )
+    assert cycles == {
+        "TiCl4": 1000.0,   # EBF 单次消耗 1e3
+        "Mg": 2.0,         # EBF 单次消耗 2
+        "MgCl2": 3.0,      # 电解单次消耗 3
+        "CO": 1000.0,      # 电解单次消耗 1e3
+        "C": 2.0,          # 化反单次消耗 2
+        "Cl2": 4000.0,     # 化反单次消耗 4e3
+    }
 
 
-def test_bootstrap_toggle_off_by_default():
-    sol = solve_production(sc("ebf_cycle")["recipes"], sc("ebf_cycle")["target"])
-    assert sol.bootstrap_inventory == {}
+def test_perfect_cycle_excludes_external_inputs():
+    """deficit 场景：C / MgCl2 由外部持续供给 => 不算完美循环。"""
+    s = sc("deficit")
+    sol = solve_production(s["recipes"], s["target"], **s["options"])
+    cycles = detect_perfect_cycles(
+        s["recipes"], sol.recipe_rates, set(sol.external_inputs)
+    )
+    assert cycles == {"TiCl4": 1000.0, "CO": 1000.0, "Cl2": 4000.0, "Mg": 2.0}
+    assert "C" not in cycles and "MgCl2" not in cycles
+
+
+def test_perfect_cycle_autocatalytic():
+    """自增殖配方（1 -> 2）是单物品自环，种子 = 1。"""
+    s = sc("autocatalytic")
+    sol = solve_production(s["recipes"], s["target"])
+    cycles = detect_perfect_cycles(
+        s["recipes"], sol.recipe_rates, set(sol.external_inputs)
+    )
+    assert cycles == {"锻造模版": 1.0}
+
+
+def test_perfect_cycle_dual_line_sst():
+    s = sc("dual_line")
+    sol = solve_production(s["recipes"], s["target"])
+    cycles = detect_perfect_cycles(
+        s["recipes"], sol.recipe_rates, set(sol.external_inputs)
+    )
+    assert cycles == {"SST": 1.0}
+
+
+def test_perfect_cycle_multi_loop_excludes_cl2():
+    """多路循环：Cl2 是外部输入 => 排除；其余环内物质保留。"""
+    s = sc("multi_loop")
+    sol = solve_production(s["recipes"], s["target"], **s["options"])
+    cycles = detect_perfect_cycles(
+        s["recipes"], sol.recipe_rates, set(sol.external_inputs)
+    )
+    assert "Cl2" not in cycles
+    assert cycles["TiCl4"] == 1000.0
+    assert cycles["TiCl2"] == 1000.0
+    assert cycles["Mg"] == 2.0
+    assert cycles["Na"] == 2.0
+
+
+def test_perfect_cycle_none_in_acyclic_scenarios():
+    """无环场景不应误报（原实现会返回一堆"零启动库存"的消耗品）。"""
+    for name in ("simple", "mek_fission", "uu"):
+        s = sc(name)
+        sol = solve_production(s["recipes"], s["target"], **s["options"])
+        assert detect_perfect_cycles(
+            s["recipes"], sol.recipe_rates, set(sol.external_inputs)
+        ) == {}, name
+
+
+def test_perfect_cycle_ignores_inactive_recipes():
+    """未激活配方不参与循环判定（避免纸面循环）。"""
+    s = sc("autocatalytic")
+    sol = solve_production(s["recipes"], s["target"])
+    # 把制造锻造模版的自增殖配方 R0 速率视为 0 => 无环
+    rates = list(sol.recipe_rates)
+    rates[0] = 0.0
+    assert detect_perfect_cycles(
+        s["recipes"], rates, set(sol.external_inputs)
+    ) == {}
+
+
+def test_bootstrap_toggle():
+    s = sc("ebf_cycle")
+    off = solve_production(s["recipes"], s["target"])
+    assert off.bootstrap_inventory == {}
+
+    on = solve_production(s["recipes"], s["target"], auto_bootstrap=True)
+    assert on.bootstrap_inventory["TiCl4"] == 1000.0
+    assert "TiO2" not in on.bootstrap_inventory  # 消耗品不再出现
 
 
 # =====================================================================
