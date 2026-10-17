@@ -68,6 +68,16 @@ recipe-balancer solve examples/mek_fission.json --objective recipes
 
 场景 JSON 格式见 [`src/recipe_balancer/io.py`](src/recipe_balancer/io.py) 模块 docstring。
 
+> **PowerShell**：带引号的绝对路径必须加调用符 `&`，否则报
+> `表达式或语句中包含意外的标记 "-m"`：
+>
+> ```powershell
+> & "C:\Users\JesseTech\.workbuddy\binaries\python\envs\default\Scripts\python.exe" `
+>   -m recipe_balancer.cli solve examples/ebf_cycle.json
+> ```
+>
+> cmd.exe / Git Bash 下不需要 `&`。
+
 ## 项目结构
 
 ```
