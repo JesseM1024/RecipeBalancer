@@ -36,9 +36,14 @@ def load_config(path: Path | None = None) -> Dict[str, Any]:
     return data
 
 
-def save_config(config: Dict[str, Any], path: Path | None = None) -> None:
+def save_config(config: Dict[str, Any], path: Path | None = None) -> bool:
+    """写入配置，返回是否成功（目录不可写时返回 ``False``，不抛异常）。"""
     target = Path(path) if path is not None else config_path()
-    target.parent.mkdir(parents=True, exist_ok=True)
     payload = {k: config.get(k, v) for k, v in DEFAULT_CONFIG.items()}
-    with open(target, "w", encoding="utf-8") as f:
-        json.dump(payload, f, ensure_ascii=False, indent=2)
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with open(target, "w", encoding="utf-8") as f:
+            json.dump(payload, f, ensure_ascii=False, indent=2)
+    except OSError:
+        return False
+    return True

@@ -941,10 +941,12 @@ class RecipeBalancerApp(tk.Tk):
         self.config_data["html_output_dir"] = html_output_dir
         self.config_data["export_dir"] = export_dir
         self.config_data["theme"] = theme
-        save_config(self.config_data)
+        saved = save_config(self.config_data)
         if theme != self.theme_name:
             self.apply_theme(theme)
-        self.set_status("设置已保存")
+        self.set_status(
+            "设置已保存" if saved else "设置已生效，但写入配置文件失败（仅本次有效）"
+        )
 
     def _open_settings(self) -> None:
         SettingsDialog(self)

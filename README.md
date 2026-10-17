@@ -159,7 +159,7 @@ src/recipe_balancer/
 ## 测试
 
 ```bash
-pytest            # 117 项（无 tkinter 的环境自动跳过 GUI 测试）
+pytest            # 118 项（无 tkinter 的环境自动跳过 GUI 测试）
 ```
 
 四层验证：

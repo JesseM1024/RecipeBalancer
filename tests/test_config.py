@@ -33,3 +33,11 @@ def test_config_rejects_unknown_theme(tmp_path):
     path = tmp_path / "config.json"
     save_config({"theme": "neon"}, path)
     assert load_config(path)["theme"] == "light"
+
+
+def test_save_config_reports_failure_instead_of_raising(tmp_path):
+    # 把一个文件当成目录用 -> mkdir 必然失败，函数应返回 False 而不是抛异常
+    blocker = tmp_path / "blocked"
+    blocker.write_text("x", encoding="utf-8")
+    ok = save_config({"theme": "dark"}, blocker / "config.json")
+    assert ok is False
