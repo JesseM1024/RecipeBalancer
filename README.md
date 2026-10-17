@@ -78,6 +78,12 @@ cd /d "C:\Users\JesseTech\Desktop\JesseTech\code\py\配方树自动配平"
 .venv\Scripts\python.exe -m recipe_balancer.gui
 ```
 
+> **如果报 `No module named 'recipe_balancer'`**：说明该 venv 里还没装本项目。两种办法：
+> ① `.venv\Scripts\pip install -e . --no-build-isolation`；
+> ② 不安装、直接指定源码目录：先 `$env:PYTHONPATH="src"`，再运行上面的命令。
+>
+> 自检：`.venv\Scripts\python.exe -c "import recipe_balancer; print(recipe_balancer.__file__)"`。
+
 界面布局：
 
 - **左侧**：配方列表（新增 / 复制 / 删除 / ↑↓ 排序），双击条目切换编辑；
