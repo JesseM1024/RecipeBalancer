@@ -88,8 +88,14 @@ def draw_production_graph_pyvis(
     height: str = "900px",
     width: str = "100%",
     show_edge_flow: bool = True,
+    cdn_resources: str = "local",
 ) -> str:
-    """生成交互式 HTML 流程图，返回输出文件路径。"""
+    """生成交互式 HTML 流程图，返回输出文件路径。
+
+    ``cdn_resources``:
+      - ``"local"``（默认）：在输出目录旁生成 ``lib/`` 资源目录，离线可用；
+      - ``"in_line"``：把 JS/CSS 内联进单个 HTML，适合临时预览（GUI 用）。
+    """
     from pyvis.network import Network  # 惰性导入
 
     net = Network(
@@ -98,6 +104,7 @@ def draw_production_graph_pyvis(
         directed=True,
         bgcolor="#ffffff",
         font_color="black",
+        cdn_resources=cdn_resources,
     )
 
     net.force_atlas_2based(

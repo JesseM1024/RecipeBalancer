@@ -132,3 +132,33 @@ def save_solution(solution: RecipeSolution, path: str | Path) -> None:
     """把解导出为 JSON。"""
     with open(path, "w", encoding="utf-8") as f:
         json.dump(solution.to_dict(), f, ensure_ascii=False, indent=2)
+
+
+def _jsonable(value: Any) -> Any:
+    """把 set / 嵌套结构转为可 JSON 化的形式。"""
+    if isinstance(value, (set, frozenset)):
+        return sorted(value)
+    if isinstance(value, dict):
+        return {k: _jsonable(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_jsonable(v) for v in value]
+    return value
+
+
+def save_scenario(
+    path: str | Path,
+    recipe_list: List[dict],
+    target_products: Dict[str, float],
+    options: Dict[str, Any] | None = None,
+) -> None:
+    """把配方 / 目标 / 选项保存为场景 JSON（格式与 :func:`load_scenario` 对应）。
+
+    不做结构校验；需要校验时先调用 :func:`validate_recipe_list`。
+    """
+    data = {
+        "recipes": recipe_list,
+        "target_products": target_products,
+        "options": _jsonable(options or {}),
+    }
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)

@@ -327,6 +327,22 @@ def test_visualize_writes_html(tmp_path):
     assert out.exists() and out.stat().st_size > 1000
 
 
+def test_visualize_inline_single_file(tmp_path):
+    """GUI 用的是 in_line 模式：单文件 HTML，不生成 lib/ 目录。"""
+    pytest.importorskip("pyvis")
+    from recipe_balancer import draw_production_graph_pyvis
+
+    s = sc("ebf_cycle")
+    sol = solve_production(s["recipes"], s["target"], auto_bootstrap=True)
+    out = tmp_path / "inline.html"
+    draw_production_graph_pyvis(
+        sol, s["recipes"], s["target"], output_file=str(out), cdn_resources="in_line"
+    )
+    text = out.read_text(encoding="utf-8")
+    assert 'src="lib/' not in text
+    assert out.stat().st_size > 100_000
+
+
 def test_material_tooltip_shows_bootstrap_amount():
     """红色（启动库存）节点的悬浮提示要带具体数量。"""
     from recipe_balancer.visualize import _material_tooltip

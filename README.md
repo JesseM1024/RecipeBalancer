@@ -9,6 +9,7 @@ MC 整合包配方树的**稳态物料衡算求解器**：把配方集合转成�
 - **完美循环启动投料**：把每个循环压缩成「最少投哪些料、各投多少」——外部输入不算循环成员，
   只做结构判定、不解析物品名（GT 元素名与其它整合包的幻想物质同样适用）
 - **输出**：文本报告（配方方案 / 汇总 / 设备统计）、pyvis 交互流程图、JSON 解
+- **图形界面**：tkinter 窗口，配方增删改、目标设定、结果查看、一键打开浏览器可视化
 - **CLI + Python API**
 
 ## 安装
@@ -67,6 +68,31 @@ recipe-balancer solve examples/simple_chain.json --draw graph.html --json soluti
 recipe-balancer solve examples/mek_fission.json --objective recipes
 ```
 
+### 图形界面
+
+tkinter 需要官方 Python 构建（WorkBuddy 托管环境无 `_tkinter`）。项目根目录自带
+基于系统 Python 3.10 的 `.venv`（含 numpy/scipy/networkx/pyvis）：
+
+```bat
+cd /d "C:\Users\JesseTech\Desktop\JesseTech\code\py\配方树自动配平"
+.venv\Scripts\python.exe -m recipe_balancer.gui
+```
+
+界面布局：
+
+- **左侧**：配方列表（新增 / 复制 / 删除 / ↑↓ 排序），双击条目切换编辑；
+- **配方编辑**：设备类型、单次耗时，原料表与产物表（双击回填、可增删）；
+- **目标与选项**：目标产物与速率、求解目标、外部原料、完美循环检测开关；
+- **结果**：完整文本报告（配方方案 / 汇总 / 设备统计）；
+- **底部**：求解、**生成可视化并打开浏览器**（单文件 HTML，自动拉起默认浏览器）、
+  导入 / 导出场景 JSON。
+
+快捷键：`F5` / `Ctrl+Enter` 求解，`Ctrl+G` 可视化，`Ctrl+O` 导入，`Ctrl+S` 导出。
+
+> 重新创建 GUI 环境：
+> `python -m venv .venv` → `.venv\Scripts\pip install numpy scipy networkx pyvis pytest` →
+> `.venv\Scripts\pip install -e . --no-build-isolation`
+
 场景 JSON 格式见 [`src/recipe_balancer/io.py`](src/recipe_balancer/io.py) 模块 docstring。
 
 > **PowerShell**：带引号的绝对路径必须加调用符 `&`，否则报
@@ -90,6 +116,7 @@ src/recipe_balancer/
 ├── bootstrap.py   # 冷启动库存模拟（待重定义，见 ANALYSIS.md §12）
 ├── report.py      # 文本报告
 ├── visualize.py   # pyvis 交互流程图（惰性导入）
+├── gui.py         # tkinter 图形界面（逻辑与控件分离，可测试）
 ├── io.py          # 场景 JSON 加载/校验、解导出
 └── cli.py         # 命令行入口
 ```
@@ -97,7 +124,7 @@ src/recipe_balancer/
 ## 测试
 
 ```bash
-pytest            # 92 项
+pytest            # 97 项（无 tkinter 的环境自动跳过 5 项 GUI 测试）
 ```
 
 三层验证：

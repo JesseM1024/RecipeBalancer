@@ -43,12 +43,19 @@ def build_parser() -> argparse.ArgumentParser:
     p_solve.add_argument("--disable", default=None, help="逗号分隔的禁用配方下标")
     p_solve.add_argument("--quiet", action="store_true", help="不打印文本报告")
 
+    sub.add_parser("gui", help="打开图形界面（需要 tkinter）")
+
     return parser
 
 
 def main(argv: Optional[List[str]] = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+
+    if args.command == "gui":
+        from .gui import main as gui_main
+
+        return gui_main()
 
     if args.command == "solve":
         recipe_list, target_products, kwargs = load_scenario(args.scenario)
