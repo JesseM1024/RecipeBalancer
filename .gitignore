@@ -8,3 +8,5 @@ dist/
 production_graph.html
 solution.json
 lib/
+
+*_graph.html
