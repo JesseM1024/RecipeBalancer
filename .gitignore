@@ -11,3 +11,4 @@ lib/
 .idea/
 
 *_graph.html
+selftest.log

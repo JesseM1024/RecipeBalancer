@@ -12,6 +12,8 @@ MC 整合包配方树的**稳态物料衡算求解器**：把配方集合转成�
 - **图形界面**：tkinter 窗口，配方增删改、目标设定、结果查看、一键打开浏览器可视化；
   **明/暗双主题**、高 DPI 感知（150% 缩放下文字不糊）、可视化与导出路径可配置
 - **CLI + Python API**
+- **可打包成免安装 exe**：`tools/build_exe.py`（PyInstaller，目录版 / 单文件版），
+  自带 `--selftest` 自检确保依赖没漏打
 
 ## 安装
 
@@ -111,8 +113,8 @@ cd /d "C:\Users\JesseTech\Desktop\JesseTech\code\py\配方树自动配平"
 | 键 | 含义 | 留空时 |
 |---|---|---|
 | `theme` | `light` / `dark` | 浅色 |
-| `html_output_dir` | 可视化 HTML 输出目录 | 系统临时目录 |
-| `export_dir` | 「导出 JSON」默认目录 | 上次使用的位置 |
+| `html_output_dir` | 可视化 HTML 输出目录 | 程序所在目录（exe 旁边 / 源码运行时为 cwd） |
+| `export_dir` | 「导出 JSON」默认目录 | 同上 |
 
 交互约定：
 
@@ -126,6 +128,30 @@ cd /d "C:\Users\JesseTech\Desktop\JesseTech\code\py\配方树自动配平"
 > 重新创建 GUI 环境：
 > `python -m venv .venv` → `.venv\Scripts\pip install numpy scipy networkx pyvis pytest` →
 > `.venv\Scripts\pip install -e . --no-build-isolation`
+
+## 打包为免安装程序（Windows）
+
+```powershell
+.venv\Scripts\python.exe tools\build_exe.py              # 目录版 → dist\RecipeBalancer\
+.venv\Scripts\python.exe tools\build_exe.py --onefile    # 单文件 → dist\RecipeBalancer.exe
+```
+
+产物不需要目标机器装 Python：tkinter / numpy / scipy / networkx / pyvis 全部内置。
+实测（本机 Win10 + SSD）：**目录版 146 MB / 启动 ~1.0 s**；
+**单文件版 58 MB / 启动 ~3.6 s**（首次启动要把 ~150 MB 解压到 `%TEMP%`，之后仍每次重解压）。
+
+- **默认目录版**：启动 1~2 秒。单文件版每次启动都要把 ~150 MB 解压到临时目录，GUI 冷启动明显更慢，
+  只有「必须发一个文件」时才用 `--onefile`。
+- **pyvis 数据**：HTML 模板与内联 JS 是包数据，构建脚本用 `--collect-data pyvis` 收集；
+  漏了会在点「可视化」时才炸，所以有下面的自检。
+- **IPython 不打包**：`pyvis.network` 顶层硬导入 `from IPython.display import IFrame`，
+  而该符号只用于 notebook 内嵌显示。`visualize._ensure_pyvis_importable()` 在 IPython
+  缺失时注入最小替身，省掉 IPython + jedi + prompt_toolkit + pygments 约 40 MB。
+- **输出路径**：可视化 HTML、导出的场景 JSON **默认写在 exe 同目录**（`config.app_dir()`），
+  可在「设置…」里改到别处。
+- **自检**：`RecipeBalancer.exe --selftest` 在冻结环境里实跑「求解 → 报告 → pyvis HTML」，
+  结果写 `selftest.log` 并弹窗；自动化可用 `--selftest --quiet`（只写日志，退出码 0/1）。
+- 构建脚本首次运行会用 PIL 生成 `assets/app.ico`（代码绘制，无外部素材）。
 
 场景 JSON 格式见 [`src/recipe_balancer/io.py`](src/recipe_balancer/io.py) 模块 docstring。
 
@@ -150,10 +176,16 @@ src/recipe_balancer/
 ├── bootstrap.py   # 完美循环检测：最小反馈顶点集 -> 最小启动投料集合
 ├── report.py      # 文本报告
 ├── visualize.py   # pyvis 交互流程图（惰性导入）
-├── config.py      # 用户设置读写（~/.recipe_balancer/config.json）
+├── config.py      # 用户设置 / 程序目录（app_dir）
+├── app.py         # 统一入口：GUI / CLI / --selftest
+├── selftest.py    # 打包自检（求解 + 报告 + pyvis）
 ├── gui.py         # tkinter 图形界面（逻辑与控件分离，可测试）
 ├── io.py          # 场景 JSON 加载/校验、解导出
 └── cli.py         # 命令行入口
+
+tools/
+├── build_exe.py   # PyInstaller 打包脚本（生成 assets/app.ico）
+└── snapshot_golden.py
 ```
 
 ## 测试

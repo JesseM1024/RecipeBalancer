@@ -2,11 +2,15 @@
 
 配置文件位置：``~/.recipe_balancer/config.json``（UTF-8）。
 读取时与默认值合并，损坏或缺失时静默回退默认值。
+
+默认输出目录见 :func:`app_dir`：打包成 exe 后是**可执行文件所在目录**，
+源码运行时是当前工作目录——用户不必再去找临时目录里生成的文件。
 """
 
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 from typing import Any, Dict
 
@@ -15,6 +19,13 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "html_output_dir": "",
     "export_dir": "",
 }
+
+
+def app_dir() -> Path:
+    """程序所在目录：冻结（PyInstaller 单文件/单目录）后为 exe 目录，否则为 cwd。"""
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return Path.cwd()
 
 
 def config_path() -> Path:

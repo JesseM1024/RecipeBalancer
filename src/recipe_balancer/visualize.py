@@ -16,10 +16,46 @@ from __future__ import annotations
 
 import math
 import shutil
+import sys
+import types
 from pathlib import Path
 from typing import Dict, Optional, Set
 
 from .models import RecipeSolution
+
+
+def _ensure_pyvis_importable() -> None:
+    """让 pyvis 在没装 IPython 的环境里也能导入。
+
+    ``pyvis.network`` 顶层就 ``from IPython.display import IFrame``（硬导入），
+    而 IFrame 只被 ``Network.show()`` 用来在 notebook 里内嵌显示。打包成 exe 时
+    并不想为一个 IFrame 拖进 IPython + jedi + prompt_toolkit + pygments（约 40 MB，
+    且 IPython 在冻结环境里另有坑），所以在 IPython 缺失时注入一个最小替身。
+    只有真的调用 ``Network.show()`` 才会报错，本项目只用 ``generate_html()``。
+    """
+    if "IPython.display" in sys.modules:
+        return
+    try:
+        import IPython.display  # noqa: F401
+
+        return
+    except ImportError:
+        pass
+
+    display = types.ModuleType("IPython.display")
+
+    class IFrame:  # pragma: no cover - 仅冻结包在缺 IPython 时需要
+        def __init__(self, *args, **kwargs):
+            raise RuntimeError(
+                "当前运行环境没有 IPython，无法在 notebook 里内嵌显示；"
+                "请改用生成的 HTML 文件。"
+            )
+
+    display.IFrame = IFrame
+    package = types.ModuleType("IPython")
+    package.display = display
+    sys.modules.setdefault("IPython", package)
+    sys.modules.setdefault("IPython.display", display)
 
 
 def _write_html_utf8(net, output_file: str, cdn_resources: str) -> None:
@@ -124,6 +160,7 @@ def draw_production_graph_pyvis(
       - ``"local"``（默认）：在输出目录旁生成 ``lib/`` 资源目录，离线可用；
       - ``"in_line"``：把 JS/CSS 内联进单个 HTML，适合临时预览（GUI 用）。
     """
+    _ensure_pyvis_importable()
     from pyvis.network import Network  # 惰性导入
 
     net = Network(

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from recipe_balancer.config import DEFAULT_CONFIG, load_config, save_config
 
 
@@ -41,3 +43,26 @@ def test_save_config_reports_failure_instead_of_raising(tmp_path):
     blocker.write_text("x", encoding="utf-8")
     ok = save_config({"theme": "dark"}, blocker / "config.json")
     assert ok is False
+
+
+def test_app_dir_is_executable_dir_when_frozen(monkeypatch, tmp_path):
+    import sys
+
+    from recipe_balancer import config as cfg
+
+    exe = tmp_path / "dist" / "RecipeBalancer.exe"
+    exe.parent.mkdir(parents=True)
+    exe.write_text("stub", encoding="utf-8")
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "executable", str(exe))
+    assert cfg.app_dir() == exe.parent
+
+
+def test_app_dir_falls_back_to_cwd(monkeypatch, tmp_path):
+    import sys
+
+    from recipe_balancer import config as cfg
+
+    monkeypatch.delattr(sys, "frozen", raising=False)
+    monkeypatch.chdir(tmp_path)
+    assert cfg.app_dir() == Path.cwd()

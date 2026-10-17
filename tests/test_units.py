@@ -401,3 +401,60 @@ def test_cli_solve(tmp_path):
     rc = main(["solve", str(path), "--json", str(out_json), "--quiet"])
     assert rc == 0
     assert out_json.exists()
+
+
+def test_pyvis_importable_without_ipython(monkeypatch):
+    """打包版为了省 40 MB 不装 IPython，visualize 要能注入 IFrame 替身。
+
+    pyvis.network 顶层硬导入 ``from IPython.display import IFrame``，
+    冻结包里 IPython 被排除，这里模拟「IPython 不存在」验证替身生效。
+    """
+    import builtins
+    import sys
+
+    from recipe_balancer import visualize
+
+    prefix = ("IPython", "pyvis")
+    saved = {
+        key: value
+        for key, value in sys.modules.items()
+        if key.startswith(prefix)
+    }
+    for key in saved:
+        del sys.modules[key]
+
+    real_import = builtins.__import__
+
+    def fake_import(name, *args, **kwargs):
+        # 只在「真的要去磁盘找 IPython」时报错；替身已进 sys.modules 时放行
+        if (name == "IPython" or name.startswith("IPython.")) and name not in sys.modules:
+            raise ImportError("IPython 不在打包环境里")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+    try:
+        visualize._ensure_pyvis_importable()
+        assert "IPython.display" in sys.modules
+        import pyvis.network  # noqa: F401  # 能导入即说明替身生效
+
+        with pytest.raises(RuntimeError):
+            sys.modules["IPython.display"].IFrame("x")
+    finally:
+        monkeypatch.undo()
+        for key in [k for k in sys.modules if k.startswith(prefix)]:
+            del sys.modules[key]
+        sys.modules.update(saved)
+
+
+def test_selftest_runs_end_to_end(tmp_path, monkeypatch):
+    """打包自检：求解 → 报告 → pyvis HTML 全链路，日志落在程序目录。"""
+    pytest.importorskip("pyvis")
+    from recipe_balancer import selftest
+
+    monkeypatch.setattr(selftest, "app_dir", lambda: tmp_path)
+    assert selftest.run_selftest(notify=False) == 0
+
+    log = (tmp_path / "selftest.log").read_text(encoding="utf-8")
+    assert "求解: 通过" in log
+    assert "可视化: 通过" in log
+    assert (tmp_path / "selftest_graph.html").stat().st_size > 100_000

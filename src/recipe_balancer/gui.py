@@ -30,7 +30,6 @@ import copy
 import ctypes
 import re
 import sys
-import tempfile
 import time
 import webbrowser
 from pathlib import Path
@@ -38,7 +37,7 @@ import tkinter as tk
 from tkinter import filedialog, font as tkfont, messagebox, ttk
 from typing import Any, Dict, List, Optional, Set
 
-from .config import load_config, save_config
+from .config import app_dir, load_config, save_config
 from .io import load_scenario, save_scenario
 from .models import RecipeSolution
 from .report import format_solution
@@ -660,7 +659,7 @@ class SettingsDialog(tk.Toplevel):
 
         ttk.Label(
             frame,
-            text="目录留空时：可视化用系统临时目录，导出用上次位置。",
+            text="目录留空时：可视化与导出都放在程序所在目录（本 exe 旁边）。",
             foreground=app.palette["muted"],
         ).grid(row=3, column=0, columnspan=3, sticky="w", pady=(6, 10))
 
@@ -742,6 +741,7 @@ class RecipeBalancerApp(tk.Tk):
         self.target_unit_var = tk.StringVar(value=DEFAULT_UNIT)
 
         self._init_fonts()
+        self._set_window_icon()
         self._apply_ttk_style()
         self._build_ui()
         self._bind_shortcuts()
@@ -770,6 +770,26 @@ class RecipeBalancerApp(tk.Tk):
     # ---------------------------------------------------------------
     # 主题 / 样式
     # ---------------------------------------------------------------
+
+    def _set_window_icon(self) -> None:
+        """用 assets/app.ico 替换 Tk 默认的羽毛图标（标题栏 + 任务栏）。
+
+        打包后图标随 `--add-data` 落在 ``sys._MEIPASS/assets``；源码运行时
+        从项目根目录找。找不到就保持 Tk 默认，不影响功能。
+        """
+        candidates = []
+        bundle_dir = getattr(sys, "_MEIPASS", None)
+        if bundle_dir:
+            candidates.append(Path(bundle_dir) / "assets" / "app.ico")
+        candidates.append(Path(__file__).resolve().parents[2] / "assets" / "app.ico")
+        for path in candidates:
+            if not path.exists():
+                continue
+            try:
+                self.iconbitmap(default=str(path))
+                return
+            except tk.TclError:
+                continue
 
     def _init_fonts(self) -> None:
         families = set(tkfont.families(self))
@@ -1490,10 +1510,11 @@ class RecipeBalancerApp(tk.Tk):
         self._render_report_text(self.last_report_text)
 
     def _html_output_dir(self) -> Path:
+        """可视化 HTML 输出目录：配置优先，否则就是程序所在目录（exe 旁边）。"""
         configured = (self.config_data.get("html_output_dir") or "").strip()
         if configured:
             return Path(configured)
-        return Path(tempfile.gettempdir()) / "recipe_balancer_ui"
+        return app_dir()
 
     def _on_visualize(self) -> None:
         if not self._on_solve():
@@ -1576,7 +1597,9 @@ class RecipeBalancerApp(tk.Tk):
         if not self.model.recipes or not self.model.targets:
             messagebox.showwarning("无法导出", "请先填写配方与目标产物")
             return
-        initial_dir = (self.config_data.get("export_dir") or "").strip() or None
+        initial_dir = (self.config_data.get("export_dir") or "").strip() or str(
+            app_dir()
+        )
         path = filedialog.asksaveasfilename(
             title="导出场景 JSON",
             defaultextension=".json",
