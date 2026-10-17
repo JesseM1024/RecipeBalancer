@@ -354,6 +354,31 @@ def test_visualize_inline_single_file(tmp_path):
     assert out.stat().st_size > 100_000
 
 
+def test_visualize_writes_utf8(tmp_path):
+    """回归：pyvis 默认按系统编码写盘（中文 Windows = GBK）会崩，必须显式 UTF-8。
+
+    pyvis 内联的 vis-network JS 含有 ``©``（U+00A9），GBK 无法编码，
+    旧实现 ``open(name, "w+")`` 在中文 Windows 上会抛 UnicodeEncodeError。
+    """
+    pytest.importorskip("pyvis")
+    from recipe_balancer import draw_production_graph_pyvis
+
+    s = sc("simple")
+    sol = solve_production(s["recipes"], s["target"], raw_materials={"圆石"})
+    out = tmp_path / "utf8.html"
+    draw_production_graph_pyvis(
+        sol, s["recipes"], s["target"], output_file=str(out), cdn_resources="in_line"
+    )
+
+    raw = out.read_bytes()
+    # © 以 UTF-8 写入（0xC2 0xA9）；GBK 根本无法表示该字符
+    assert b"\xc2\xa9" in raw
+    with pytest.raises(UnicodeEncodeError):
+        "©".encode("gbk")
+    text = raw.decode("utf-8")
+    assert '<meta charset="utf-8">' in text
+
+
 def test_material_tooltip_shows_bootstrap_amount():
     """红色（启动库存）节点的悬浮提示要带具体数量。"""
     from recipe_balancer.visualize import _material_tooltip

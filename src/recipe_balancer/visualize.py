@@ -15,9 +15,37 @@
 from __future__ import annotations
 
 import math
+import shutil
+from pathlib import Path
 from typing import Dict, Optional, Set
 
 from .models import RecipeSolution
+
+
+def _write_html_utf8(net, output_file: str, cdn_resources: str) -> None:
+    """用 UTF-8 写 pyvis HTML。
+
+    pyvis 的 ``write_html`` 使用 ``open(name, "w+")``（不指定编码），
+    在中文 Windows 上会按 GBK 写盘，内联的 vis-network JS 含有 ``©``
+    等字符，直接抛 UnicodeEncodeError。这里改为自行落盘。
+    """
+    html = net.generate_html()
+    out_path = Path(output_file)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if cdn_resources == "local":
+        import pyvis
+
+        lib_src = Path(pyvis.__file__).parent / "templates" / "lib"
+        lib_dst = Path.cwd() / "lib"
+        lib_dst.mkdir(exist_ok=True)
+        for name in ("bindings", "tom-select", "vis-9.1.2"):
+            target = lib_dst / name
+            if not target.exists():
+                shutil.copytree(lib_src / name, target)
+
+    with open(out_path, "w", encoding="utf-8") as f:
+        f.write(html)
 
 
 def _fmt_amount(amt: float) -> str:
@@ -243,7 +271,7 @@ def draw_production_graph_pyvis(
             add_material_node(item)
             add_flow_edge(recipe_id, item, total_amount, f"{recipe_id} → {item}")
 
-    net.save_graph(output_file)
+    _write_html_utf8(net, output_file, cdn_resources)
     print("\n================================================")
     print("pyvis流程图已生成:")
     print(output_file)
