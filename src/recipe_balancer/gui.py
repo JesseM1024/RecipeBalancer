@@ -1,31 +1,36 @@
 """tkinter 图形界面：配方卡片流 / 目标设置 / 实时结果 / 一键可视化。
 
-布局参考用户草图：
+布局（左侧编辑 / 右侧结果）：
 
     ┌───────────────────────────────┬───────────────┐
-    │ 目标产物 / 速率 / 单位 / 求解选项 │               │
+    │ 目标产物 / 速率 / 单位          │               │
+    │ 目标列表（最多 3 行，可滚动）    │               │
+    │ 求解目标 / 循环检测             │   文本结果     │
+    │ 外部原料                        │               │
+    │ 循环亏损表                      │               │
     ├───────────────────────────────┤               │
-    │ 筛选框                         │   文本结果     │
-    │ ┌ 配方卡片 1 ───────────────┐  │               │
-    │ │ 原料（回车添加）          │  │               │
-    │ │ 产物（回车添加）          │  │               │
-    │ │ 机器类型 / 耗时            │  │               │
+    │ 筛选框                         │               │
+    │ ┌ 配方卡片 1（可滚动）───────┐  │               │
+    │ │ 原料（回车添加）           │  │               │
+    │ │ 产物（回车添加）           │  │               │
+    │ │ 机器类型 / 耗时 / 单位      │  │               │
     │ └───────────────────────────┘  │               │
-    │ ┌ 配方卡片 2 …（可滚动）     │  │               │
     ├───────────────────────────────┤               │
-    │ 新增 / 求解 / 导入 / 导出       │ 启动浏览器按钮 │
+    │ 新增 / 求解 / 导入 / 导出        │ 启动浏览器按钮 │
     └───────────────────────────────┴───────────────┘
 
-交互约定：
+时间单位：
 
-- **改动即保存**：所有输入实时写入内存模型，无需"应用"按钮；
-- **自动求解**：模型合法时，改动后 600ms 自动求解并刷新右侧结果；
-- **回车添加**：每张卡片的原料/产物各有一组「名称 + 数量」输入框，
-  回车即加入对应列表（条目可点 ✕ 删除）；
-- 单位（tick / 秒 / 分 / 时）只影响显示与录入，模型内部统一用秒；
-- 配方列表放在 Canvas 上，可滚动；筛选框按物品名 / 设备名过滤卡片。
+- **每个耗时字段、每个目标速率各自带单位**（t / 秒 / 分 / 时），互不影响；
+- 录入后统一**归一化为 tick**，再换算成求解器使用的秒/每秒：
+  ``1 t = 0.05 s``，``速率(每秒) = 速率(/单位) ÷ (单位秒数)``；
+- 配方耗时的内部存储仍是秒（场景 JSON 契约不变）。
 
-启动：``python -m recipe_balancer.gui``（需要带 tkinter 的 Python，见 README）。
+其它约定：
+
+- 改动即时写入内存模型，合法时 600ms 后自动求解；
+- 原料允许为空（视为无输入）；产物为空则配方无效；
+- 新增配方不带占位物品。
 """
 
 from __future__ import annotations
@@ -50,11 +55,12 @@ CARD_BG = "#fbfbfb"
 LIST_BG = "#efefef"
 MUTED = "#6b6b6b"
 
+#: 新配方模板：不放占位物品；耗时 1 t；设备留空待填
 TEMPLATE_RECIPE = {
-    "sourceList": {"输入物品": 1},
-    "productList": {"输出物品": 1},
-    "time": 1.0,
-    "equType": "设备",
+    "sourceList": {},
+    "productList": {},
+    "time": 0.05,
+    "equType": "",
 }
 
 OBJECTIVE_LABELS = {
@@ -63,25 +69,39 @@ OBJECTIVE_LABELS = {
 }
 LABEL_TO_OBJECTIVE = {v: k for k, v in OBJECTIVE_LABELS.items()}
 
-#: 显示单位 -> 每单位对应的秒数（GT 中 1 tick = 1/20 秒）
-UNIT_FACTORS = {"tick": 0.05, "秒": 1.0, "分": 60.0, "时": 3600.0}
+#: 1 tick = 0.05 秒（GT 20 t/s）
+TICK_SECONDS = 0.05
+#: 显示单位 -> 若干 tick
+UNIT_TICKS = {"t": 1.0, "秒": 20.0, "分": 1200.0, "时": 72000.0}
+UNIT_CHOICES = list(UNIT_TICKS)
+DEFAULT_UNIT = "t"
+
+
+def unit_seconds(unit: str) -> float:
+    """一个显示单位等于多少秒（经由 tick 归一化）。"""
+    return UNIT_TICKS[unit] * TICK_SECONDS
 
 
 def seconds_from_display(value: float, unit: str) -> float:
-    return value * UNIT_FACTORS[unit]
+    """录入值（单位 unit）-> 秒。先归一到 tick：t = value × UNIT_TICKS[unit]。"""
+    ticks = value * UNIT_TICKS[unit]
+    return ticks * TICK_SECONDS
 
 
 def display_from_seconds(seconds: float, unit: str) -> float:
-    return seconds / UNIT_FACTORS[unit]
+    ticks = seconds / TICK_SECONDS
+    return ticks / UNIT_TICKS[unit]
 
 
 def rate_from_display(value: float, unit: str) -> float:
-    """每单位时间产量 -> 每秒产量。"""
-    return value / UNIT_FACTORS[unit]
+    """每 unit 产量 -> 每秒产量。"""
+    per_tick = value / UNIT_TICKS[unit]
+    return per_tick / TICK_SECONDS
 
 
 def rate_to_display(per_second: float, unit: str) -> float:
-    return per_second * UNIT_FACTORS[unit]
+    per_tick = per_second * TICK_SECONDS
+    return per_tick * UNIT_TICKS[unit]
 
 
 def _fmt(value: float) -> str:
@@ -185,12 +205,13 @@ class GuiState:
                     errors.append(f"{label}: 耗时必须大于 0")
             except (TypeError, ValueError):
                 errors.append(f"{label}: 耗时不是有效数字")
+
+            # 原料允许为空（无输入）；产物必须非空
+            products = recipe.get("productList") or {}
+            if not products:
+                errors.append(f"{label}: 产物列表为空（配方无效）")
             for key, cn in (("sourceList", "原料"), ("productList", "产物")):
-                mapping = recipe.get(key) or {}
-                if not mapping:
-                    errors.append(f"{label}: {cn}列表为空")
-                    continue
-                for item, amount in mapping.items():
+                for item, amount in (recipe.get(key) or {}).items():
                     if not str(item).strip():
                         errors.append(f"{label}: 存在空物品名")
                     try:
@@ -227,7 +248,7 @@ class GuiState:
 
 
 class RecipeCard(tk.Frame):
-    """一张配方卡片：原料 / 产物 / 设备 / 耗时，改动即时写回模型。"""
+    """一张配方卡片：原料 / 产物 / 设备 / 耗时（自带单位）。"""
 
     def __init__(self, master, app: "RecipeBalancerApp", index: int):
         super().__init__(
@@ -245,6 +266,7 @@ class RecipeCard(tk.Frame):
         self.item_boxes: Dict[str, tk.Frame] = {}
         self.item_vars: Dict[str, Dict[str, tk.StringVar]] = {}
         self.item_entries: Dict[str, Dict[str, ttk.Entry]] = {}
+        self.unit_var = tk.StringVar(value=app.recipe_units[index])
         self._build()
 
     # ---- 构建 ----
@@ -285,8 +307,16 @@ class RecipeCard(tk.Frame):
         self.time_var = tk.StringVar()
         self.time_entry = ttk.Entry(row, textvariable=self.time_var, width=10)
         self.time_entry.pack(side="left", padx=4)
-        self.unit_label = tk.Label(row, text="t", bg=CARD_BG, fg=MUTED)
-        self.unit_label.pack(side="left")
+
+        self.unit_box = ttk.Combobox(
+            row,
+            textvariable=self.unit_var,
+            values=UNIT_CHOICES,
+            state="readonly",
+            width=4,
+        )
+        self.unit_box.pack(side="left")
+        self.unit_box.bind("<<ComboboxSelected>>", self._on_unit_changed)
 
         self.equ_var.trace_add("write", self._on_fields_changed)
         self.time_var.trace_add("write", self._on_fields_changed)
@@ -333,8 +363,7 @@ class RecipeCard(tk.Frame):
         try:
             self.equ_var.set(str(self.recipe.get("equType", "")))
             seconds = float(self.recipe.get("time", 0))
-            self.time_var.set(_fmt(display_from_seconds(seconds, app.unit)))
-            self.unit_label.configure(text=app.unit)
+            self.time_var.set(_fmt(display_from_seconds(seconds, self.unit_var.get())))
         finally:
             app.syncing = False
 
@@ -401,8 +430,15 @@ class RecipeCard(tk.Frame):
             except ValueError:
                 value = None
             if value is not None and value > 0:
-                self.recipe["time"] = seconds_from_display(value, self.app.unit)
+                self.recipe["time"] = seconds_from_display(
+                    value, self.unit_var.get()
+                )
         self.app.on_model_changed(schedule=True, silent=True)
+
+    def _on_unit_changed(self, _event=None) -> None:
+        self.app.recipe_units[self.index] = self.unit_var.get()
+        self.refresh_fields()
+        self.app.on_model_changed(schedule=False)
 
     def _delete(self) -> None:
         self.app.delete_recipe(self.index)
@@ -420,16 +456,18 @@ class RecipeBalancerApp(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
         self.title(APP_TITLE)
-        self.geometry("1280x860")
-        self.minsize(1040, 680)
+        self.geometry("1280x880")
+        self.minsize(1040, 700)
 
         self.model = GuiState()
         self.cards: List[RecipeCard] = []
+        #: 与 model.recipes 对齐的每张卡片的时间显示单位
+        self.recipe_units: List[str] = []
+        #: 每个目标产物自己的速率单位
+        self.target_units: Dict[str, str] = {}
         self.syncing = False
         self._auto_job: Optional[str] = None
 
-        self.unit = "tick"
-        self.unit_var = tk.StringVar(value=self.unit)
         self.filter_var = tk.StringVar()
         self.raw_var = tk.StringVar()
         self.cyc_var = tk.StringVar()
@@ -438,12 +476,14 @@ class RecipeBalancerApp(tk.Tk):
         self.status_var = tk.StringVar(value="就绪")
         self.target_name_var = tk.StringVar()
         self.target_rate_var = tk.StringVar()
+        self.target_unit_var = tk.StringVar(value=DEFAULT_UNIT)
 
         self._init_fonts()
         self._build_ui()
         self._bind_shortcuts()
 
         self.model.add_recipe()
+        self.recipe_units.append(DEFAULT_UNIT)
         self._rebuild_cards()
         self._refresh_targets()
         self._schedule_auto_solve()
@@ -467,7 +507,7 @@ class RecipeBalancerApp(tk.Tk):
         status = ttk.Label(root, textvariable=self.status_var, foreground="#555555")
         status.pack(side="bottom", fill="x", pady=(6, 0))
 
-        # 用 grid 的列权重固定左右比例（3:2），避免右侧 Text 的请求宽度反压左栏
+        # grid 的 uniform 保证 3:2 分栏，不受子控件请求宽度影响
         body = ttk.Frame(root)
         body.pack(fill="both", expand=True)
         body.columnconfigure(0, weight=3, uniform="cols")
@@ -503,25 +543,46 @@ class RecipeBalancerApp(tk.Tk):
             side="left", padx=(4, 6)
         )
         ttk.Entry(row, textvariable=self.target_rate_var, width=7).pack(side="left")
-        self.rate_unit_label = ttk.Label(row, text=f"/{self.unit}")
-        self.rate_unit_label.pack(side="left", padx=(2, 6))
-
-        self.unit_box = ttk.Combobox(
+        ttk.Combobox(
             row,
-            textvariable=self.unit_var,
-            values=list(UNIT_FACTORS),
+            textvariable=self.target_unit_var,
+            values=UNIT_CHOICES,
             state="readonly",
-            width=5,
-        )
-        self.unit_box.pack(side="left")
-        self.unit_box.bind("<<ComboboxSelected>>", self._on_unit_changed)
-
+            width=4,
+        ).pack(side="left", padx=(2, 6))
         ttk.Button(row, text="添加目标", command=self._add_target).pack(
-            side="left", padx=8
+            side="left", padx=4
         )
 
-        self.targets_frame = ttk.Frame(frame)
-        self.targets_frame.pack(fill="x")
+        # 目标列表：最多显示 3 行，超出滚动
+        targets_wrap = ttk.Frame(frame)
+        targets_wrap.pack(fill="x")
+        self.targets_canvas = tk.Canvas(
+            targets_wrap, height=84, highlightthickness=0, bd=0
+        )
+        targets_scroll = ttk.Scrollbar(
+            targets_wrap, orient="vertical", command=self.targets_canvas.yview
+        )
+        self.targets_canvas.configure(yscrollcommand=targets_scroll.set)
+        self.targets_canvas.pack(side="left", fill="x", expand=True)
+        targets_scroll.pack(side="right", fill="y")
+        self.targets_frame = ttk.Frame(self.targets_canvas)
+        self._targets_window = self.targets_canvas.create_window(
+            (0, 0), window=self.targets_frame, anchor="nw"
+        )
+        self.targets_frame.bind(
+            "<Configure>",
+            lambda _e: self.targets_canvas.configure(
+                scrollregion=self.targets_canvas.bbox("all")
+            ),
+        )
+        self.targets_canvas.bind(
+            "<Configure>",
+            lambda e: self.targets_canvas.itemconfigure(
+                self._targets_window, width=e.width
+            ),
+        )
+        self.targets_canvas.bind("<MouseWheel>", self._on_targets_wheel)
 
         line2 = ttk.Frame(frame)
         line2.pack(fill="x", pady=(6, 0))
@@ -542,14 +603,20 @@ class RecipeBalancerApp(tk.Tk):
             command=self._on_option_changed,
         ).pack(side="left")
 
-        line3 = ttk.Frame(frame)
-        line3.pack(fill="x", pady=(4, 0))
-        ttk.Label(line3, text="外部原料").pack(side="left")
-        raw_entry = ttk.Entry(line3, textvariable=self.raw_var, width=8)
-        raw_entry.pack(side="left", fill="x", expand=True, padx=(4, 12))
-        ttk.Label(line3, text="循环亏损表").pack(side="left")
-        cyc_entry = ttk.Entry(line3, textvariable=self.cyc_var, width=10)
-        cyc_entry.pack(side="left", padx=4)
+        # 外部原料、循环亏损表各占一行
+        raw_line = ttk.Frame(frame)
+        raw_line.pack(fill="x", pady=(4, 0))
+        ttk.Label(raw_line, text="外部原料", width=10).pack(side="left")
+        ttk.Entry(raw_line, textvariable=self.raw_var, width=8).pack(
+            side="left", fill="x", expand=True, padx=(4, 0)
+        )
+
+        cyc_line = ttk.Frame(frame)
+        cyc_line.pack(fill="x", pady=(4, 0))
+        ttk.Label(cyc_line, text="循环亏损表", width=10).pack(side="left")
+        ttk.Entry(cyc_line, textvariable=self.cyc_var, width=8).pack(
+            side="left", fill="x", expand=True, padx=(4, 0)
+        )
 
         for var in (self.raw_var, self.cyc_var):
             var.trace_add("write", self._on_options_text_changed)
@@ -562,8 +629,9 @@ class RecipeBalancerApp(tk.Tk):
         frame = ttk.Frame(parent)
         frame.pack(side="top", fill="x", pady=(8, 4))
         ttk.Label(frame, text="筛选").pack(side="left")
-        entry = ttk.Entry(frame, textvariable=self.filter_var)
-        entry.pack(side="left", fill="x", expand=True, padx=(6, 0))
+        ttk.Entry(frame, textvariable=self.filter_var).pack(
+            side="left", fill="x", expand=True, padx=(6, 0)
+        )
         self.filter_var.trace_add("write", lambda *_: self._apply_filter())
         ttk.Label(frame, text="按配方物品 / 设备过滤", foreground="#8a8a8a").pack(
             side="left", padx=6
@@ -646,6 +714,10 @@ class RecipeBalancerApp(tk.Tk):
         for card in self.cards:
             card.destroy()
         self.cards.clear()
+        while len(self.recipe_units) < len(self.model.recipes):
+            self.recipe_units.append(DEFAULT_UNIT)
+        del self.recipe_units[len(self.model.recipes):]
+
         for index in range(len(self.model.recipes)):
             card = RecipeCard(self.cards_frame, self, index)
             card.grid(row=index, column=0, sticky="ew", padx=4, pady=4)
@@ -669,23 +741,33 @@ class RecipeBalancerApp(tk.Tk):
 
     def add_recipe(self) -> None:
         index = self.model.add_recipe()
+        self.recipe_units.append(DEFAULT_UNIT)
         self._rebuild_cards()
+        self.canvas.yview_moveto(1.0)  # 新卡片在底部，滚过去
         self.cards[index].equ_entry.focus_set()
         self.on_model_changed()
 
     def duplicate_recipe(self, index: int) -> None:
-        index_new = self.model.add_recipe(self.model.recipes[index], at=index + 1)
+        new_index = self.model.add_recipe(self.model.recipes[index], at=index + 1)
+        self.recipe_units.insert(index + 1, self.recipe_units[index])
         self._rebuild_cards()
-        self.cards[index_new].equ_entry.focus_set()
+        self.cards[new_index].equ_entry.focus_set()
         self.on_model_changed()
 
     def delete_recipe(self, index: int) -> None:
         self.model.remove_recipe(index)
+        if 0 <= index < len(self.recipe_units):
+            self.recipe_units.pop(index)
         self._rebuild_cards()
         self.on_model_changed()
 
     def move_recipe(self, index: int, delta: int) -> None:
         new_index = self.model.move_recipe(index, delta)
+        if new_index != index:
+            self.recipe_units[index], self.recipe_units[new_index] = (
+                self.recipe_units[new_index],
+                self.recipe_units[index],
+            )
         self._rebuild_cards()
         if 0 <= new_index < len(self.cards):
             self.cards[new_index].equ_entry.focus_set()
@@ -708,7 +790,9 @@ class RecipeBalancerApp(tk.Tk):
         if value <= 0:
             self.set_status("目标速率必须大于 0")
             return
-        self.model.targets[name] = rate_from_display(value, self.unit)
+        unit = self.target_unit_var.get()
+        self.model.targets[name] = rate_from_display(value, unit)
+        self.target_units[name] = unit
         self.target_name_var.set("")
         self.target_rate_var.set("")
         self._refresh_targets()
@@ -721,54 +805,70 @@ class RecipeBalancerApp(tk.Tk):
             ttk.Label(
                 self.targets_frame, text="（未设置目标产物）", foreground="#999999"
             ).pack(anchor="w")
-            return
-        for item, per_second in sorted(self.model.targets.items()):
-            row = ttk.Frame(self.targets_frame)
-            row.pack(fill="x")
-            ttk.Label(row, text=item, width=10).pack(side="left")
-            var = tk.StringVar(value=_fmt(rate_to_display(per_second, self.unit)))
-            entry = ttk.Entry(row, textvariable=var, width=8)
-            entry.pack(side="left")
-            entry.bind(
-                "<KeyRelease>",
-                lambda _e, i=item, v=var: self._update_target_rate(i, v),
-            )
-            ttk.Label(row, text=f"/{self.unit}", foreground=MUTED).pack(
-                side="left", padx=(2, 8)
-            )
-            ttk.Button(
-                row, text="✕", width=2, command=lambda i=item: self._remove_target(i)
-            ).pack(side="left")
+        else:
+            for item, per_second in sorted(self.model.targets.items()):
+                unit = self.target_units.get(item, DEFAULT_UNIT)
+                row = ttk.Frame(self.targets_frame)
+                row.pack(fill="x")
+                ttk.Label(row, text=item, width=10).pack(side="left")
+                var = tk.StringVar(value=_fmt(rate_to_display(per_second, unit)))
+                entry = ttk.Entry(row, textvariable=var, width=8)
+                entry.pack(side="left")
+                entry.bind(
+                    "<KeyRelease>",
+                    lambda _e, i=item, v=var, u=unit: self._update_target_rate(
+                        i, v, u
+                    ),
+                )
+                unit_var = tk.StringVar(value=unit)
+                combo = ttk.Combobox(
+                    row,
+                    textvariable=unit_var,
+                    values=UNIT_CHOICES,
+                    state="readonly",
+                    width=4,
+                )
+                combo.pack(side="left", padx=(2, 6))
+                combo.bind(
+                    "<<ComboboxSelected>>",
+                    lambda _e, i=item, u=unit_var: self._on_target_unit_changed(i, u),
+                )
+                ttk.Button(
+                    row, text="✕", width=2, command=lambda i=item: self._remove_target(i)
+                ).pack(side="left")
+        self.targets_frame.update_idletasks()
+        self.targets_canvas.configure(scrollregion=self.targets_canvas.bbox("all"))
+        # 布局完成后回到顶部（过早调用会被裁剪成错误的偏移）
+        self.after_idle(lambda: self.targets_canvas.yview_moveto(0))
+        self._bind_targets_wheel(self.targets_frame)
 
-    def _update_target_rate(self, item: str, var: tk.StringVar) -> None:
+    def _update_target_rate(
+        self, item: str, var: tk.StringVar, unit: str
+    ) -> None:
         try:
             value = float(var.get())
         except ValueError:
             return
         if value <= 0:
             return
-        self.model.targets[item] = rate_from_display(value, self.unit)
+        self.model.targets[item] = rate_from_display(value, unit)
         self.on_model_changed(schedule=True, silent=True)
+
+    def _on_target_unit_changed(self, item: str, unit_var: tk.StringVar) -> None:
+        self.target_units[item] = unit_var.get()
+        # 在事件回调里直接重建会销毁正在派发事件的控件，延后到空闲时执行
+        self.after_idle(self._refresh_targets)
+        self.on_model_changed(schedule=False)
 
     def _remove_target(self, item: str) -> None:
         self.model.targets.pop(item, None)
+        self.target_units.pop(item, None)
         self._refresh_targets()
         self.on_model_changed()
 
     # ---------------------------------------------------------------
     # 选项
     # ---------------------------------------------------------------
-
-    def _on_unit_changed(self, _event=None) -> None:
-        new_unit = self.unit_var.get()
-        if new_unit not in UNIT_FACTORS:
-            return
-        self.unit = new_unit
-        self.rate_unit_label.configure(text=f"/{self.unit}")
-        self._refresh_targets()
-        for card in self.cards:
-            card.refresh_fields()
-        self.on_model_changed(schedule=True, silent=True)
 
     def _on_options_text_changed(self, *_args) -> None:
         if self.syncing:
@@ -845,9 +945,7 @@ class RecipeBalancerApp(tk.Tk):
         self.model.last_solution = solution
         self._show_report(solution)
         self.set_status(
-            "求解成功"
-            if solution.success
-            else f"求解失败：{solution.message}"
+            "求解成功" if solution.success else f"求解失败：{solution.message}"
         )
         return solution.success
 
@@ -903,6 +1001,8 @@ class RecipeBalancerApp(tk.Tk):
             return
 
         self.model = GuiState.from_scenario(recipes, targets, kwargs)
+        self.recipe_units = [DEFAULT_UNIT] * len(self.model.recipes)
+        self.target_units = {item: DEFAULT_UNIT for item in self.model.targets}
         self._apply_state_to_widgets()
         self._rebuild_cards()
         self._refresh_targets()
@@ -987,6 +1087,15 @@ class RecipeBalancerApp(tk.Tk):
 
     def _on_wheel(self, event) -> None:
         self.canvas.yview_scroll(int(-event.delta / 120), "units")
+
+    def _on_targets_wheel(self, event):
+        self.targets_canvas.yview_scroll(int(-event.delta / 120), "units")
+        return "break"
+
+    def _bind_targets_wheel(self, widget) -> None:
+        widget.bind("<MouseWheel>", self._on_targets_wheel)
+        for child in widget.winfo_children():
+            self._bind_targets_wheel(child)
 
     def bind_wheel_recursive(self, widget) -> None:
         widget.bind("<MouseWheel>", self._on_wheel)

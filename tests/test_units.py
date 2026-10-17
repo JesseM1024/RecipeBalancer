@@ -277,6 +277,17 @@ def test_io_rejects_bad_schema():
                               "time": 0, "equType": "x"}])
 
 
+def test_io_allows_empty_source():
+    # 原料允许为空（无输入配方）；产物必须非空
+    validate_recipe_list(
+        [{"sourceList": {}, "productList": {"b": 1}, "time": 1, "equType": "x"}]
+    )
+    with pytest.raises(RecipeSchemaError):
+        validate_recipe_list(
+            [{"sourceList": {"a": 1}, "productList": {}, "time": 1, "equType": "x"}]
+        )
+
+
 def test_solution_json_serializable(tmp_path):
     sol = solve_production(sc("simple")["recipes"], sc("simple")["target"],
                            raw_materials={"圆石"})

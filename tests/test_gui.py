@@ -41,9 +41,22 @@ def test_state_validate_reports_problems():
     state.recipes = [{"sourceList": {}, "productList": {}, "time": 0, "equType": ""}]
     errors = state.validate()
     assert any("设备类型不能为空" in e for e in errors)
-    assert any("原料列表为空" in e for e in errors)
     assert any("产物列表为空" in e for e in errors)
+    # 原料允许为空：不应报错
+    assert not any("原料列表为空" in e for e in errors)
     assert any("目标产物" in e for e in errors)
+
+
+def test_state_allows_empty_source_and_solves():
+    state = GuiState()
+    state.recipes = [
+        {"sourceList": {}, "productList": {"空气": 1}, "time": 1, "equType": "发电机"}
+    ]
+    state.targets = {"空气": 1}
+    assert state.validate() == []
+    sol = state.solve()
+    assert sol.success
+    assert sol.external_inputs == {}
 
 
 def test_state_solve():
@@ -79,10 +92,13 @@ def test_state_scenario_roundtrip(tmp_path):
 
 
 def test_unit_conversion():
-    assert seconds_from_display(20, "tick") == pytest.approx(1.0)
+    # t 为基准：20 t = 1 秒
+    assert seconds_from_display(20, "t") == pytest.approx(1.0)
     assert seconds_from_display(2, "分") == pytest.approx(120.0)
-    assert rate_from_display(20, "tick") == pytest.approx(400.0)
-    assert rate_to_display(400.0, "tick") == pytest.approx(20.0)
+    assert rate_from_display(20, "t") == pytest.approx(400.0)
+    assert rate_to_display(400.0, "t") == pytest.approx(20.0)
+    # 每单位独立：0.01/t 与 0.2/s 等价
+    assert rate_from_display(0.01, "t") == pytest.approx(0.2)
 
 
 # =====================================================================
@@ -135,15 +151,34 @@ def test_card_enter_adds_item(app):
     assert any("矿石" in text for text in labels)
 
 
-def test_card_time_edits_follow_unit(app):
+def test_card_time_edits_follow_own_unit(app):
     card = app.cards[0]
-    app.unit = "tick"
-    card.time_var.set("40")  # 40 tick = 2 秒
+    card.unit_var.set("t")
+    card.refresh_fields()
+    card.time_var.set("40")  # 40 t = 2 秒
     assert app.model.recipes[0]["time"] == pytest.approx(2.0)
 
-    app.unit = "秒"
-    card.refresh_fields()
+    # 切换该卡片自己的单位（不影响其它卡片）
+    card.unit_var.set("秒")
+    card._on_unit_changed()
     assert card.time_var.get() == "2"
+    assert app.model.recipes[0]["time"] == pytest.approx(2.0)
+    assert app.recipe_units[0] == "秒"
+
+
+def test_target_uses_its_own_unit(app):
+    app.target_unit_var.set("秒")
+    app.target_name_var.set("产物Z")
+    app.target_rate_var.set("2")
+    app._add_target()
+    assert app.model.targets["产物Z"] == pytest.approx(2.0)  # 每秒
+    assert app.target_units["产物Z"] == "秒"
+
+    app.target_unit_var.set("t")
+    app.target_name_var.set("产物Y")
+    app.target_rate_var.set("40")  # 40/t = 800/s? 40/0.05 = 800
+    app._add_target()
+    assert app.model.targets["产物Y"] == pytest.approx(800.0)
 
 
 def test_filter_hides_non_matching_cards(app):

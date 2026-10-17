@@ -65,10 +65,11 @@ def validate_recipe_list(recipe_list: List[dict]) -> None:
             if key not in recipe:
                 raise RecipeSchemaError(f"配方 [{idx}] 缺少键: {key}")
         for key in ("sourceList", "productList"):
-            if not isinstance(recipe[key], dict) or not recipe[key]:
-                raise RecipeSchemaError(
-                    f"配方 [{idx}].{key} 必须为非空 dict（物品名 -> 数量）"
-                )
+            if not isinstance(recipe[key], dict):
+                raise RecipeSchemaError(f"配方 [{idx}].{key} 必须为 dict（物品名 -> 数量）")
+            # 原料允许为空（无输入的配方）；产物必须非空
+            if key == "productList" and not recipe[key]:
+                raise RecipeSchemaError(f"配方 [{idx}].productList 不能为空")
             for item, amount in recipe[key].items():
                 if not isinstance(item, str) or not item:
                     raise RecipeSchemaError(
