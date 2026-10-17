@@ -97,10 +97,19 @@ src/recipe_balancer/
 ## 测试
 
 ```bash
-pytest            # 9 个 notebook 场景 + 单元测试
+pytest            # 92 项
 ```
 
-场景数据逐字转录自 notebook（`tests/conftest.py`），作为转写的金标准。
+三层验证：
+
+- **数值金标准**（`tests/test_golden.py` + `tests/golden/`）：9 个场景的**完整数值输出**
+  （全部配方速率、外部输入、净物流、副产物、设备统计）与 notebook 原函数逐位对拍
+  （实测最大绝对差 0）。金标准由 `tools/snapshot_golden.py <notebook.ipynb>` 生成。
+- **数值不变量**（`tests/test_invariants.py`）：物料守恒恒等式 `net = A·x + ext − target`、
+  设备统计可由速率重算、外部输入必须落在白名单内——与具体期望值无关，任何改动都必须成立。
+- **场景与单元测试**：各场景关键点位断言 + 检测器 / IO / 报告 / 可视化 / CLI。
+
+场景数据逐字转录自 notebook（`tests/conftest.py`）。
 
 ## 已知语义（忠实保留，待转写后优化）
 

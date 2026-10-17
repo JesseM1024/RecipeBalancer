@@ -1,0 +1,33 @@
+{
+  "success": true,
+  "recipe_rates": [
+    0.0,
+    3840.0,
+    3840.0,
+    64.0,
+    64.0
+  ],
+  "external_inputs": {
+    "圆石": 3840.0
+  },
+  "net_flow": {
+    "红石": 1152.0,
+    "金锭": 768.0,
+    "钻石": 384.0
+  },
+  "final_outputs": {
+    "红石": 1152.0,
+    "金锭": 768.0,
+    "钻石": 384.0
+  },
+  "equipment_usage": {
+    "分子装配": 256.0,
+    "筛子": 38400.0,
+    "粉碎": 8533.333333333334
+  },
+  "total_machine_count": 47190,
+  "inferred_raw_materials": [
+    "空"
+  ],
+  "inferred_initial_inventory": {}
+}

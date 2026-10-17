@@ -1,0 +1,32 @@
+{
+  "success": true,
+  "recipe_rates": [
+    0.2,
+    0.2,
+    0.2,
+    0.8
+  ],
+  "external_inputs": {
+    "C": 0.2,
+    "MgCl2": 1.1999999999999997,
+    "TiO2": 0.2
+  },
+  "net_flow": {
+    "Mg": 0.15999999999999992,
+    "O2": 200.0
+  },
+  "final_outputs": {
+    "Mg": 0.15999999999999992,
+    "O2": 200.0
+  },
+  "equipment_usage": {
+    "EBF": 1.0,
+    "化反": 1.0,
+    "电解": 2.08
+  },
+  "total_machine_count": 5,
+  "inferred_raw_materials": [
+    "TiO2"
+  ],
+  "inferred_initial_inventory": {}
+}

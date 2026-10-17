@@ -77,6 +77,7 @@
   "options": {
     "allowed_external_cyc_inputs": [
       "Cl2"
-    ]
+    ],
+    "auto_bootstrap": true
   }
 }

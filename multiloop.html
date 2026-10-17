@@ -1,0 +1,127 @@
+<html>
+    <head>
+        <meta charset="utf-8">
+        
+            <script src="lib/bindings/utils.js"></script>
+            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.2/dist/dist/vis-network.min.css" integrity="sha512-WgxfT5LWjfszlPHXRmBWHkV2eceiWTOBvrKCNbdgDYTHrT2AeLCGbF4sZlZw3UMN3WtL0tGUoIAKsu8mllg/XA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+            <script src="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.2/dist/vis-network.min.js" integrity="sha512-LnvoEWDFrqGHlHmDD2101OrLcbsfkrzoSpvtSQtxK3RMnRV0eOkhhBN2dXHKRrUU8p2DGRTk35n4O8nWSVe1mQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+            
+        
+<center>
+<h1></h1>
+</center>
+
+<!-- <link rel="stylesheet" href="../node_modules/vis/dist/vis.min.css" type="text/css" />
+<script type="text/javascript" src="../node_modules/vis/dist/vis.js"> </script>-->
+        <link
+          href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta3/dist/css/bootstrap.min.css"
+          rel="stylesheet"
+          integrity="sha384-eOJMYsd53ii+scO/bJGFsiCZc+5NDVN2yr8+0RDqr0Ql0h+rP48ckxlpbzKgwra6"
+          crossorigin="anonymous"
+        />
+        <script
+          src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta3/dist/js/bootstrap.bundle.min.js"
+          integrity="sha384-JEW9xMcG8R+pH31jmWH6WWP0WintQrMb4s7ZOdauHnUtxwoG2vI5DkLtS3qm9Ekf"
+          crossorigin="anonymous"
+        ></script>
+
+
+        <center>
+          <h1></h1>
+        </center>
+        <style type="text/css">
+
+             #mynetwork {
+                 width: 100%;
+                 height: 900px;
+                 background-color: #ffffff;
+                 border: 1px solid lightgray;
+                 position: relative;
+                 float: left;
+             }
+
+             
+
+             
+
+             
+        </style>
+    </head>
+
+
+    <body>
+        <div class="card" style="width: 100%">
+            
+            
+            <div id="mynetwork" class="card-body"></div>
+        </div>
+
+        
+        
+
+        <script type="text/javascript">
+
+              // initialize global variables.
+              var edges;
+              var nodes;
+              var allNodes;
+              var allEdges;
+              var nodeColors;
+              var originalNodes;
+              var network;
+              var container;
+              var options, data;
+              var filter = {
+                  item : '',
+                  property : '',
+                  value : []
+              };
+
+              
+
+              
+
+              // This method is responsible for drawing the graph, returns the drawn network
+              function drawGraph() {
+                  var container = document.getElementById('mynetwork');
+
+                  
+
+                  // parsing and collecting nodes and edges from the python
+                  nodes = new vis.DataSet([{"borderWidth": 3, "color": "rgba(255,180,70,0.90)", "font": {"color": "black"}, "id": "R0", "label": "R0\nEBF\nx2", "shape": "box", "size": 35, "title": "R0\n\n\u8bbe\u5907\u7c7b\u578b: EBF\n\nRecipe: Time Cost 5.000\n1000TiCl4 + 2Mg\n\u2192\n1000TiCl2 + 6MgCl2\n\nRecipe Rate: 0.300000\n\u5b9e\u9645\u5e76\u884c\u6570: 1.500\n\u9700\u8981\u8bbe\u5907\u6570: 2"}, {"borderWidth": 3, "color": "rgba(255,180,70,0.90)", "font": {"color": "black"}, "id": "R1", "label": "R1\nEBF\nx2", "shape": "box", "size": 35, "title": "R1\n\n\u8bbe\u5907\u7c7b\u578b: EBF\n\nRecipe: Time Cost 5.000\n1000TiCl2 + 2Na\n\u2192\n1Ti + 6NaCl\n\nRecipe Rate: 0.300000\n\u5b9e\u9645\u5e76\u884c\u6570: 1.500\n\u9700\u8981\u8bbe\u5907\u6570: 2"}, {"borderWidth": 3, "color": "rgba(255,180,70,0.90)", "font": {"color": "black"}, "id": "R2", "label": "R2\n\u5316\u53cd\nx2", "shape": "box", "size": 35, "title": "R2\n\n\u8bbe\u5907\u7c7b\u578b: \u5316\u53cd\n\nRecipe: Time Cost 5.000\n2C + 1TiO2 + 8000Cl2\n\u2192\n1000TiCl4 + 2000CO\n\nRecipe Rate: 0.300000\n\u5b9e\u9645\u5e76\u884c\u6570: 1.500\n\u9700\u8981\u8bbe\u5907\u6570: 2"}, {"borderWidth": 3, "color": "rgba(255,180,70,0.90)", "font": {"color": "black"}, "id": "R3", "label": "R3\n\u7535\u89e3\nx1", "shape": "box", "size": 35, "title": "R3\n\n\u8bbe\u5907\u7c7b\u578b: \u7535\u89e3\n\nRecipe: Time Cost 1.400\n1000CO\n\u2192\n1C + 1000O2\n\nRecipe Rate: 0.600000\n\u5b9e\u9645\u5e76\u884c\u6570: 0.840\n\u9700\u8981\u8bbe\u5907\u6570: 1"}, {"borderWidth": 3, "color": "rgba(255,180,70,0.90)", "font": {"color": "black"}, "id": "R4", "label": "R4\n\u7535\u89e3\nx2", "shape": "box", "size": 35, "title": "R4\n\n\u8bbe\u5907\u7c7b\u578b: \u7535\u89e3\n\nRecipe: Time Cost 2.250\n3MgCl2\n\u2192\n2000Cl2 + 1Mg\n\nRecipe Rate: 0.600000\n\u5b9e\u9645\u5e76\u884c\u6570: 1.350\n\u9700\u8981\u8bbe\u5907\u6570: 2"}, {"borderWidth": 3, "color": "rgba(255,180,70,0.90)", "font": {"color": "black"}, "id": "R5", "label": "R5\n\u7535\u89e3\nx2", "shape": "box", "size": 35, "title": "R5\n\n\u8bbe\u5907\u7c7b\u578b: \u7535\u89e3\n\nRecipe: Time Cost 2.250\n3NaCl\n\u2192\n1000Cl2 + 1Na\n\nRecipe Rate: 0.600000\n\u5b9e\u9645\u5e76\u884c\u6570: 1.350\n\u9700\u8981\u8bbe\u5907\u6570: 2"}, {"color": "rgba(100,180,255,0.80)", "font": {"color": "black"}, "id": "TiCl4", "label": "TiCl4", "shape": "dot", "size": 22, "title": "TiCl4"}, {"color": "rgba(255,100,100,0.85)", "font": {"color": "black"}, "id": "Mg", "label": "Mg", "shape": "dot", "size": 24, "title": "Mg\n\u9700\u8981\u542f\u52a8\u5e93\u5b58: 2"}, {"color": "rgba(100,180,255,0.80)", "font": {"color": "black"}, "id": "TiCl2", "label": "TiCl2", "shape": "dot", "size": 22, "title": "TiCl2"}, {"color": "rgba(100,180,255,0.80)", "font": {"color": "black"}, "id": "MgCl2", "label": "MgCl2", "shape": "dot", "size": 22, "title": "MgCl2"}, {"color": "rgba(255,100,100,0.85)", "font": {"color": "black"}, "id": "Na", "label": "Na", "shape": "dot", "size": 24, "title": "Na\n\u9700\u8981\u542f\u52a8\u5e93\u5b58: 2"}, {"color": "rgba(200,120,255,0.95)", "font": {"color": "black"}, "id": "Ti", "label": "Ti", "shape": "dot", "size": 30, "title": "Ti\n\n\u76ee\u6807\u4ea7\u7269"}, {"color": "rgba(100,180,255,0.80)", "font": {"color": "black"}, "id": "NaCl", "label": "NaCl", "shape": "dot", "size": 22, "title": "NaCl"}, {"color": "rgba(255,100,100,0.85)", "font": {"color": "black"}, "id": "C", "label": "C", "shape": "dot", "size": 24, "title": "C\n\u9700\u8981\u542f\u52a8\u5e93\u5b58: 2"}, {"color": "rgba(100,255,100,0.85)", "font": {"color": "black"}, "id": "TiO2", "label": "TiO2", "shape": "dot", "size": 24, "title": "TiO2\n\u5916\u90e8\u8f93\u5165"}, {"color": "rgba(100,255,100,0.85)", "font": {"color": "black"}, "id": "Cl2", "label": "Cl2", "shape": "dot", "size": 24, "title": "Cl2\n\u5916\u90e8\u8f93\u5165"}, {"color": "rgba(100,180,255,0.80)", "font": {"color": "black"}, "id": "CO", "label": "CO", "shape": "dot", "size": 22, "title": "CO"}, {"color": "rgba(255,215,0,0.90)", "font": {"color": "black"}, "id": "O2", "label": "O2", "shape": "dot", "size": 24, "title": "O2\n\u6700\u7ec8\u526f\u4ea7\u7269"}]);
+                  edges = new vis.DataSet([{"arrows": "to", "color": "rgba(120,120,120,0.35)", "font": {"color": "rgba(60,60,60,0.7)", "size": 12}, "from": "TiCl4", "label": "300.000", "title": "TiCl4 \u2192 R0\n\nflow: 300.000000", "to": "R0", "width": 3.9657063929501497}, {"arrows": "to", "color": "rgba(120,120,120,0.35)", "font": {"color": "rgba(60,60,60,0.7)", "size": 12}, "from": "Mg", "label": "0.600", "title": "Mg \u2192 R0\n\nflow: 0.600000", "to": "R0", "width": 0.8}, {"arrows": "to", "color": "rgba(120,120,120,0.35)", "font": {"color": "rgba(60,60,60,0.7)", "size": 12}, "from": "R0", "label": "300.000", "title": "R0 \u2192 TiCl2\n\nflow: 300.000000", "to": "TiCl2", "width": 3.9657063929501497}, {"arrows": "to", "color": "rgba(120,120,120,0.35)", "font": {"color": "rgba(60,60,60,0.7)", "size": 12}, "from": "R0", "label": "1.800", "title": "R0 \u2192 MgCl2\n\nflow: 1.800000", "to": "MgCl2", "width": 0.8}, {"arrows": "to", "color": "rgba(120,120,120,0.35)", "font": {"color": "rgba(60,60,60,0.7)", "size": 12}, "from": "TiCl2", "label": "300.000", "title": "TiCl2 \u2192 R1\n\nflow: 300.000000", "to": "R1", "width": 3.9657063929501497}, {"arrows": "to", "color": "rgba(120,120,120,0.35)", "font": {"color": "rgba(60,60,60,0.7)", "size": 12}, "from": "Na", "label": "0.600", "title": "Na \u2192 R1\n\nflow: 0.600000", "to": "R1", "width": 0.8}, {"arrows": "to", "color": "rgba(120,120,120,0.35)", "font": {"color": "rgba(60,60,60,0.7)", "size": 12}, "from": "R1", "label": "0.300", "title": "R1 \u2192 Ti\n\nflow: 0.300000", "to": "Ti", "width": 0.8}, {"arrows": "to", "color": "rgba(120,120,120,0.35)", "font": {"color": "rgba(60,60,60,0.7)", "size": 12}, "from": "R1", "label": "1.800", "title": "R1 \u2192 NaCl\n\nflow: 1.800000", "to": "NaCl", "width": 0.8}, {"arrows": "to", "color": "rgba(120,120,120,0.35)", "font": {"color": "rgba(60,60,60,0.7)", "size": 12}, "from": "C", "label": "0.600", "title": "C \u2192 R2\n\nflow: 0.600000", "to": "R2", "width": 0.8}, {"arrows": "to", "color": "rgba(120,120,120,0.35)", "font": {"color": "rgba(60,60,60,0.7)", "size": 12}, "from": "TiO2", "label": "0.300", "title": "TiO2 \u2192 R2\n\nflow: 0.300000", "to": "R2", "width": 0.8}, {"arrows": "to", "color": "rgba(120,120,120,0.35)", "font": {"color": "rgba(60,60,60,0.7)", "size": 12}, "from": "Cl2", "label": "2400.000", "title": "Cl2 \u2192 R2\n\nflow: 2400.000000", "to": "R2", "width": 5.408627456091244}, {"arrows": "to", "color": "rgba(120,120,120,0.35)", "font": {"color": "rgba(60,60,60,0.7)", "size": 12}, "from": "R2", "label": "300.000", "title": "R2 \u2192 TiCl4\n\nflow: 300.000000", "to": "TiCl4", "width": 3.9657063929501497}, {"arrows": "to", "color": "rgba(120,120,120,0.35)", "font": {"color": "rgba(60,60,60,0.7)", "size": 12}, "from": "R2", "label": "600.000", "title": "R2 \u2192 CO\n\nflow: 600.000000", "to": "CO", "width": 4.446199155204384}, {"arrows": "to", "color": "rgba(120,120,120,0.35)", "font": {"color": "rgba(60,60,60,0.7)", "size": 12}, "from": "CO", "label": "600.000", "title": "CO \u2192 R3\n\nflow: 600.000000", "to": "R3", "width": 4.446199155204384}, {"arrows": "to", "color": "rgba(120,120,120,0.35)", "font": {"color": "rgba(60,60,60,0.7)", "size": 12}, "from": "R3", "label": "0.600", "title": "R3 \u2192 C\n\nflow: 0.600000", "to": "C", "width": 0.8}, {"arrows": "to", "color": "rgba(120,120,120,0.35)", "font": {"color": "rgba(60,60,60,0.7)", "size": 12}, "from": "R3", "label": "600.000", "title": "R3 \u2192 O2\n\nflow: 600.000000", "to": "O2", "width": 4.446199155204384}, {"arrows": "to", "color": "rgba(120,120,120,0.35)", "font": {"color": "rgba(60,60,60,0.7)", "size": 12}, "from": "MgCl2", "label": "1.800", "title": "MgCl2 \u2192 R4\n\nflow: 1.800000", "to": "R4", "width": 0.8}, {"arrows": "to", "color": "rgba(120,120,120,0.35)", "font": {"color": "rgba(60,60,60,0.7)", "size": 12}, "from": "R4", "label": "1200.000", "title": "R4 \u2192 Cl2\n\nflow: 1200.000000", "to": "Cl2", "width": 4.92726881184465}, {"arrows": "to", "color": "rgba(120,120,120,0.35)", "font": {"color": "rgba(60,60,60,0.7)", "size": 12}, "from": "R4", "label": "0.600", "title": "R4 \u2192 Mg\n\nflow: 0.600000", "to": "Mg", "width": 0.8}, {"arrows": "to", "color": "rgba(120,120,120,0.35)", "font": {"color": "rgba(60,60,60,0.7)", "size": 12}, "from": "NaCl", "label": "1.800", "title": "NaCl \u2192 R5\n\nflow: 1.800000", "to": "R5", "width": 0.8}, {"arrows": "to", "color": "rgba(120,120,120,0.35)", "font": {"color": "rgba(60,60,60,0.7)", "size": 12}, "from": "R5", "label": "600.000", "title": "R5 \u2192 Cl2\n\nflow: 600.000000", "to": "Cl2", "width": 4.446199155204384}, {"arrows": "to", "color": "rgba(120,120,120,0.35)", "font": {"color": "rgba(60,60,60,0.7)", "size": 12}, "from": "R5", "label": "0.600", "title": "R5 \u2192 Na\n\nflow: 0.600000", "to": "Na", "width": 0.8}]);
+
+                  nodeColors = {};
+                  allNodes = nodes.get({ returnType: "Object" });
+                  for (nodeId in allNodes) {
+                    nodeColors[nodeId] = allNodes[nodeId].color;
+                  }
+                  allEdges = edges.get({ returnType: "Object" });
+                  // adding nodes and edges to the graph
+                  data = {nodes: nodes, edges: edges};
+
+                  var options = {"physics": {"enabled": true, "solver": "forceAtlas2Based", "stabilization": {"enabled": true, "iterations": 1500, "updateInterval": 25}}, "interaction": {"hover": true, "dragNodes": true, "dragView": true, "zoomView": true}, "edges": {"smooth": {"type": "dynamic"}, "arrows": {"to": {"enabled": true}}}};
+
+                  
+
+
+                  
+
+                  network = new vis.Network(container, data, options);
+
+                  
+
+                  
+
+                  
+
+
+                  
+
+                  return network;
+
+              }
+              drawGraph();
+        </script>
+    </body>
+</html>

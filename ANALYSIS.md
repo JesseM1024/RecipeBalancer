@@ -366,13 +366,16 @@ RecipeSolution ──► [报告] print_solution
 
 ## 10. 转写实施状态（2026-10-17）
 
-忠实转写已完成并入库（本目录，`src/recipe_balancer/`，54 项测试全绿）：
+忠实转写已完成并入库（本目录，`src/recipe_balancer/`，92 项测试全绿）：
 
-- 行为与 notebook 完全对齐（P0-A/B/C 现状语义均保留，并有测试文档化）；
+- 行为与 notebook 完全对齐：**9 个场景的完整数值输出逐位对拍**（`tests/golden/`，
+  由 notebook 原函数生成，最大绝对差 0）；另有物料守恒恒等式与设备统计不变量测试；
+- P0-A/B/C 现状语义均保留，并有测试文档化；
 - 八模块结构落地（models / matrix / detection / solver / bootstrap / report / visualize / io），新增 cli 与场景 JSON 格式；
-- 9 个 notebook 场景固化为 pytest 金标准（`tests/conftest.py`，数值表达式逐字转录）；
+- 9 个 notebook 场景固化为 pytest 场景数据（`tests/conftest.py`，数值表达式逐字转录）；
 - 转写实测新发现 P0-D（亏损检测量纲效应），见 §6；
-- **U1 已完成**：bootstrap 重定义为"完美循环物质检测"（§12 U1），P0-D 按用户决策暂不处理。
+- **U1 已完成（v2）**：bootstrap 重定义为"完美循环最小启动投料集合"（§12 U1），
+  P0-D 按用户决策暂不处理。
 
 后续优化按 §12 执行。
 
