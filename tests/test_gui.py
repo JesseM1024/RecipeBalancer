@@ -140,15 +140,62 @@ def test_card_enter_adds_item(app):
     card.add_item("sourceList")
 
     assert app.model.recipes[0]["sourceList"]["矿石"] == 3.0
-    # 输入框已清空，条目渲染为一行
+    # 输入框已清空，条目以可编辑行呈现
     assert card.item_vars["sourceList"]["name"].get() == ""
-    labels = [
-        w.cget("text")
-        for row in card.item_boxes["sourceList"].winfo_children()
-        for w in row.winfo_children()
-        if isinstance(w, tk.Label)
-    ]
-    assert any("矿石" in text for text in labels)
+    rows = card.item_rows["sourceList"]
+    assert len(rows) == 1
+    assert rows[0]["name_var"].get() == "矿石"
+    assert rows[0]["amount_var"].get() == "3"
+
+
+def test_card_inline_rename_and_amount(app):
+    card = app.cards[0]
+    card.item_vars["sourceList"]["name"].set("旧名")
+    card.item_vars["sourceList"]["amount"].set("1")
+    card.add_item("sourceList")
+    record = card.item_rows["sourceList"][0]
+
+    # 改名（实时写回，无需删除重加）
+    record["name_var"].set("新名")
+    card._on_item_edit("sourceList", record)
+    assert app.model.recipes[0]["sourceList"] == {"新名": 1.0}
+    assert record["item"] == "新名"
+
+    # 改数量
+    record["amount_var"].set("7.5")
+    card._on_item_edit("sourceList", record)
+    assert app.model.recipes[0]["sourceList"] == {"新名": 7.5}
+
+
+def test_card_inline_rename_collision_blocked(app):
+    card = app.cards[0]
+    for name in ("甲", "乙"):
+        card.item_vars["sourceList"]["name"].set(name)
+        card.item_vars["sourceList"]["amount"].set("1")
+        card.add_item("sourceList")
+
+    record = next(r for r in card.item_rows["sourceList"] if r["item"] == "乙")
+    record["name_var"].set("甲")  # 与已有条目重名
+    card._on_item_edit("sourceList", record)
+
+    assert app.model.recipes[0]["sourceList"] == {"甲": 1.0, "乙": 1.0}
+    assert "已存在" in app.status_var.get()
+
+
+def test_card_inline_edit_empty_name_reverts(app):
+    card = app.cards[0]
+    card.item_vars["sourceList"]["name"].set("保留名")
+    card.item_vars["sourceList"]["amount"].set("2")
+    card.add_item("sourceList")
+    record = card.item_rows["sourceList"][0]
+
+    record["name_var"].set("")
+    card._finish_item_edit("sourceList", record)
+    assert record["name_var"].get() == "保留名"
+    # 非法数量也还原
+    record["amount_var"].set("abc")
+    card._finish_item_edit("sourceList", record)
+    assert record["amount_var"].get() == "2"
 
 
 def test_card_time_edits_follow_own_unit(app):

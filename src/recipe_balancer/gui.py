@@ -266,6 +266,7 @@ class RecipeCard(tk.Frame):
         self.item_boxes: Dict[str, tk.Frame] = {}
         self.item_vars: Dict[str, Dict[str, tk.StringVar]] = {}
         self.item_entries: Dict[str, Dict[str, ttk.Entry]] = {}
+        self.item_rows: Dict[str, List[dict]] = {"sourceList": [], "productList": []}
         self.unit_var = tk.StringVar(value=app.recipe_units[index])
         self._build()
 
@@ -345,7 +346,7 @@ class RecipeCard(tk.Frame):
         ttk.Button(row, text="添加", width=5, command=lambda: self.add_item(which)).pack(
             side="left"
         )
-        tk.Label(row, text="回车添加", bg=CARD_BG, fg="#9a9a9a").pack(
+        tk.Label(row, text="回车添加 · 条目可直接改", bg=CARD_BG, fg="#9a9a9a").pack(
             side="left", padx=6
         )
         self.item_entries[which] = {"name": name_entry, "amount": amount_entry}
@@ -371,16 +372,34 @@ class RecipeCard(tk.Frame):
         box = self.item_boxes[which]
         for child in box.winfo_children():
             child.destroy()
+        self.item_rows[which].clear()
+
         mapping = self.recipe.get(which) or {}
         if not mapping:
             tk.Label(box, text="（空）", bg=CARD_BG, fg="#a0a0a0").pack(anchor="w")
             return
+
         for item, amount in sorted(mapping.items()):
             row = tk.Frame(box, bg=CARD_BG)
-            row.pack(fill="x")
-            tk.Label(row, text=f"· {item}  × {_fmt(float(amount))}", bg=CARD_BG).pack(
-                side="left"
-            )
+            row.pack(fill="x", pady=1)
+
+            name_var = tk.StringVar(value=item)
+            amount_var = tk.StringVar(value=_fmt(float(amount)))
+            record = {"item": item, "name_var": name_var, "amount_var": amount_var}
+
+            name_entry = ttk.Entry(row, textvariable=name_var, width=16)
+            name_entry.pack(side="left")
+            amount_entry = ttk.Entry(row, textvariable=amount_var, width=7)
+            amount_entry.pack(side="left", padx=4)
+
+            for entry in (name_entry, amount_entry):
+                entry.bind(
+                    "<KeyRelease>", lambda _e, r=record: self._on_item_edit(which, r)
+                )
+                entry.bind(
+                    "<FocusOut>", lambda _e, r=record: self._finish_item_edit(which, r)
+                )
+
             tk.Button(
                 row,
                 text="✕",
@@ -388,11 +407,62 @@ class RecipeCard(tk.Frame):
                 bg=CARD_BG,
                 fg="#aa3333",
                 cursor="hand2",
-                command=lambda i=item: self.remove_item(which, i),
+                command=lambda r=record: self.remove_item(which, r),
             ).pack(side="left", padx=4)
+
+            self.item_rows[which].append(record)
+
         self.app.bind_wheel_recursive(box)
 
     # ---- 编辑 ----
+    def _on_item_edit(self, which: str, record: dict) -> None:
+        """条目内联编辑：改名 / 改数量，实时写回模型。"""
+        mapping = self.recipe.setdefault(which, {})
+        old = record["item"]
+        if old not in mapping:
+            return
+
+        name = record["name_var"].get().strip()
+        if not name:
+            return  # 名称暂时为空（正在输入），等下一次按键
+
+        try:
+            amount = float(record["amount_var"].get())
+        except ValueError:
+            return
+        if amount <= 0:
+            return
+
+        if name != old and name in mapping:
+            self.app.set_status(f"「{name}」已存在，改名未生效")
+            return
+
+        if name == old and mapping.get(old) == amount:
+            return  # 无变化
+
+        if name != old:
+            mapping.pop(old, None)
+            mapping[name] = amount
+            record["item"] = name
+        else:
+            mapping[old] = amount
+        self.app.on_model_changed(schedule=True, silent=True)
+
+    def _finish_item_edit(self, which: str, record: dict) -> None:
+        """离开输入框时兜底：空名称 / 非法数量还原显示。"""
+        mapping = self.recipe.get(which) or {}
+        old = record["item"]
+        if old not in mapping:
+            return
+        if not record["name_var"].get().strip():
+            record["name_var"].set(old)
+        try:
+            value = float(record["amount_var"].get())
+            if value <= 0:
+                raise ValueError
+        except ValueError:
+            record["amount_var"].set(_fmt(float(mapping[old])))
+
     def add_item(self, which: str) -> None:
         name = self.item_vars[which]["name"].get().strip()
         raw_amount = self.item_vars[which]["amount"].get().strip()
@@ -414,7 +484,9 @@ class RecipeCard(tk.Frame):
         self.app.on_model_changed()
         self.item_entries[which]["name"].focus_set()
 
-    def remove_item(self, which: str, item: str) -> None:
+    def remove_item(self, which: str, record) -> None:
+        """删除条目；record 可以是行记录（含最新改名）或旧式物品名。"""
+        item = record["item"] if isinstance(record, dict) else record
         self.recipe.get(which, {}).pop(item, None)
         self._render_items(which)
         self.app.on_model_changed()
@@ -563,6 +635,7 @@ class RecipeBalancerApp(tk.Tk):
         targets_scroll = ttk.Scrollbar(
             targets_wrap, orient="vertical", command=self.targets_canvas.yview
         )
+        self.targets_scroll = targets_scroll
         self.targets_canvas.configure(yscrollcommand=targets_scroll.set)
         self.targets_canvas.pack(side="left", fill="x", expand=True)
         targets_scroll.pack(side="right", fill="y")
@@ -810,7 +883,7 @@ class RecipeBalancerApp(tk.Tk):
                 unit = self.target_units.get(item, DEFAULT_UNIT)
                 row = ttk.Frame(self.targets_frame)
                 row.pack(fill="x")
-                ttk.Label(row, text=item, width=10).pack(side="left")
+                ttk.Label(row, text=item, width=10).pack(side="left", padx=(0, 4))
                 var = tk.StringVar(value=_fmt(rate_to_display(per_second, unit)))
                 entry = ttk.Entry(row, textvariable=var, width=8)
                 entry.pack(side="left")
@@ -837,6 +910,13 @@ class RecipeBalancerApp(tk.Tk):
                     row, text="✕", width=2, command=lambda i=item: self._remove_target(i)
                 ).pack(side="left")
         self.targets_frame.update_idletasks()
+        # 高度随条数自适应：1~3 行按实际行数，超过 3 行固定 3 行并滚动
+        visible_rows = max(1, min(3, len(self.model.targets)))
+        self.targets_canvas.configure(height=visible_rows * 28 + 2)
+        if len(self.model.targets) > 3:
+            self.targets_scroll.pack(side="right", fill="y")
+        else:
+            self.targets_scroll.pack_forget()
         self.targets_canvas.configure(scrollregion=self.targets_canvas.bbox("all"))
         # 布局完成后回到顶部（过早调用会被裁剪成错误的偏移）
         self.after_idle(lambda: self.targets_canvas.yview_moveto(0))
