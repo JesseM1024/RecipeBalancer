@@ -128,19 +128,14 @@ def test_ebf_cycle_no_deficit():
 
 
 def test_ebf_bootstrap_detects_perfect_cycles():
-    """auto_bootstrap 现在是"完美循环物质检测"：只报环内自给物质 + 单批次启动量。"""
+    """auto_bootstrap 现在是"完美循环物质检测"：每个环只报最小启动集合。"""
     sol = solve("ebf_cycle", auto_bootstrap=True)
-    assert sol.bootstrap_inventory == {
-        "C": 2.0,
-        "Cl2": 4000.0,
-        "CO": 1000.0,
-        "Mg": 2.0,
-        "MgCl2": 3.0,
-        "TiCl4": 1000.0,
-    }
-    # 原料 TiO2 / 副产物 O2 都不应出现
+    # C ⇄ CO 投 C；Cl2/TiCl4/MgCl2 与 Mg/MgCl2 两环由 MgCl2 一次打破
+    assert sol.bootstrap_inventory == {"C": 2.0, "MgCl2": 3.0}
+    # 原料 TiO2、副产物 O2、过程料 TiCl4 都不应出现
     assert "TiO2" not in sol.bootstrap_inventory
     assert "O2" not in sol.bootstrap_inventory
+    assert "TiCl4" not in sol.bootstrap_inventory
 
 
 def test_simple_no_perfect_cycles():

@@ -129,36 +129,36 @@ def test_initial_inventory_is_inert_current_behavior():
 # =====================================================================
 
 
-def test_perfect_cycle_ebf_loop():
-    """EBF 闭环：6 个环内物质全部自给；启动量 = 单批次投料量。"""
+def test_perfect_cycle_ebf_minimal_seed_set():
+    """EBF 闭环：只报"启动所需的最小投料集合"，不是所有环内物质。
+
+    - C ⇄ CO 是一对循环：只投 C（2 个/批），CO 由化反产出；
+    - Cl2→TiCl4→MgCl2→Cl2 与 Mg⇄MgCl2 共享 MgCl2：
+      投 MgCl2（3 个/批）一次破两个环；
+    - TiCl4 只是被 Cl 环"路过"的过程料（被 EBF 消耗），不作为启动项。
+    """
     s = sc("ebf_cycle")
     sol = solve_production(s["recipes"], s["target"])
     cycles = detect_perfect_cycles(
         s["recipes"], sol.recipe_rates, set(sol.external_inputs)
     )
-    assert cycles == {
-        "TiCl4": 1000.0,   # EBF 单次消耗 1e3
-        "Mg": 2.0,         # EBF 单次消耗 2
-        "MgCl2": 3.0,      # 电解单次消耗 3
-        "CO": 1000.0,      # 电解单次消耗 1e3
-        "C": 2.0,          # 化反单次消耗 2
-        "Cl2": 4000.0,     # 化反单次消耗 4e3
-    }
+    assert cycles == {"C": 2.0, "MgCl2": 3.0}
+    assert "TiCl4" not in cycles
+    assert "CO" not in cycles and "Cl2" not in cycles and "Mg" not in cycles
 
 
-def test_perfect_cycle_excludes_external_inputs():
-    """deficit 场景：C / MgCl2 由外部持续供给 => 不算完美循环。"""
+def test_perfect_cycle_external_inputs_break_cycles():
+    """deficit 场景：C / MgCl2 由外部持续供给 => 所有环都被外部供给打破 => 无种子。"""
     s = sc("deficit")
     sol = solve_production(s["recipes"], s["target"], **s["options"])
     cycles = detect_perfect_cycles(
         s["recipes"], sol.recipe_rates, set(sol.external_inputs)
     )
-    assert cycles == {"TiCl4": 1000.0, "CO": 1000.0, "Cl2": 4000.0, "Mg": 2.0}
-    assert "C" not in cycles and "MgCl2" not in cycles
+    assert cycles == {}
 
 
 def test_perfect_cycle_autocatalytic():
-    """自增殖配方（1 -> 2）是单物品自环，种子 = 1。"""
+    """自增殖配方（1 -> 2）是单物品自环，种子 = 1 批。"""
     s = sc("autocatalytic")
     sol = solve_production(s["recipes"], s["target"])
     cycles = detect_perfect_cycles(
@@ -176,18 +176,38 @@ def test_perfect_cycle_dual_line_sst():
     assert cycles == {"SST": 1.0}
 
 
-def test_perfect_cycle_multi_loop_excludes_cl2():
-    """多路循环：Cl2 是外部输入 => 排除；其余环内物质保留。"""
+def test_perfect_cycle_multi_loop_minimal():
+    """多路循环：三对独立循环各投一个（且 Cl2 是外部输入，不参与）。"""
     s = sc("multi_loop")
     sol = solve_production(s["recipes"], s["target"], **s["options"])
     cycles = detect_perfect_cycles(
         s["recipes"], sol.recipe_rates, set(sol.external_inputs)
     )
-    assert "Cl2" not in cycles
-    assert cycles["TiCl4"] == 1000.0
-    assert cycles["TiCl2"] == 1000.0
-    assert cycles["Mg"] == 2.0
-    assert cycles["Na"] == 2.0
+    assert cycles == {"C": 2.0, "Mg": 2.0, "Na": 2.0}
+    assert "Cl2" not in cycles and "TiCl4" not in cycles
+
+
+def test_perfect_cycle_structure_only_ignores_names():
+    """纯结构判定：幻想物质命名同样生效，不解析化学式。
+
+    结构：源岩 -> 幻想甲 -> 幻想乙 -> (幻想甲 + 终点产物)
+    循环 幻想甲 ⇄ 幻想乙，只投其中一批用量更小的那个。
+    """
+    recipes = [
+        {"sourceList": {"源岩": 1}, "productList": {"幻想甲": 2},
+         "time": 1, "equType": "祭坛"},
+        {"sourceList": {"幻想甲": 2}, "productList": {"幻想乙": 1},
+         "time": 1, "equType": "熔炉"},
+        {"sourceList": {"幻想乙": 1, "源岩": 1}, "productList": {"幻想甲": 1, "终点": 1},
+         "time": 1, "equType": "反应釜"},
+    ]
+    sol = solve_production(recipes, {"终点": 1})
+    assert sol.success, sol.message
+    cycles = detect_perfect_cycles(
+        recipes, sol.recipe_rates, set(sol.external_inputs)
+    )
+    # 幻想乙 单批用量 1 < 幻想甲 单批用量 2 => 只投 幻想乙
+    assert cycles == {"幻想乙": 1.0}
 
 
 def test_perfect_cycle_none_in_acyclic_scenarios():
@@ -218,8 +238,9 @@ def test_bootstrap_toggle():
     assert off.bootstrap_inventory == {}
 
     on = solve_production(s["recipes"], s["target"], auto_bootstrap=True)
-    assert on.bootstrap_inventory["TiCl4"] == 1000.0
-    assert "TiO2" not in on.bootstrap_inventory  # 消耗品不再出现
+    assert on.bootstrap_inventory == {"C": 2.0, "MgCl2": 3.0}
+    assert "TiO2" not in on.bootstrap_inventory  # 外部输入不出现
+    assert "TiCl4" not in on.bootstrap_inventory  # 过程料不作启动项
 
 
 # =====================================================================
