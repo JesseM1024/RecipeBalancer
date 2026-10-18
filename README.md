@@ -1,6 +1,6 @@
 # 配方树自动配平（recipe-balancer）
 
-MC 整合包配方树的**稳态物料衡算求解器**：把配方集合转成化学计量矩阵，用线性规划（scipy / HiGHS）求各配方速率，使机器总量最小、物流自洽。忠实迁移自 notebook《配方树自动配平》，架构与算法分析见 [ANALYSIS.md](ANALYSIS.md)。
+MC 整合包配方树的**稳态物料衡算求解器**：把配方集合转成计量矩阵，用线性规划（scipy / HiGHS）求各配方速率，使机器总量最小、物流自洽。迁移自 notebook《配方树自动配平》，架构与算法分析见 [ANALYSIS.md](ANALYSIS.md)。
 
 ## 能力
 
