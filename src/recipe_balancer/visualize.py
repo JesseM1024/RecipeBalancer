@@ -73,7 +73,9 @@ def _write_html_utf8(net, output_file: str, cdn_resources: str) -> None:
         import pyvis
 
         lib_src = Path(pyvis.__file__).parent / "templates" / "lib"
-        lib_dst = Path.cwd() / "lib"
+        # 必须是 HTML 旁边：页面里写的是 src="lib/…"（相对路径）。
+        # 以前放 Path.cwd()，`--draw out/x.html` 时会错位到工作目录，页面白屏。
+        lib_dst = out_path.parent / "lib"
         lib_dst.mkdir(exist_ok=True)
         for name in ("bindings", "tom-select", "vis-9.1.2"):
             target = lib_dst / name

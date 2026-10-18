@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import copy
 import ctypes
+import os
 import re
 import sys
 import time
@@ -42,6 +43,28 @@ from .io import load_scenario, save_scenario
 from .models import RecipeSolution
 from .report import format_solution
 from .solver import solve_production
+
+
+def open_in_browser(path: Path) -> bool:
+    """用系统关联打开 HTML 文件，返回是否成功。
+
+    **必须传文件路径，不要传 ``file://`` URI**。踩过的坑：
+    ``webbrowser.open(path.as_uri())`` 在 Windows 上最终调 ``os.startfile("file:///…")``，
+    ShellExecute 会把它当 URL 走协议处理器，而不再套用 .html 的文件关联
+    （实测 ``FindExecutable("file:///…")`` 直接返回 ERROR_FILE_NOT_FOUND=2）。
+    用户那边表现就是「弹 Edge、页面打不开」，双击同一个文件却正常——因为双击走的是
+    .html 的文件关联（可能被设成 Firefox）。传路径就等于模拟双击。
+    """
+    if sys.platform == "win32":
+        try:
+            os.startfile(str(path))  # noqa: S606 - 与资源管理器里双击等价
+            return True
+        except OSError:
+            pass
+    try:
+        return bool(webbrowser.open(path.as_uri()))
+    except Exception:  # noqa: BLE001 - 打不开就交给调用方提示
+        return False
 
 APP_TITLE = "配方树自动配平"
 
@@ -1548,7 +1571,15 @@ class RecipeBalancerApp(tk.Tk):
         except Exception as exc:  # noqa: BLE001
             messagebox.showerror("生成失败", f"{type(exc).__name__}: {exc}")
             return
-        webbrowser.open(out_file.as_uri())
+        if not open_in_browser(out_file):
+            messagebox.showwarning(
+                "没能自动打开浏览器",
+                f"流程图已生成：\n{out_file}\n\n"
+                "系统没能唤起浏览器，请手动双击该文件打开"
+                "（或在「设置…」里换一个输出目录）。",
+            )
+            self.set_status(f"已生成（未自动打开）：{out_file}")
+            return
         self.set_status(f"已生成并在浏览器打开：{out_file}")
 
     def _on_import(self) -> None:

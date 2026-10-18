@@ -470,3 +470,45 @@ def test_version_matches_pyproject():
         encoding="utf-8"
     )
     assert f'version = "{recipe_balancer.__version__}"' in text
+
+
+def test_local_mode_puts_lib_next_to_html(tmp_path, monkeypatch):
+    """local 模式：lib/ 必须落在 HTML 同目录（页面里是相对路径 src="lib/…"）。"""
+    pytest.importorskip("pyvis")
+    from recipe_balancer import draw_production_graph_pyvis
+
+    workdir = tmp_path / "cwd"
+    workdir.mkdir()
+    monkeypatch.chdir(workdir)
+
+    out = tmp_path / "nested" / "graph.html"
+    s = sc("simple")
+    sol = solve_production(s["recipes"], s["target"], raw_materials={"圆石"})
+    draw_production_graph_pyvis(
+        sol, s["recipes"], s["target"], output_file=str(out), cdn_resources="local"
+    )
+
+    assert (out.parent / "lib" / "bindings").is_dir()
+    assert (out.parent / "lib" / "vis-9.1.2").is_dir()
+    # 不能污染工作目录
+    assert not (workdir / "lib").exists()
+
+
+def test_open_in_browser_passes_path_not_uri(tmp_path, monkeypatch):
+    """打开 HTML 必须传路径（等价双击），传 file:// URI 会走协议处理器（弹 Edge）。"""
+    import sys
+
+    if sys.platform != "win32":
+        pytest.skip("仅 Windows 有 os.startfile")
+
+    import recipe_balancer.gui as gui_module
+
+    calls = []
+    monkeypatch.setattr(gui_module.os, "startfile", lambda p: calls.append(p))
+
+    html = tmp_path / "配方 测试.html"
+    html.write_text("<html></html>", encoding="utf-8")
+
+    assert gui_module.open_in_browser(html) is True
+    assert calls == [str(html)]
+    assert not calls[0].startswith("file:")

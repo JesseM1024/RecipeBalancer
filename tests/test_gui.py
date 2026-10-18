@@ -275,12 +275,16 @@ def test_html_output_dir_from_config(app, tmp_path, monkeypatch):
     app.config_data["html_output_dir"] = str(tmp_path)
 
     opened = []
-    monkeypatch.setattr(gui_module.webbrowser, "open", lambda uri: opened.append(uri))
+    # GUI 现在走 open_in_browser（Windows 下 = os.startfile 文件路径），
+    # 不再直接用 webbrowser.open(file:// URI)
+    monkeypatch.setattr(
+        gui_module, "open_in_browser", lambda path: opened.append(path) or True
+    )
     app._on_visualize()
 
     files = list(tmp_path.glob("*.html"))
     assert files, "未在配置目录生成 HTML"
-    assert opened and opened[0].endswith(".html")
+    assert opened and str(opened[0]).endswith(".html")
 
 
 def test_report_placeholder_before_first_solve(app):
