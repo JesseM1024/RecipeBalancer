@@ -1,0 +1,151 @@
+plugins {
+    id 'java-library'
+    id 'net.neoforged.moddev' version '2.0.147'
+    id 'idea'
+}
+
+version = mod_version
+group = mod_group_id
+
+base {
+    archivesName = mod_id
+}
+
+// 1.21.1 对应 Java 21
+java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+
+sourceSets.main.resources {
+    srcDir('src/generated/resources')
+    exclude('**/*.bbmodel')
+    exclude('src/generated/**/.cache')
+}
+
+repositories {
+    // MDG 已自动带上 Minecraft / NeoForge 仓库。
+    // JEI 官方 maven（blamejared）。
+    //
+    // ★ exclusiveContent：mezz.jei 组只能从 blamejared 解析 ★
+    // 没有它时 Gradle 会把 mezz.jei 的 POM 请求发给所有仓库（含 neoforged 仓库）；
+    // 当 neoforged 仓库网络异常（502/超时）时会连带 JEI 解析失败。
+    // 钉死来源后既省请求，也消除这个不确定性。
+    exclusiveContent {
+        forRepository {
+            maven {
+                name = 'BlameJared'
+                url = 'https://maven.blamejared.com/'
+            }
+        }
+        filter {
+            // JEI 1.21.1 的 groupId 是 mezz.jei（不是老文档的 mezz），2026-10-25 逐目录核实。
+            includeGroup 'mezz.jei'
+        }
+    }
+    // Maven Central：保持普通声明，不过滤。
+    // 【教训 2026-10-25】曾试图用 exclusiveContent 把 org.apache / org.junit 等
+    // 第三方组钉死到 central——但 exclusiveContent 是「双向独占」：被包进 exclusiveContent
+    // 的仓库从此只提供 filter 列出的组，导致 neoform 管线依赖（org.ow2.asm 等）
+    // 被 central 拒收、被 neoforged 仓库的白名单挡住 → "Could not find"。
+    // 第三方组请走默认解析顺序：neoforged 仓库 404 → 跳过 → central 200。
+    mavenCentral()
+}
+
+neoForge {
+    version = project.neo_version
+
+    // 本项目是【纯客户端】模组（@Mod(dist = Dist.CLIENT)），
+    // 因此只声明 client 运行配置 —— 服务端/数据生成配置对本项目无意义。
+    runs {
+        client {
+            client()
+        }
+        configureEach {
+            systemProperty 'forge.logging.markers', 'REGISTRIES'
+            logLevel = org.slf4j.event.Level.DEBUG
+        }
+    }
+
+    mods {
+        "${mod_id}" {
+            sourceSet(sourceSets.main)
+        }
+    }
+}
+
+configurations {
+    runtimeClasspath.extendsFrom localRuntime
+}
+
+dependencies {
+    // ------------------------------------------------------------------
+    // JEI —— 软依赖：编译期对 API 编译，运行期装上即可用其取配方/拖物品。
+    // 不装 JEI 时本模组必须照常工作（渲染/求解不依赖 JEI）。
+    // groupId = mezz.jei（blamejared 2026-10-25 核实），版本与 NAST 实例一致。
+    // ------------------------------------------------------------------
+    compileOnly "mezz.jei:jei-${minecraft_version}-common-api:${jei_version}"
+    compileOnly "mezz.jei:jei-${minecraft_version}-neoforge-api:${jei_version}"
+    runtimeOnly "mezz.jei:jei-${minecraft_version}-neoforge:${jei_version}"
+
+    // ------------------------------------------------------------------
+    // LP 求解器：Apache Commons Math（纯 Java simplex）。
+    // 【架构阶段占位】最终分发形态（JarJar 内嵌 vs. 单独依赖）见
+    // docs/ARCHITECTURE.md 风险 R-03，待开发阶段定夺。
+    // ------------------------------------------------------------------
+    implementation 'org.apache.commons:commons-math3:3.6.1'
+
+    // ------------------------------------------------------------------
+    // JCEF（游戏内 HTML 渲染主线方案，坐标 me.friwi:jcefmaven）——
+    // 本会话只做架构设计，不引入该依赖；集成方式见 docs/ARCHITECTURE.md
+    // 渲染层一节。此处注释保留坐标备查：
+    //   implementation 'me.friwi:jcefmaven:152.0.6'   （natives 首启下载 ~100MB）
+    // ------------------------------------------------------------------
+}
+
+// ---------------------------------------------------------------------------
+// 生成模组元数据
+//
+// ★ filteringCharset = 'UTF-8' 是必须的 ★
+// ProcessResources 做占位符替换(expand)时默认用「平台默认编码」，
+// 中文 Windows 上是 GBK，会把 UTF-8 模板里的中文转坏（字节被替换成 '?'），
+// 产出非法 UTF-8 文件 → FML 解析 neoforge.mods.toml 时抛
+//   MalformedInputException: Input length = 2
+// → 游戏报 "File ... is not a valid mod file"
+// 这个坑在 logiscope 项目里已经踩过一次，这里直接规避。
+// ---------------------------------------------------------------------------
+var generateModMetadata = tasks.register('generateModMetadata', ProcessResources) {
+    filteringCharset = 'UTF-8'
+
+    var replaceProperties = [
+            minecraft_version      : minecraft_version,
+            minecraft_version_range: minecraft_version_range,
+            neo_version            : neo_version,
+            loader_version_range   : loader_version_range,
+            mod_id                 : mod_id,
+            mod_name               : mod_name,
+            mod_license            : mod_license,
+            mod_version            : mod_version,
+    ]
+    inputs.properties replaceProperties
+    expand replaceProperties
+    from 'src/main/templates'
+    into 'build/generated/sources/modMetadata'
+}
+sourceSets.main.resources.srcDir generateModMetadata
+neoForge.ideSyncTask generateModMetadata
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+// 让运行任务的子进程输出直接接到 Gradle 控制台。
+// 否则游戏崩溃时只会显示"退出码非零"，子进程的 stderr 会被吞掉。
+tasks.matching { it.name in ['runClient'] }.configureEach {
+    standardOutput = System.out
+    errorOutput = System.err
+}
+
+idea {
+    module {
+        downloadSources = true
+        downloadJavadoc = true
+    }
+}

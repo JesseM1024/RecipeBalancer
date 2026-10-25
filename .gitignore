@@ -1,0 +1,24 @@
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# 开发运行实例（存档、日志、配置，体积很大）
+run/
+run-data/
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+out/
+
+# 系统
+.DS_Store
+Thumbs.db
+
+# 一次性排查产物：临时补丁脚本与提交消息/断言日志（不入库）
+_*.py
+_*.txt
+*-log.txt

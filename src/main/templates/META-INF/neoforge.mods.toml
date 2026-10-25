@@ -1,0 +1,46 @@
+# 构建时 ${} 占位符会被 gradle.properties 的值替换。
+# 最终产物在 build/generated/sources/modMetadata/META-INF/neoforge.mods.toml
+
+modLoader="javafml" #mandatory
+loaderVersion="${loader_version_range}" #mandatory
+license="${mod_license}"
+
+[[mods]] #mandatory
+modId="${mod_id}" #mandatory
+version="${mod_version}" #mandatory
+displayName="${mod_name}" #mandatory
+description='''
+产线配平自动计算器（纯客户端）。
+按下快捷键打开图形界面，可视化录入配方（物品可从背包/JEI 拖入，或从 JEI 配方直接写入），
+用线性规划求解各配方稳态速率与机器并行数，支持循环配方与启动投料计算。
+
+A client-side production line balancer.
+Press the hotkey to open the GUI, visually enter recipes (items can be dragged from
+inventory/JEI, or written directly from JEI recipes), then solve steady-state
+recipe rates and machine parallels via linear programming, with cyclic recipe
+and bootstrap inventory support.
+'''
+
+# 纯客户端模组：依赖只在客户端校验。
+# 服务端即使没装这个模组也不会报错（配合主类上的 @Mod(dist = Dist.CLIENT)）。
+[[dependencies.${mod_id}]]
+    modId="neoforge"
+    type="required"
+    versionRange="[${neo_version},)"
+    ordering="NONE"
+    side="CLIENT"
+
+[[dependencies.${mod_id}]]
+    modId="minecraft"
+    type="required"
+    versionRange="${minecraft_version_range}"
+    ordering="NONE"
+    side="CLIENT"
+
+# JEI 为可选依赖：编译期依赖其 API，运行期不安装时功能降级（无 JEI 录入通道）。
+[[dependencies.${mod_id}]]
+    modId="jei"
+    type="optional"
+    versionRange="[19.44.0,)"
+    ordering="NONE"
+    side="CLIENT"
