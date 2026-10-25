@@ -5,6 +5,50 @@
 
 ---
 
+## R6 · 2026-10-25 · 求解缺类终极修复（shade）+ 自动保存草稿
+
+### 实测结果
+
+| 项 | 结果 |
+|---|---|
+| `gradlew build` | **BUILD SUCCESSFUL**，69 tests, 0 failures |
+| 产物 | `recipebalancer-0.1.0-1.21.1.jar` **2,267,602 B**；`org/apache/commons/math3/**` **直接位于 jar 内**，无 `META-INF/jarjar` |
+| 仅 jar 验证 | 新建独立 Java 进程，classpath **只放模组 jar**：`success=true machines=1 rates=[1.0]`——证明不再依赖外部 math3 |
+| 实机部署 | 已覆盖 `1.21.1-NeoForge/mods/`（22:49:59，2,267,602 B） |
+| dev JEI | 22:43 的 `run/logs/latest.log` 已加载 **Just Enough Items 19.39.0.372**，无版本错误 |
+
+### 求解失败根因（补充）
+
+- R5 的 JarJar 版 jar 确实含 `META-INF/jarjar/commons-math3-3.6.1.jar` + metadata，
+  但实机/IDE 运行仍报 `NoClassDefFoundError`（截图状态栏是 R5 新增的 LinkageError 捕获）。
+- 不再依赖 JarJar 的加载时机与运行环境（Sinytra Connector / IDE run config），
+  改为 Gradle `shaded` 配置 + `jar { from(zipTree) }` **把 class 直接解包进模组 jar**。
+- 增加启动自检：`RecipeBalancerMod` 构造时 `Class.forName(SimplexSolver)`，日志打印
+  `commons-math3 可用/不可用`；求解 catch 记录完整堆栈。
+
+### 记住上次输入
+
+- `BalancerScreen` 每次打开读取 `config/recipebalancer/scenarios/autosave.json`；
+- `init()` / `onClose()` / 增删配方/目标/启禁/清空/求解/载入后自动写回；
+- **K 键可关闭界面**（与打开同键；`EditBox` 聚焦时不抢按键，避免输入 k 被吞）；
+- 手动「保存/载入」仍然独立，不影响 autosave。
+
+### 踩坑
+
+| # | 现象 | 根因 | 结论 |
+|---|---|---|---|
+| 1 | JarJar 版仍 `NoClassDefFoundError` | 嵌套 jar 已生成，但运行环境（Connector/IDE）下不可见 | 对单库依赖，直接 shade 最稳；JarJar 不是万无一失 |
+| 2 | 求解失败没有崩溃、只显示状态 | R5 已补 `catch (LinkageError)` | 这是预期降级；根因仍是缺类，必须修依赖 |
+| 3 | 截图里的“求解失败”与 dev 日志时间对不上 | 用户实际在 dev 客户端测试（22:43 日志）；实机日志停在 22:32 | 排查时先对齐“哪次运行”的日志，再下结论 |
+
+### 待验证
+
+- 重启 dev 客户端：启动日志应出现 `commons-math3 可用`；求解应成功。
+- 重启实机实例：求解成功；按 K 关闭再打开，配方应保留。
+- 若仍失败，日志中会有 `[RecipeBalancer] 求解失败` 的完整堆栈（R6 新增）。
+
+---
+
 ## R5 · 2026-10-25 · 实机闪退修复（JarJar）+ dev JEI 降到 19.39
 
 ### 实测结果

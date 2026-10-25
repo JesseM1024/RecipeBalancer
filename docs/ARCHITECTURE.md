@@ -236,10 +236,10 @@ SCC 分解 → 每 SCC **最小反馈顶点集**（|SCC|≤12 精确枚举，按
 - scipy 映射：`A_ub/b_ub`（≤ 约束）→ `LinearConstraint(LEQ)`；等式约束 → `EQ`；
   **变量只有下界 0**（`restrictToNonNegative=true`），禁用配方用**删列**实现
   `x_j = 0`——commons-math3 无任意上下界 API，不做 bounds 适配层；big-M 直接写进目标向量（语义同 P0-C）。
-- **分发形态（R-06 已定）**：commons-math3 用 **JarJar 内嵌**
-  （`META-INF/jarjar/commons-math3-3.6.1.jar`，版本区间 `[3.6.1,4.0)`）。
-  2026-10-25 实机崩溃证明 `implementation` 只进 dev classpath、**不会随 jar 分发**，
-  生产环境点击求解直接 `NoClassDefFoundError`。
+- **分发形态（R-06 已定）**：commons-math3 **直接把 class 解包进模组 jar**
+  （Gradle `shaded` 配置 + `jar { from(zipTree) }`），不走 JarJar。
+  2026-10-25 实测：JarJar 版在实机/IDE 仍报 `NoClassDefFoundError`；改为解包后，
+  **仅用模组 jar 启动独立 Java 进程即可求解**（无任何外部 math3）。
 - **多解问题（R-10）**：LP 最优解可退化不唯一，CM3 与 HiGHS 可能给出不同顶点。
   对拍按 §7 分层策略执行，**不追求逐位速率恒等**；差异必须记录。
 - **S-04 实测（2026-10-25）**：`epsilon=1e-10`、`maxIterations=200000`、变量非负 + 删列后，
@@ -389,7 +389,8 @@ public final class RbKeyMappings {
 }
 
 package com.jessetech.recipebalancer.mc.screen;
-/** 主界面（原生）：配方/目标编辑 + 求解 + 文本结果 + 场景保存载入。 */
+/** 主界面（原生）：配方/目标编辑 + 求解 + 文本结果 + 场景保存载入。
+ *  每次打开读取 `scenarios/autosave.json`，关闭/修改时自动写回（记住上次输入）。 */
 public final class BalancerScreen extends Screen { /* M2 */ }
 /** 配方编辑：原料/产物两列动态行（手动输入）。 */
 public final class RecipeEditScreen extends Screen { /* M2 */ }
@@ -527,7 +528,7 @@ Java → JS 推送（`executeJavaScript`）：
 | R-03 | 无 AWT toolkit 进程里构造 KeyEvent | ⏸ 暂缓 | 恢复时 S-02；键码自映射 + CefKeyEvent 直填 |
 | R-04 | 中文 IME 输入（OSR 已知痛点） | ✅ 已消除 | 原生 `EditBox` 由 MC 处理 IME/粘贴 |
 | R-05 | CEF 内存 +~300MB | ⏸ 暂缓 | 恢复时配置开关 + 文档告知 |
-| R-06 | commons-math3 / gson 分发冲突（其他模组可能内嵌） | 低 | commons-math3 已 **JarJar 内嵌**（区间 `[3.6.1,4.0)`）；gson 用加载器自带（`compileOnly`） |
+| R-06 | commons-math3 / gson 分发冲突（其他模组可能内嵌） | 低 | commons-math3 已 **直接 shade 进模组 jar**（单 jar 2.27MB，无嵌套依赖）；gson 用加载器自带（`compileOnly`） |
 | R-07 | GUI scale 与坐标换算错位（点击偏） | 低 | 原生控件统一用 GUI 缩放坐标；验收含 150% DPI |
 | R-08 | JEI 19.39 / 19.70 API 逐行核实（lookup/ghost 签名） | 中 | 沿用 logiscope 的"逐行核实"纪律，动工前先读 API jar；以 dev 19.39 为编译基准 |
 | R-09 | CEF 帧位序（BGRA/RGBA） | ⏸ 暂缓 | 恢复时 S-03 |
