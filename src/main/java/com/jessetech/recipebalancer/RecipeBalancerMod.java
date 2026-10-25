@@ -28,5 +28,16 @@ public final class RecipeBalancerMod {
         modBus.addListener(RegisterKeyMappingsEvent.class, RbKeyMappings::register);
         NeoForge.EVENT_BUS.addListener(ClientTickEvent.Post.class, RbKeyMappings::onClientTick);
         LOGGER.info("[RecipeBalancer] M2 初始化：快捷键 K 打开原生主界面");
+        checkRuntimeDependencies();
+    }
+
+    /** 启动自检：求解库是否真的在运行期 classpath 上（比点「求解」时才发现更早）。 */
+    private static void checkRuntimeDependencies() {
+        try {
+            Class.forName("org.apache.commons.math3.optim.linear.SimplexSolver");
+            LOGGER.info("[RecipeBalancer] commons-math3 可用");
+        } catch (Throwable t) {
+            LOGGER.error("[RecipeBalancer] commons-math3 不可用，求解会失败", t);
+        }
     }
 }

@@ -75,6 +75,8 @@ neoForge {
 
 configurations {
     runtimeClasspath.extendsFrom localRuntime
+    // 只用于“解包进模组 jar”的库；不参与 mod 依赖声明
+    shaded
 }
 
 dependencies {
@@ -92,15 +94,13 @@ dependencies {
 
     // ------------------------------------------------------------------
     // LP 求解器：Apache Commons Math（纯 Java simplex）。
-    // 必须 JarJar 内嵌：实机没有这个库，`implementation` 只进 dev classpath，
-    // 生产环境点「求解」会 NoClassDefFoundError（2026-10-25 实机崩溃已证实）。
+    // implementation：dev 运行期 classpath；
+    // shaded：构建时把类**直接解包进模组 jar**（不依赖 JarJar/嵌套 jar）。
+    // 2026-10-25 实机与 dev 都出现过 NoClassDefFoundError，JarJar 方案在
+    // Connector/IDE 运行下不可靠，改为直接内嵌，用“仅 jar + JShell”验证。
     // ------------------------------------------------------------------
-    jarJar(implementation('org.apache.commons:commons-math3:3.6.1')) {
-        version {
-            strictly '[3.6.1,4.0)'
-            prefer '3.6.1'
-        }
-    }
+    implementation 'org.apache.commons:commons-math3:3.6.1'
+    shaded 'org.apache.commons:commons-math3:3.6.1'
 
     // ------------------------------------------------------------------
     // JCEF（备选·暂缓，2026-10-25 R2）：渲染主线已改为原生 GuiGraphics。
@@ -123,6 +123,14 @@ dependencies {
     testImplementation platform("org.junit:junit-bom:${junit_version}")
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+// 把 shaded 库的 class 直接并入模组 jar；排除 META-INF 避免签名/清单冲突。
+tasks.named('jar') {
+    from({ configurations.shaded.collect { zipTree(it) } }) {
+        exclude 'META-INF/**'
+        duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    }
 }
 
 // 纯 JVM 测试：不依赖 runClient / MDG 的 dev 运行时。

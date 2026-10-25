@@ -1,5 +1,6 @@
 package com.jessetech.recipebalancer.mc.screen;
 
+import com.jessetech.recipebalancer.RecipeBalancerMod;
 import com.jessetech.recipebalancer.core.io.ScenarioStore;
 import com.jessetech.recipebalancer.core.model.Recipe;
 import com.jessetech.recipebalancer.core.model.Scenario;
@@ -34,7 +35,7 @@ public final class BalancerScreen extends Screen {
     private static final ScenarioStore STORE = new ScenarioStore(
             FMLPaths.CONFIGDIR.get().resolve("recipebalancer").resolve("scenarios"));
 
-    private ScenarioDraft draft = ScenarioDraft.blank();
+    private ScenarioDraft draft = loadAutosave();
     private SolveResult result;
     private String scenarioName = "default";
     private String status = "添加配方与目标产物后点「求解」";
@@ -140,6 +141,25 @@ public final class BalancerScreen extends Screen {
                 .bounds(PAD + 236, height - 44, 52, 20).build());
 
         rebuildReport();
+        persistDraft();
+    }
+
+    /** 每次打开界面读取上次自动保存的草稿（跨重启）。 */
+    private static ScenarioDraft loadAutosave() {
+        try {
+            return ScenarioDraft.from(STORE.load("autosave"));
+        } catch (RuntimeException e) {
+            return ScenarioDraft.blank();
+        }
+    }
+
+    /** 自动保存当前输入，避免关闭界面/重启后丢失。失败只写状态栏，不打断流程。 */
+    private void persistDraft() {
+        try {
+            STORE.save("autosave", draft.toScenario());
+        } catch (RuntimeException e) {
+            status = "自动保存失败: " + e.getMessage();
+        }
     }
 
     @Override
@@ -366,6 +386,7 @@ public final class BalancerScreen extends Screen {
         }
         result = null;
         rebuildReport();
+        persistDraft();
         status = "已删除配方";
     }
 
@@ -375,6 +396,7 @@ public final class BalancerScreen extends Screen {
             return;
         }
         draft.toggleRecipeEnabled(selectedRecipe);
+        persistDraft();
         status = draft.isRecipeEnabled(selectedRecipe) ? "已启用 R" + selectedRecipe : "已禁用 R" + selectedRecipe;
     }
 
@@ -394,6 +416,7 @@ public final class BalancerScreen extends Screen {
         selectedTarget = null;
         result = null;
         rebuildReport();
+        persistDraft();
     }
 
     private void solve() {
@@ -410,10 +433,12 @@ public final class BalancerScreen extends Screen {
             status = result.success() ? "求解完成" : "求解失败: " + result.message();
         } catch (RuntimeException | LinkageError e) {
             // LinkageError：生产环境缺依赖（如 commons-math3 未内嵌）时不要崩游戏，界面给出提示
+            RecipeBalancerMod.LOGGER.error("[RecipeBalancer] 求解失败", e);
             result = null;
             status = "求解失败: " + e;
         }
         rebuildReport();
+        persistDraft();
     }
 
     private void clearAll() {
@@ -422,6 +447,7 @@ public final class BalancerScreen extends Screen {
         selectedRecipe = -1;
         selectedTarget = null;
         rebuildReport();
+        persistDraft();
         status = "已清空";
     }
 
@@ -453,6 +479,7 @@ public final class BalancerScreen extends Screen {
                     }
                 });
             }
+            persistDraft();
             status = "已载入: " + scenarioName;
         } catch (RuntimeException e) {
             status = "载入失败: " + e.getMessage();
@@ -461,9 +488,21 @@ public final class BalancerScreen extends Screen {
 
     @Override
     public void onClose() {
+        persistDraft();
         if (minecraft != null) {
             minecraft.setScreen(null);
         }
+    }
+
+    @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        // K 关闭（与打开同一键位）；EditBox 聚焦时不抢按键，避免输入 k 被吞
+        if (modifiers == 0 && !(getFocused() instanceof EditBox)
+                && com.jessetech.recipebalancer.mc.keybind.RbKeyMappings.OPEN.matches(keyCode, scanCode)) {
+            onClose();
+            return true;
+        }
+        return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
     @Override
