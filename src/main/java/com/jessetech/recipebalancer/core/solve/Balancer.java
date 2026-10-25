@@ -4,7 +4,7 @@ import com.jessetech.recipebalancer.core.bootstrap.PerfectCycleBootstrapper;
 import com.jessetech.recipebalancer.core.detect.CyclicDeficitDetector;
 import com.jessetech.recipebalancer.core.detect.RawDetector;
 import com.jessetech.recipebalancer.core.detect.SeedDetector;
-import com.jessetech.recipebalancer.core.matrix.StoichMatrix;
+import com.jessetech.recipebalancer.core.matrix.MaterialMatrix;
 import com.jessetech.recipebalancer.core.model.Constants;
 import com.jessetech.recipebalancer.core.model.Objective;
 import com.jessetech.recipebalancer.core.model.Recipe;
@@ -56,8 +56,8 @@ public final class Balancer {
         Set<Integer> disabled = options.disabledRecipes();
 
         // ---- 第 1 遍：初始物品与矩阵 ----
-        List<String> items = StoichMatrix.collectItems(recipes, scenario.targetProducts(), userInventory);
-        StoichMatrix matrix = StoichMatrix.build(recipes, items);
+        List<String> items = MaterialMatrix.collectItems(recipes, scenario.targetProducts(), userInventory);
+        MaterialMatrix matrix = MaterialMatrix.build(recipes, items);
 
         // ---- 自动检测原料 / 自增殖种子 ----
         Set<String> inferredRaw = options.autoDetectRaw() ? RawDetector.detect(matrix) : Set.of();
@@ -74,8 +74,8 @@ public final class Balancer {
         }
 
         // ---- 第 2 遍：种子可能引入新物品 ----
-        items = StoichMatrix.collectItems(recipes, effectiveTarget, inventory);
-        matrix = StoichMatrix.build(recipes, items);
+        items = MaterialMatrix.collectItems(recipes, effectiveTarget, inventory);
+        matrix = MaterialMatrix.build(recipes, items);
 
         // ---- 循环亏损检测（P0-B：全量配方，不感知 disabled）----
         Set<String> deficits = CyclicDeficitDetector.detect(

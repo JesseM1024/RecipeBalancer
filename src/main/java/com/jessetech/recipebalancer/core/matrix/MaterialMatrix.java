@@ -9,7 +9,8 @@ import java.util.Map;
 import java.util.TreeSet;
 
 /**
- * 化学计量矩阵 {@code A[i][j] = 产量_ij − 消耗量_ij}（对应 Python {@code matrix.py}）。
+ * 物料矩阵 {@code A[i][j] = 产量_ij − 消耗量_ij}：每个配方对各物品的净产出。
+ * 只描述物品数量关系，**与化学无关**（对应 Python {@code matrix.py}）。
  *
  * <p>物品顺序 = {@link TreeSet} 自然序，即 Python {@code sorted(all_items)}。
  * registry id / 物品名均为 BMP 字符时，{@code String.compareTo}（UTF-16 code unit）
@@ -17,15 +18,15 @@ import java.util.TreeSet;
  *
  * <p>装配顺序刻意与 Python 对齐：**先加产物、再减原料**，保证浮点累加序一致。
  */
-public final class StoichMatrix {
+public final class MaterialMatrix {
 
     private final List<String> items;
     private final Map<String, Integer> itemIndex;
     private final double[][] a;
     private final int recipeCount;
 
-    private StoichMatrix(List<String> items, Map<String, Integer> itemIndex,
-                         double[][] a, int recipeCount) {
+    private MaterialMatrix(List<String> items, Map<String, Integer> itemIndex,
+                           double[][] a, int recipeCount) {
         this.items = items;
         this.itemIndex = itemIndex;
         this.a = a;
@@ -46,7 +47,7 @@ public final class StoichMatrix {
         return List.copyOf(all);
     }
 
-    public static StoichMatrix build(List<Recipe> recipes, List<String> items) {
+    public static MaterialMatrix build(List<Recipe> recipes, List<String> items) {
         Map<String, Integer> index = new LinkedHashMap<>();
         for (int i = 0; i < items.size(); i++) {
             index.put(items.get(i), i);
@@ -61,7 +62,7 @@ public final class StoichMatrix {
                 a[row(index, entry.getKey())][j] -= entry.getValue();
             }
         }
-        return new StoichMatrix(List.copyOf(items), Collections.unmodifiableMap(index),
+        return new MaterialMatrix(List.copyOf(items), Collections.unmodifiableMap(index),
                 a, recipes.size());
     }
 

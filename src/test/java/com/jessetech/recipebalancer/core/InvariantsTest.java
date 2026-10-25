@@ -2,7 +2,7 @@ package com.jessetech.recipebalancer.core;
 
 import com.jessetech.recipebalancer.core.detect.CyclicDeficitDetector;
 import com.jessetech.recipebalancer.core.detect.RawDetector;
-import com.jessetech.recipebalancer.core.matrix.StoichMatrix;
+import com.jessetech.recipebalancer.core.matrix.MaterialMatrix;
 import com.jessetech.recipebalancer.core.model.Constants;
 import com.jessetech.recipebalancer.core.model.Recipe;
 import com.jessetech.recipebalancer.core.model.Scenario;
@@ -42,8 +42,8 @@ class InvariantsTest {
         assertTrue(result.success(), name + ": " + result.message());
 
         // ---- 净物流恒等式：net = A·x + ext − target（库存是催化式语义，在 b 与 s 中抵消）----
-        List<String> items = StoichMatrix.collectItems(scenario.recipes(), scenario.targetProducts(), Map.of());
-        StoichMatrix matrix = StoichMatrix.build(scenario.recipes(), items);
+        List<String> items = MaterialMatrix.collectItems(scenario.recipes(), scenario.targetProducts(), Map.of());
+        MaterialMatrix matrix = MaterialMatrix.build(scenario.recipes(), items);
         double[][] a = matrix.matrix();
         double[] x = new double[scenario.recipes().size()];
         for (int i = 0; i < x.length; i++) {
@@ -102,8 +102,8 @@ class InvariantsTest {
         SolveResult result = Balancer.solve(scenario);
         assertTrue(result.success(), name + ": " + result.message());
 
-        List<String> items = StoichMatrix.collectItems(scenario.recipes(), scenario.targetProducts(), Map.of());
-        StoichMatrix matrix = StoichMatrix.build(scenario.recipes(), items);
+        List<String> items = MaterialMatrix.collectItems(scenario.recipes(), scenario.targetProducts(), Map.of());
+        MaterialMatrix matrix = MaterialMatrix.build(scenario.recipes(), items);
         Set<String> allowed = new LinkedHashSet<>(scenario.options().rawMaterials());
         allowed.addAll(RawDetector.detect(matrix));
         allowed.addAll(CyclicDeficitDetector.detect(scenario.recipes(),

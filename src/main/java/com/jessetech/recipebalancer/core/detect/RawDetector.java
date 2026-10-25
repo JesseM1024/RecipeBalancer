@@ -1,6 +1,6 @@
 package com.jessetech.recipebalancer.core.detect;
 
-import com.jessetech.recipebalancer.core.matrix.StoichMatrix;
+import com.jessetech.recipebalancer.core.matrix.MaterialMatrix;
 import com.jessetech.recipebalancer.core.model.Constants;
 
 import java.util.LinkedHashSet;
@@ -12,7 +12,7 @@ public final class RawDetector {
     private RawDetector() {
     }
 
-    public static Set<String> detect(StoichMatrix matrix) {
+    public static Set<String> detect(MaterialMatrix matrix) {
         Set<String> raw = new LinkedHashSet<>();
         double[][] a = matrix.matrix();
         for (int i = 0; i < matrix.itemCount(); i++) {

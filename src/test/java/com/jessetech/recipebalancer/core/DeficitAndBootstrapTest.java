@@ -4,7 +4,7 @@ import com.jessetech.recipebalancer.core.bootstrap.PerfectCycleBootstrapper;
 import com.jessetech.recipebalancer.core.detect.CyclicDeficitDetector;
 import com.jessetech.recipebalancer.core.detect.RawDetector;
 import com.jessetech.recipebalancer.core.detect.SeedDetector;
-import com.jessetech.recipebalancer.core.matrix.StoichMatrix;
+import com.jessetech.recipebalancer.core.matrix.MaterialMatrix;
 import com.jessetech.recipebalancer.core.model.Recipe;
 import com.jessetech.recipebalancer.core.model.Scenario;
 import com.jessetech.recipebalancer.core.model.SolveOptions;
@@ -35,8 +35,8 @@ class DeficitAndBootstrapTest {
     @Test
     void rawMaterialsDetectedFromMatrix() {
         Scenario scenario = TestSupport.scenario("simple");
-        List<String> items = StoichMatrix.collectItems(scenario.recipes(), scenario.targetProducts(), Map.of());
-        StoichMatrix matrix = StoichMatrix.build(scenario.recipes(), items);
+        List<String> items = MaterialMatrix.collectItems(scenario.recipes(), scenario.targetProducts(), Map.of());
+        MaterialMatrix matrix = MaterialMatrix.build(scenario.recipes(), items);
         assertEquals(Set.of("空"), RawDetector.detect(matrix));
     }
 
