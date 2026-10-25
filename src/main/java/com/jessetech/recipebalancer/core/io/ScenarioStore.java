@@ -80,6 +80,15 @@ public final class ScenarioStore {
         return ScenarioJson.load(path);
     }
 
+    /** 宽松载入草稿：允许目标/配方为空（自动保存用），其余字段仍校验。 */
+    public Scenario loadDraft(String rawName) {
+        Path path = pathFor(rawName);
+        if (!Files.isRegularFile(path)) {
+            throw new IllegalArgumentException("场景不存在: " + sanitize(rawName));
+        }
+        return ScenarioJson.loadDraft(path);
+    }
+
     public boolean delete(String rawName) {
         try {
             return Files.deleteIfExists(pathFor(rawName));

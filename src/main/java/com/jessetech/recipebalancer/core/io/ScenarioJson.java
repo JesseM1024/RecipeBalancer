@@ -53,6 +53,26 @@ public final class ScenarioJson {
     }
 
     public static Scenario load(String json) {
+        return parse(json, true);
+    }
+
+    /**
+     * 宽松读取：用于**自动保存的草稿**。允许 recipes / target_products 为空
+     * （用户可能还没填完就按 K 退出），但每条已存在的配方仍按严格规则校验。
+     */
+    public static Scenario loadDraft(Path path) {
+        try {
+            return loadDraft(Files.readString(path, StandardCharsets.UTF_8));
+        } catch (IOException e) {
+            throw new UncheckedIOException("读取草稿失败: " + path, e);
+        }
+    }
+
+    public static Scenario loadDraft(String json) {
+        return parse(json, false);
+    }
+
+    private static Scenario parse(String json, boolean completeScenario) {
         JsonElement root;
         try {
             root = JsonParser.parseString(json);
@@ -67,16 +87,25 @@ public final class ScenarioJson {
         JsonElement recipesElement = object.get("recipes");
         JsonElement targetsElement = object.get("target_products");
         if (recipesElement == null) {
-            throw new SchemaException("场景缺少必需键: recipes");
+            if (completeScenario) {
+                throw new SchemaException("场景缺少必需键: recipes");
+            }
+            recipesElement = new JsonArray();
         }
         if (targetsElement == null) {
-            throw new SchemaException("场景缺少必需键: target_products");
+            if (completeScenario) {
+                throw new SchemaException("场景缺少必需键: target_products");
+            }
+            targetsElement = new JsonObject();
         }
-        if (!targetsElement.isJsonObject() || targetsElement.getAsJsonObject().isEmpty()) {
+        if (!targetsElement.isJsonObject()) {
+            throw new SchemaException("target_products 必须为对象");
+        }
+        if (completeScenario && targetsElement.getAsJsonObject().isEmpty()) {
             throw new SchemaException("target_products 不能为空");
         }
 
-        List<Recipe> recipes = parseRecipes(recipesElement);
+        List<Recipe> recipes = parseRecipes(recipesElement, completeScenario);
         Map<String, Double> targets = parseNumberMap(targetsElement.getAsJsonObject(), "target_products");
 
         JsonObject optionsJson;
@@ -92,13 +121,19 @@ public final class ScenarioJson {
         return new Scenario(recipes, targets, options);
     }
 
-    private static List<Recipe> parseRecipes(JsonElement element) {
+    private static List<Recipe> parseRecipes(JsonElement element, boolean requireNonEmpty) {
         if (!element.isJsonArray()) {
-            throw new SchemaException("recipes 必须为非空列表");
+            if (requireNonEmpty) {
+                throw new SchemaException("recipes 必须为非空列表");
+            }
+            return List.of();
         }
         JsonArray array = element.getAsJsonArray();
         if (array.isEmpty()) {
-            throw new SchemaException("recipes 必须为非空列表");
+            if (requireNonEmpty) {
+                throw new SchemaException("recipes 必须为非空列表");
+            }
+            return List.of();
         }
 
         List<Recipe> recipes = new ArrayList<>(array.size());

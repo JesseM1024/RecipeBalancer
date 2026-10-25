@@ -147,7 +147,8 @@ public final class BalancerScreen extends Screen {
     /** 每次打开界面读取上次自动保存的草稿（跨重启）。 */
     private static ScenarioDraft loadAutosave() {
         try {
-            return ScenarioDraft.from(STORE.load("autosave"));
+            // 宽松载入：允许还没填目标产物/配方就退出，下次继续编辑
+            return ScenarioDraft.from(STORE.loadDraft("autosave"));
         } catch (RuntimeException e) {
             return ScenarioDraft.blank();
         }

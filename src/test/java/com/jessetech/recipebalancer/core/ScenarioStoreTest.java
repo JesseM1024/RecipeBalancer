@@ -1,13 +1,17 @@
 package com.jessetech.recipebalancer.core;
 
+import com.jessetech.recipebalancer.core.io.SchemaException;
 import com.jessetech.recipebalancer.core.io.ScenarioStore;
+import com.jessetech.recipebalancer.core.model.Recipe;
 import com.jessetech.recipebalancer.core.model.Scenario;
+import com.jessetech.recipebalancer.core.model.ScenarioDraft;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -67,6 +71,28 @@ class ScenarioStoreTest {
     void loadMissingThrows() {
         ScenarioStore store = new ScenarioStore(directory);
         assertThrows(IllegalArgumentException.class, () -> store.load("nope"));
+    }
+
+    @Test
+    void autosaveToleratesEmptyTargetsAndRecipesButManualLoadStaysStrict() {
+        ScenarioStore store = new ScenarioStore(directory);
+
+        // 刚打开界面、什么都没填就退出
+        store.save("autosave", ScenarioDraft.blank().toScenario());
+        Scenario blank = store.loadDraft("autosave");
+        assertTrue(blank.recipes().isEmpty());
+        assertTrue(blank.targetProducts().isEmpty());
+        assertThrows(SchemaException.class, () -> store.load("autosave"));
+
+        // 有配方但目标还没填（用户报告的场景）
+        ScenarioDraft draft = ScenarioDraft.blank();
+        draft.addRecipe(new Recipe(Map.of("ore", 1.0), Map.of("ingot", 1.0), 1.0, "furnace"));
+        store.save("autosave", draft.toScenario());
+
+        Scenario loaded = store.loadDraft("autosave");
+        assertEquals(1, loaded.recipes().size());
+        assertTrue(loaded.targetProducts().isEmpty());
+        assertThrows(SchemaException.class, () -> store.load("autosave"));
     }
 
     @Test
