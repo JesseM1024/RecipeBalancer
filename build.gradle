@@ -93,11 +93,36 @@ dependencies {
     implementation 'org.apache.commons:commons-math3:3.6.1'
 
     // ------------------------------------------------------------------
-    // JCEF（游戏内 HTML 渲染主线方案，坐标 me.friwi:jcefmaven）——
-    // 本会话只做架构设计，不引入该依赖；集成方式见 docs/ARCHITECTURE.md
-    // 渲染层一节。此处注释保留坐标备查：
-    //   implementation 'me.friwi:jcefmaven:152.0.6'   （natives 首启下载 ~100MB）
+    // JCEF（备选·暂缓，2026-10-25 R2）：渲染主线已改为原生 GuiGraphics。
+    // 恢复条件见 docs/ARCHITECTURE.md §二。坐标备查：
+    //   implementation 'me.friwi:jcefmaven:152.0.6'   （natives ≈100MB / 平台）
+    // 零下载分发三形态：classpath 平台伴生 jar / 整合包 overrides 预置 / 在线回退。
     // ------------------------------------------------------------------
+
+    // ------------------------------------------------------------------
+    // Gson：core/io 场景 JSON 序列化（契约 C1 允许的依赖）。
+    // compileOnly：运行期由 NeoForge 自带 Gson 提供，避免 JarJar 版本冲突（R-06）；
+    // testImplementation：纯 JVM 测试不启动游戏，必须自己带到 classpath。
+    // ------------------------------------------------------------------
+    compileOnly "com.google.code.gson:gson:${gson_version}"
+    testImplementation "com.google.code.gson:gson:${gson_version}"
+
+    // ------------------------------------------------------------------
+    // JUnit 5：core/ 金标准对拍（D1：不启动游戏、不加载 MC 类）。
+    // ------------------------------------------------------------------
+    testImplementation platform("org.junit:junit-bom:${junit_version}")
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+// 纯 JVM 测试：不依赖 runClient / MDG 的 dev 运行时。
+tasks.named('test') {
+    useJUnitPlatform()
+    testLogging {
+        events 'failed', 'skipped'
+        exceptionFormat = 'full'
+        showStackTraces = true
+    }
 }
 
 // ---------------------------------------------------------------------------
