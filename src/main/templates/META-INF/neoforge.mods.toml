@@ -41,6 +41,6 @@ and bootstrap inventory support.
 [[dependencies.${mod_id}]]
     modId="jei"
     type="optional"
-    versionRange="[19.70.0,)"
+    versionRange="[19.39.0,)"
     ordering="NONE"
     side="CLIENT"

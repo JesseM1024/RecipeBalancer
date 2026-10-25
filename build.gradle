@@ -81,8 +81,10 @@ dependencies {
     // ------------------------------------------------------------------
     // JEI —— 软依赖：编译期对 API 编译，运行期装上即可用其取配方/拖物品。
     // 不装 JEI 时本模组必须照常工作（渲染/求解不依赖 JEI）。
-    // groupId = mezz.jei（blamejared 2026-10-25 核实）；版本与实机测试实例
-    // 1.21.1-NeoForge 一致（19.70.0.460）。19.44.0.405 要求 NeoForge 21.1.239+，不可用。
+    // groupId = mezz.jei（blamejared 2026-10-25 核实）。
+    // 开发环境用 19.39.0.372：其 mods.toml 只要求 NeoForge [21.0.118-beta,)；
+    // 19.42.0.389+ 要求 [21.1.238,)，与 dev 锁定的 21.1.209 冲突。
+    // 实机（NeoForge 21.1.246 + JEI 19.70）满足本模组 `[19.39.0,)` 的可选范围。
     // ------------------------------------------------------------------
     compileOnly "mezz.jei:jei-${minecraft_version}-common-api:${jei_version}"
     compileOnly "mezz.jei:jei-${minecraft_version}-neoforge-api:${jei_version}"
@@ -90,10 +92,15 @@ dependencies {
 
     // ------------------------------------------------------------------
     // LP 求解器：Apache Commons Math（纯 Java simplex）。
-    // 【架构阶段占位】最终分发形态（JarJar 内嵌 vs. 单独依赖）见
-    // docs/ARCHITECTURE.md 风险 R-03，待开发阶段定夺。
+    // 必须 JarJar 内嵌：实机没有这个库，`implementation` 只进 dev classpath，
+    // 生产环境点「求解」会 NoClassDefFoundError（2026-10-25 实机崩溃已证实）。
     // ------------------------------------------------------------------
-    implementation 'org.apache.commons:commons-math3:3.6.1'
+    jarJar(implementation('org.apache.commons:commons-math3:3.6.1')) {
+        version {
+            strictly '[3.6.1,4.0)'
+            prefer '3.6.1'
+        }
+    }
 
     // ------------------------------------------------------------------
     // JCEF（备选·暂缓，2026-10-25 R2）：渲染主线已改为原生 GuiGraphics。

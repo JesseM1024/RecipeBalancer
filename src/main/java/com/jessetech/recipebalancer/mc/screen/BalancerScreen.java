@@ -408,9 +408,10 @@ public final class BalancerScreen extends Screen {
         try {
             result = Balancer.solve(draft.toScenario());
             status = result.success() ? "求解完成" : "求解失败: " + result.message();
-        } catch (RuntimeException e) {
+        } catch (RuntimeException | LinkageError e) {
+            // LinkageError：生产环境缺依赖（如 commons-math3 未内嵌）时不要崩游戏，界面给出提示
             result = null;
-            status = "求解异常: " + e.getMessage();
+            status = "求解失败: " + e;
         }
         rebuildReport();
     }
