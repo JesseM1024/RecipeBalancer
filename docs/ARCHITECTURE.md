@@ -223,6 +223,7 @@ SCC 分解 → 每 SCC **最小反馈顶点集**（|SCC|≤12 精确枚举，按
 | `solver.py`（主 LP + 编排） | `solve/Balancer` + `solve/CommonsMath3LpSolver` | `scipy.linprog(method="highs")` → commons-math3 `SimplexSolver`（见 3.3） |
 | `bootstrap.py` | `bootstrap/PerfectCycleBootstrapper` | 组合枚举 `itertools.combinations` → Java 组合迭代器；行为逐分支对齐 |
 | `io.py`（场景 JSON） | `io/ScenarioJson` | **schema 完全同构**（`recipes/sourceList/productList/time/equType` + `options`），键名一字不改 → 与 Python 互导 |
+| （新增）场景仓库 | `io/ScenarioStore` | 纯 Java、目录注入（MC 侧 `config/recipebalancer/scenarios`）；文件名白名单防目录穿越；可脱离游戏单测 |
 | `report.py` | `report/TextReporter` | 文本报告移植（主界面与导出复用） |
 | `visualize.py`（pyvis） | **不移植图形库** → `core/layout/LayeredLayout` + `mc/ui/graph/GraphView` | 配色语义对齐；HTML 导出单独走模板（C5） |
 | `gui.py`（tkinter） | **不移植** → `mc/screen/BalancerScreen` + `mc/ui/widget/*` | 交互约定（600ms 防抖、单位归一化、回车添加）在原生界面复刻 |
@@ -338,6 +339,30 @@ public final class ScenarioJson {
     public static Scenario load(java.nio.file.Path path);
     public static String dump(Scenario scenario);
 }
+
+/** 场景文件仓库（M2）：目录注入，文件名清洗，供界面保存/载入。 */
+public final class ScenarioStore {
+    public ScenarioStore(Path directory);
+    public Path save(String name, Scenario scenario);
+    public Scenario load(String name);
+    public List<String> names();
+    public boolean delete(String name);
+    public static String sanitize(String name);
+}
+```
+
+```java
+package com.jessetech.recipebalancer.core.model;
+
+/** 界面唯一可变状态（契约 C6）；删除配方时同步平移 disabled 下标，可纯 JVM 单测。 */
+public final class ScenarioDraft {
+    public static ScenarioDraft from(Scenario scenario);
+    public void addRecipe(Recipe recipe);
+    public void removeRecipe(int index);
+    public void toggleRecipeEnabled(int index);
+    public void putTarget(String item, double amount);
+    public Scenario toScenario();
+}
 ```
 
 ### 4.2 LP 后端实现（core/solve/，M1）
@@ -362,8 +387,12 @@ public final class RbKeyMappings {
 }
 
 package com.jessetech.recipebalancer.mc.screen;
-/** 主界面（原生）：编辑 / 结果 / 流程图三页签。 */
+/** 主界面（原生）：配方/目标编辑 + 求解 + 文本结果 + 场景保存载入。 */
 public final class BalancerScreen extends Screen { /* M2 */ }
+/** 配方编辑：原料/产物两列动态行（手动输入）。 */
+public final class RecipeEditScreen extends Screen { /* M2 */ }
+/** 目标产物编辑。 */
+public final class TargetEditScreen extends Screen { /* M2 */ }
 /** 背包拾取小屏（点选物品标记）。 */
 public final class InventoryPickerScreen extends Screen { /* M4 */ }
 
@@ -534,6 +563,7 @@ RecipeBalancer/
 │   ├── mc/            # keybind / screen / ui / itemmap / jei
 │   └── cef/           # ⏸ 备选（host / render / input / scheme / bridge）
 ├── src/main/resources/
+│   ├── assets/recipebalancer/lang/   # 键位名（en_us / zh_cn）
 │   └── web/            # 仅 HTML 导出模板（自包含 vis-network）
 ├── src/test/java/      # JUnit 5：金标准 / 不变量 / 单元
 ├── src/test/resources/ # scenarios/*.json（输入）+ golden/*.json（Python 快照）

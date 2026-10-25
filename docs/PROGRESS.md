@@ -5,6 +5,50 @@
 
 ---
 
+## R3 · 2026-10-25 · M2 原生主界面（手动编辑 + 求解 + 文本结果）
+
+### 实测结果
+
+| 项 | 结果 |
+|---|---|
+| `gradlew build` | **BUILD SUCCESSFUL**（含 69 项测试与 jar 打包） |
+| `gradlew test` | **69 tests, 0 failures**（M1 58 + `ScenarioDraftTest` 6 + `ScenarioStoreTest` 5） |
+| 产物 | jar 内含 `mc/keybind/RbKeyMappings`、`mc/screen/{BalancerScreen,RecipeEditScreen,TargetEditScreen}`、`core/model/ScenarioDraft`、`core/io/ScenarioStore`、`assets/recipebalancer/lang/{en_us,zh_cn}.json` |
+| 未验证 | **游戏内冒烟**：需图形会话并进入世界后按 K。本轮未自动启动游戏窗口，B1 的人工验收步骤见下 |
+
+### 本轮完成
+
+1. **快捷键**（`RbKeyMappings`）：K 键（可在「按键绑定」改），主菜单不响应、已有 Screen 时不抢输入；模组总线注册、游戏总线 `ClientTickEvent.Post` 打开。
+2. **主界面**（`BalancerScreen`）：左栏配方列表（点击选中 / 滚轮 / 启禁 / 删除）+ 目标产物列表（加/改/删）；右栏四个选项开关（目标=设备/配方、自动原料、自增殖种子、启动投料）+ 求解/清空；下方文本报告滚动区；底部场景名 + 保存/载入；状态栏。
+3. **配方编辑屏**（`RecipeEditScreen`）：原料/产物两列动态行（物品名 + 数量 + 删除），耗时与设备类型；空行忽略、重复物品合并；保存时逐项校验。
+4. **目标编辑屏**（`TargetEditScreen`）：物品名 + 每秒目标量；改名时删除旧键。
+5. **场景持久化**：`core/io/ScenarioStore`（纯 Java，目录注入）+ MC 侧落到 `config/recipebalancer/scenarios/*.json`；文件名白名单（去路径分隔符、Windows 保留名、首尾点/空格）。
+6. **可测的编辑状态**：`core/model/ScenarioDraft`——添加/替换/删除配方、目标增删、选项切换；删除配方时**同步平移 disabled 下标**（单测锁定）。
+7. **语言文件**：键位类别与名称中英文。
+
+### 交互约定（M2）
+
+- K 打开，ESC 关闭；`isPauseScreen()=false`（不暂停单人世界）。
+- 配方行显示 `R{idx} 设备 耗时 原料 -> 产物`，禁用配方灰显并带 `[禁用]` 前缀。
+- 求解在主线程直接执行（当前规模毫秒级）；异常被界面捕获并显示，不崩游戏。
+- 保存/载入使用「场景名」输入框；场景目录首次保存时自动创建。
+
+### 本轮踩坑（根因与结论）
+
+| # | 现象 | 根因 | 结论/修复 |
+|---|---|---|---|
+| 1 | 动态行增删存在 CME 风险 | 按钮回调里清空/重建控件会改写 `Screen.renderables`，而事件分发正在遍历它 | 统一 `minecraft.execute(...)` 延迟到下一 tick 重建，并检查 `minecraft.screen == this` |
+| 2 | 1.21.1 API 与旧笔记不一致 | `EditBox` 构造器带 `Component`；`Button.builder`；`mouseScrolled` 为 4 参；`Screen.render` 内部先调 `renderBackground` | 动工前用 `javap` 对 `build/moddev/artifacts/neoforge-21.1.209.jar` 逐项核实，而不是照抄 1.20 教程 |
+| 3 | 载入后场景名回退 `default` | `init()` 每次都用常量重建 `EditBox` | 引入 `scenarioName` 字段，`init()` 从字段取值 |
+| 4 | 编辑子屏返回后旧解可能越界 | 旧 `SolveResult` 的速率数组长度与新配方数可能不一致 | 打开编辑器即清空 `result`；`rebuildReport()` 再做长度防御 |
+
+### 下一步（M3）
+
+主界面页签化/三栏细化、600ms 防抖自动求解、结果表与筛选、场景列表 UI、导出自包含 HTML（C5）。
+`core/layout` 与 `GraphView` 仍属 M5，不在本轮。
+
+---
+
 ## R2 · 2026-10-25 · 渲染主线切换（CEF → GuiGraphics）+ M1 求解核心
 
 ### 决策
