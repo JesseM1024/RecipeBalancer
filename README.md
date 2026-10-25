@@ -26,7 +26,7 @@ MC 1.21.1 + NeoForge 21.1.209 **纯客户端**模组：产线配平自动计算�
 | Java | 21（`org.gradle.java.home` 已锁定，勿用系统默认 JDK 25） |
 | Gradle | 9.2.1 wrapper（腾讯镜像直连；发行版已缓存于 `~/.gradle/wrapper/dists`） |
 | 构建 | `./gradlew build` |
-| 纯 JVM 测试 | `./gradlew test`（金标准对拍 / 不变量 / 单元，不启动游戏） |
+| 纯 JVM 测试 | `./gradlew test`（金标准对拍 / 不变量 / 单元，不启动游戏；结束后自动把 jar 复制到 `test_instance_dir/mods`） |
 | 运行客户端 | `./gradlew runClient`（dev 环境自带 JEI 19.44.0.405 runtimeOnly） |
 
 构建骨架复制自 `D:\dev\logiscope`（版本组合一致，全量复用 `~/.gradle` 依赖缓存），

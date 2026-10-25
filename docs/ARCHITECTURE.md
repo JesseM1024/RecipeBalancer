@@ -34,7 +34,7 @@
 ├────────────────────────────────────────────────────────────────────────┤
 │ 求解核心  core/（★ 纯 Java，零 MC/JEI 依赖，M1 先行）                    │
 │   model/    Recipe, Scenario, SolveOptions, SolveResult                │
-│   matrix/   StoichMatrix（装配，物品索引确定性排序）                   │
+│   matrix/   MaterialMatrix（装配，物品索引确定性排序）                 │
 │   detect/   RawDetector, SeedDetector, CyclicDeficitDetector(+Tarjan)  │
 │   solve/    LpSolver(接口) → CommonsMath3LpSolver；Balancer(编排)       │
 │   bootstrap/PerfectCycleBootstrapper（最小反馈顶点集→启动投料）        │
@@ -193,7 +193,7 @@ s.t. -A·x - E·r ≤ s - b        （每物品 i：净产出 + 外部输入 ≥
       x_j = 0（j ∈ 禁用集），其余 x_j ≥ 0，r ≥ 0
 
 c = [ t_j (objective=machine) 或 1 (objective=recipes) ；  M=10^6（外部输入惩罚）]
-A[i,j] = 产量_ij − 消耗量_ij   （化学计量矩阵，物品按名称确定性排序）
+A[i,j] = 产量_ij − 消耗量_ij   （物料矩阵：只描述物品数量关系，与化学无关；物品按名称确定性排序）
 E = 白名单物品的单位选择矩阵（外部输入白名单 = 用户原料 ∪ 自动原料 ∪ 循环亏损 − 目标产物）
 b = 目标向量；  s = 库存向量（自增殖种子 ∪ 用户库存）
 ```
@@ -218,7 +218,7 @@ SCC 分解 → 每 SCC **最小反馈顶点集**（|SCC|≤12 精确枚举，按
 | Python（recipe_balancer/） | Java（core/） | 移植要点 |
 |---|---|---|
 | `models.py`（常量 + RecipeSolution） | `model/` | 常量**逐字面量**移植（见 C7）；Solution→`SolveResult` record |
-| `matrix.py` | `matrix/StoichMatrix` | 不引矩阵库：`double[][]` 或列稀疏数组即可（问题规模 ≤ 数百×数百） |
+| `matrix.py` | `matrix/MaterialMatrix` | 不引矩阵库：`double[][]` 或列稀疏数组即可（问题规模 ≤ 数百×数百） |
 | `detection.py`（原料/种子/亏损） | `detect/` | networkx SCC → **自写 Tarjan**（约 80 行，避免引 JGraphT）；子 LP 用 `LpSolver` |
 | `solver.py`（主 LP + 编排） | `solve/Balancer` + `solve/CommonsMath3LpSolver` | `scipy.linprog(method="highs")` → commons-math3 `SimplexSolver`（见 3.3） |
 | `bootstrap.py` | `bootstrap/PerfectCycleBootstrapper` | 组合枚举 `itertools.combinations` → Java 组合迭代器；行为逐分支对齐 |
@@ -438,7 +438,7 @@ final class GraphView {
 
 ## 五、JEI 集成（mc/jei/，M4）
 
-| 通道 | 用法 | JEI API（19.44.0.405，**逐项待核实 R-08**） |
+| 通道 | 用法 | JEI API（19.70.0.460，**逐项待核实 R-08**） |
 |---|---|---|
 | G-拖拽 | 从 JEI 物品列表把物品拖到界面配方槽 | `IGhostIngredientHandler<Screen>`：Screen 提供目标矩形集；落点回调拿 `ITypedIngredient` |
 | G-配方写入 | 界面内对某物品点"从 JEI 查配方"→ JEI lookup → 自动填原料/产物（数量带入，**耗时/设备手填**） | `IJeiRuntime.getRecipeManager()` → recipe lookup → `IRecipeWrapper` 的输入/输出 ingredient 列表 |
@@ -527,7 +527,7 @@ Java → JS 推送（`executeJavaScript`）：
 | R-05 | CEF 内存 +~300MB | ⏸ 暂缓 | 恢复时配置开关 + 文档告知 |
 | R-06 | commons-math3 / gson 分发冲突（其他模组可能内嵌） | 低 | JarJar 版本区间 / `compileOnly`；M2 定最终形态 |
 | R-07 | GUI scale 与坐标换算错位（点击偏） | 低 | 原生控件统一用 GUI 缩放坐标；验收含 150% DPI |
-| R-08 | JEI 19.44 API 逐行核实（lookup/ghost 签名） | 中 | 沿用 logiscope 的"逐行核实"纪律，动工前先读 API jar |
+| R-08 | JEI 19.70 API 逐行核实（lookup/ghost 签名） | 中 | 沿用 logiscope 的"逐行核实"纪律，动工前先读 API jar |
 | R-09 | CEF 帧位序（BGRA/RGBA） | ⏸ 暂缓 | 恢复时 S-03 |
 | R-10 | **LP 多解 / 数值条件差异导致与 Python 不一致** | 已降至低 | S-04 实测：9 场景数值 1e-9 内、结构集合一致；余留 `total_machine_count` ±1（ceil 边界），已记录并在测试中单列 |
 | R-11 | CEF 子进程崩溃 | ⏸ 暂缓 | 恢复时 `onBrowserClosed` → 降级 + 提示 |
@@ -544,7 +544,7 @@ Spikes（M1/M3 动工前先做，每个 ≤ 半天；⏸ 随 JCEF 暂缓）：
 - **S-03** onPaint 帧位序直拷验证 + 帧率实测 —— ⏸ 暂缓（R-09）。
 - **S-04** ✅ **已完成（2026-10-25）**：commons-math3 对 9 场景对拍，epsilon=1e-10；
   数值 1e-9 内、结构集合一致，唯一偏差 `total_machine_count` ±1（详见 PROGRESS R2）。
-- **S-05** JEI 19.44 API jar 逐行核实（lookup / ghost / ITypedIngredient）——输出到本文档附录。
+- **S-05** JEI 19.70 API jar 逐行核实（lookup / ghost / ITypedIngredient）——输出到本文档附录。
 - **S-06** `GuiGraphics` 画布试验：300 节点 60fps、`RenderType.lines` 边宽、pose/scissor 平移缩放、CJK 标签裁剪 —— 决定 R-13/R-14/R-15。
 
 ## 十、目录结构（目标态）
@@ -575,8 +575,9 @@ RecipeBalancer/
 - 环境骨架复制自 `D:\dev\logiscope`（gradlew / wrapper 9.2.1 / MDG 2.0.147 /
   NeoForge 21.1.209 / Java 21 锁定 / UTF-8 元数据陷阱规避）——**复制而非引用**，
   两个模组完全独立；共享的只有 `~/.gradle` 全局缓存与 wrapper 发行版缓存。
-- JEI 对齐实例实装版本 19.44.0.405。**groupId 已逐目录核实 = `mezz.jei`（不是老文档的
-  `mezz`）**；blamejared 上三件套（common-api / neoforge-api / neoforge）齐全。
+- JEI 对齐**实机测试实例** `1.21.1-NeoForge` 实装版本 **19.70.0.460**（NeoForge 21.1.209 下可加载）。
+  19.44.0.405 声明要求 NeoForge 21.1.239+，dev 运行期会直接报版本错误，已弃用。
+  **groupId 已逐目录核实 = `mezz.jei`（不是老文档的 `mezz`）**；blamejared 上三件套齐全。
   仓库声明用 `exclusiveContent` 把 `mezz.jei` 组钉死在 blamejared（JEI 解析不再
   发请求给其它仓库，消除 neoforged 仓库波动的影响）。
 - commons-math3 3.6.1（Maven Central，普通声明）。

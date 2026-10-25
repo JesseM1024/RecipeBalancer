@@ -5,6 +5,47 @@
 
 ---
 
+## R4 · 2026-10-25 · JEI 对齐实机 + 测试后自动部署 + 去化学化措辞
+
+### 实测结果
+
+| 项 | 结果 |
+|---|---|
+| `gradlew test` | **BUILD SUCCESSFUL**，69 tests, 0 failures（JEI 19.70.0.460 解析通过） |
+| 实机部署 | 自动复制到 `1.21.1-NeoForge/mods/recipebalancer-0.1.0-1.21.1.jar`（90,484 B），旧 `recipebalancer-*.jar` 已清理 |
+| 产物元数据 | `jei` optional `[19.70.0,)`；`neoforge` `[21.1.209,)`；`minecraft` `[1.21.1]` |
+| JEI 版本 | dev/实机统一 **19.70.0.460**（实例实测可配 NeoForge 21.1.209） |
+
+### 本轮完成
+
+1. **JEI 版本修正**：19.44.0.405 → **19.70.0.460**。19.44 的 `neoforge.mods.toml` 声明
+   `requires neoforge 21.1.239 or above`，与锁定的 21.1.209 冲突（截图报错），不是"版本低"而是"门槛高"。
+2. **依赖仓库补漏**：JEI 19.70 的传递依赖 `net.mezzdev.config:mezz_config-*` 只发布在 blamejared；
+   在 `exclusiveContent` 白名单加入 `net.mezzdev.config`。
+3. **测试后自动部署**：`gradle.properties` 新增 `test_instance_dir`；`test` 任务 `finalizedBy`
+   `deployToTestInstance`（`Copy`），复制前删除**其它版本**的 `recipebalancer-*.jar`（当前版本由 Copy 覆盖）；实例目录不存在时跳过。
+4. **去化学化**：`StoichMatrix` → **`MaterialMatrix`**；文档/注释中的"化学计量矩阵" → **"物料矩阵
+   （只描述物品数量关系，与化学无关）"**；ARCHITECTURE/GOALS/代码引用同步。
+5. **文档**：ARCHITECTURE §五/§九/§十一 的 JEI 版本与 API 核实对象改为 19.70；GOALS 参考实例改为
+   实机 `1.21.1-NeoForge`。
+
+### 本轮踩坑（根因与结论）
+
+| # | 现象 | 根因 | 结论/修复 |
+|---|---|---|---|
+| 1 | dev 启动即报 `Mod jei requires neoforge 21.1.239 or above` | JEI 19.44 的依赖门槛高于项目锁定版本 | 对齐实机 19.70；版本号不是越大越好，要看 loader 门槛 |
+| 2 | `Could not find net.mezzdev.config:mezz_config-...:0.6.6` | `exclusiveContent` 只放行 `mezz.jei`，而 19.70 起新增 `net.mezzdev.config` 传递依赖 | 白名单加入该组（仍在 blamejared） |
+| 3 | `:test` 失败时 `deployToTestInstance` 仍执行 | Gradle `finalizedBy` 语义 | 符合预期，保留失败现场；要避免需改为 `mustRunAfter` + 成功判定，暂不需要 |
+
+### 说明
+
+- 实机实例路径：`C:\Users\JesseTech\Desktop\JesseTech\exe\waterdrop\.minecraft\versions\1.21.1-NeoForge`；
+  换实例只改 `gradle.properties` 一行。
+- 部署发生在测试结束；游戏正在运行时需重启后生效。
+- 实机加载日志验证（是否出现 Mixin/版本错误）仍待进入游戏确认。
+
+---
+
 ## R3 · 2026-10-25 · M2 原生主界面（手动编辑 + 求解 + 文本结果）
 
 ### 实测结果
@@ -86,7 +127,7 @@
 1. **渲染主线文档切换**（见上）：ARCHITECTURE / GOALS / README 全部改为原生 `GuiGraphics`，JCEF 转备选。
 2. **`core/` 求解核心**（纯 Java，零 MC 依赖）：
    - `model/`：`Recipe`、`Scenario`、`SolveOptions`、`SolveResult`、`Objective`、`Constants`（C7 逐字面量）
-   - `matrix/StoichMatrix`、`graph/DirectedGraph`（Tarjan SCC + networkx 同序拓扑分代）
+   - `matrix/MaterialMatrix`（R4 前名 `StoichMatrix`）、`graph/DirectedGraph`（Tarjan SCC + networkx 同序拓扑分代）
    - `detect/`：`RawDetector`、`SeedDetector`、`CyclicDeficitDetector`（SCC + 子 LP）
    - `solve/`：`LpSolver` 接口、`CommonsMath3LpSolver`、`Balancer`（两遍收集 + 编排，P0-A/B/C 忠实保留）
    - `bootstrap/PerfectCycleBootstrapper`（外部输入移除 → 最小反馈顶点集 → 1 秒缺口 → 整批取整）
