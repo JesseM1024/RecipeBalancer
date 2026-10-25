@@ -1,0 +1,174 @@
+{
+  "recipes": [
+    {
+      "sourceList": {
+        "空晶体": 64,
+        "反物质": 1
+      },
+      "time": 50,
+      "equType": "反质子核",
+      "productList": {
+        "UU物质": 1
+      }
+    },
+    {
+      "sourceList": {
+        "废料盒": 64,
+        "不稳定维度气体": 10000,
+        "液态DT": 10000
+      },
+      "time": 1,
+      "equType": "加压反应",
+      "productList": {
+        "空晶体": 1,
+        "核废料": 1000
+      }
+    },
+    {
+      "sourceList": {
+        "空": 1
+      },
+      "time": 1,
+      "equType": "加速气体收集",
+      "productList": {
+        "不稳定维度气体": 128
+      }
+    },
+    {
+      "sourceList": {
+        "废料": 1088,
+        "锇气体": 3400
+      },
+      "time": 1,
+      "equType": "压缩",
+      "productList": {
+        "废料盒": 17
+      }
+    },
+    {
+      "sourceList": {
+        "富集锇": 75
+      },
+      "time": 1,
+      "equType": "氧化",
+      "productList": {
+        "锇气体": 120000
+      }
+    },
+    {
+      "sourceList": {
+        "锇粉": 75
+      },
+      "time": 1,
+      "equType": "富集",
+      "productList": {
+        "富集锇": 75
+      }
+    },
+    {
+      "sourceList": {
+        "石头": 75
+      },
+      "time": 1,
+      "equType": "回收",
+      "productList": {
+        "废料": 12.750000000000002
+      }
+    },
+    {
+      "sourceList": {
+        "圆石": 1260
+      },
+      "time": 1,
+      "equType": "熔炼",
+      "productList": {
+        "石头": 1260
+      }
+    },
+    {
+      "sourceList": {
+        "DT": 100000
+      },
+      "time": 1,
+      "equType": "回旋冷凝",
+      "productList": {
+        "液态DT": 100000
+      }
+    },
+    {
+      "sourceList": {
+        "D": 100000,
+        "T": 100000
+      },
+      "time": 1,
+      "equType": "灌注",
+      "productList": {
+        "DT": 200000
+      }
+    },
+    {
+      "sourceList": {
+        "重水": 200000
+      },
+      "time": 1,
+      "equType": "电解",
+      "productList": {
+        "D": 200000
+      }
+    },
+    {
+      "sourceList": {
+        "空": 1
+      },
+      "time": 1,
+      "equType": "高级电动泵",
+      "productList": {
+        "重水": 100
+      }
+    },
+    {
+      "sourceList": {
+        "Li": 180000
+      },
+      "time": 1,
+      "equType": "中子活化",
+      "productList": {
+        "T": 180000
+      }
+    },
+    {
+      "sourceList": {
+        "Li液态": 180000
+      },
+      "time": 1,
+      "equType": "回旋蒸发",
+      "productList": {
+        "Li": 180000
+      }
+    },
+    {
+      "sourceList": {
+        "盐水": 21600
+      },
+      "time": 1,
+      "equType": "加速蒸馏",
+      "productList": {
+        "Li液态": 2160
+      }
+    },
+    {
+      "sourceList": {
+        "水": 21600
+      },
+      "time": 1,
+      "equType": "加速蒸馏",
+      "productList": {
+        "盐水": 2160
+      }
+    }
+  ],
+  "target_products": {
+    "UU物质": 0.002
+  },
+  "options": {}
+}

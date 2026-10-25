@@ -1,0 +1,67 @@
+{
+  "recipes": [
+    {
+      "sourceList": {
+        "C2H4(L)": 50,
+        "O2": 10,
+        "SST": 1
+      },
+      "time": 6,
+      "equType": "化反",
+      "productList": {
+        "HDPE": 1
+      }
+    },
+    {
+      "sourceList": {
+        "C2H4": 256
+      },
+      "time": 1,
+      "equType": "回旋液化",
+      "productList": {
+        "C2H4(L)": 256
+      }
+    },
+    {
+      "sourceList": {
+        "SST": 1,
+        "H2O": 200,
+        "C2H4": 100
+      },
+      "time": 40,
+      "equType": "化反",
+      "productList": {
+        "SST": 8,
+        "O2": 10
+      }
+    },
+    {
+      "sourceList": {
+        "H2": 100,
+        "H2O": 10,
+        "BF": 2
+      },
+      "time": 10,
+      "equType": "化反",
+      "productList": {
+        "SST": 1,
+        "C2H4": 100
+      }
+    },
+    {
+      "sourceList": {
+        "H2O": 512
+      },
+      "time": 1,
+      "equType": "电解",
+      "productList": {
+        "O2": 256,
+        "H2": 512
+      }
+    }
+  ],
+  "target_products": {
+    "HDPE": 1.5999999999999999
+  },
+  "options": {}
+}

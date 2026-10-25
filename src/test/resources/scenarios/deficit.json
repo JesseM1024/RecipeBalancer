@@ -1,0 +1,57 @@
+{
+  "recipes": [
+    {
+      "sourceList": {
+        "TiCl4": 1000.0,
+        "Mg": 2
+      },
+      "time": 5,
+      "equType": "EBF",
+      "productList": {
+        "Ti": 1,
+        "MgCl2": 6
+      }
+    },
+    {
+      "sourceList": {
+        "C": 2,
+        "TiO2": 1,
+        "Cl2": 4000.0
+      },
+      "time": 5,
+      "equType": "化反",
+      "productList": {
+        "TiCl4": 1000.0,
+        "CO": 1000.0
+      }
+    },
+    {
+      "sourceList": {
+        "CO": 1000.0
+      },
+      "time": 1.4,
+      "equType": "电解",
+      "productList": {
+        "C": 1,
+        "O2": 1000.0
+      }
+    },
+    {
+      "sourceList": {
+        "MgCl2": 3
+      },
+      "time": 2.25,
+      "equType": "电解",
+      "productList": {
+        "Cl2": 1000.0,
+        "Mg": 0.7
+      }
+    }
+  ],
+  "target_products": {
+    "Ti": 0.2
+  },
+  "options": {
+    "allowed_external_cyc_inputs": []
+  }
+}

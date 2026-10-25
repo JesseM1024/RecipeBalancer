@@ -1,0 +1,31 @@
+{
+  "success": true,
+  "recipe_rates": [
+    0.3,
+    0.3,
+    0.3,
+    0.6,
+    0.6,
+    0.6
+  ],
+  "external_inputs": {
+    "Cl2": 600.0,
+    "TiO2": 0.3
+  },
+  "net_flow": {
+    "O2": 600.0
+  },
+  "final_outputs": {
+    "O2": 600.0
+  },
+  "equipment_usage": {
+    "EBF": 3.0,
+    "化反": 1.5,
+    "电解": 3.54
+  },
+  "total_machine_count": 9,
+  "inferred_raw_materials": [
+    "TiO2"
+  ],
+  "inferred_initial_inventory": {}
+}

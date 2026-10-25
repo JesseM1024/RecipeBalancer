@@ -1,0 +1,73 @@
+{
+  "recipes": [
+    {
+      "sourceList": {
+        "锻造模版": 1,
+        "钻石": 7,
+        "地狱岩": 1
+      },
+      "time": 2,
+      "equType": "分子装配",
+      "productList": {
+        "锻造模版": 2
+      }
+    },
+    {
+      "sourceList": {
+        "沙砾": 1
+      },
+      "time": 10,
+      "equType": "筛子",
+      "productList": {
+        "钻石": 0.1,
+        "铁锭": 0.2,
+        "金锭": 0.2,
+        "红石": 0.3
+      }
+    },
+    {
+      "sourceList": {
+        "圆石": 1
+      },
+      "time": 2.2222222222222223,
+      "equType": "粉碎",
+      "productList": {
+        "沙砾": 1
+      }
+    },
+    {
+      "sourceList": {
+        "空": 1
+      },
+      "time": 5,
+      "equType": "造石机",
+      "productList": {
+        "圆石": 1
+      }
+    },
+    {
+      "sourceList": {
+        "圆石": 1
+      },
+      "time": 20,
+      "equType": "熔岩炉",
+      "productList": {
+        "熔岩": 1000
+      }
+    },
+    {
+      "sourceList": {
+        "熔岩": 500
+      },
+      "time": 10,
+      "equType": "冷却器",
+      "productList": {
+        "地狱岩": 1
+      }
+    }
+  ],
+  "target_products": {
+    "锻造模版": 0.05
+  },
+  "options": {}
+}
