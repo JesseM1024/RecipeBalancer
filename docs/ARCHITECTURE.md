@@ -337,8 +337,11 @@ package com.jessetech.recipebalancer.core.io;
 
 /** 场景 JSON 读写；字段名与 Python io.py 一字不差（跨项目互导的根基）。 */
 public final class ScenarioJson {
-    public static Scenario load(String json);              // 校验失败抛 SchemaException
+    public static Scenario load(String json);              // 严格：recipes/targets 均非空
     public static Scenario load(java.nio.file.Path path);
+    /** 宽松：允许空 recipes/targets（autosave 草稿）；已存在的配方仍逐条校验。 */
+    public static Scenario loadDraft(String json);
+    public static Scenario loadDraft(java.nio.file.Path path);
     public static String dump(Scenario scenario);
 }
 
@@ -346,7 +349,8 @@ public final class ScenarioJson {
 public final class ScenarioStore {
     public ScenarioStore(Path directory);
     public Path save(String name, Scenario scenario);
-    public Scenario load(String name);
+    public Scenario load(String name);          // 严格（手动载入）
+    public Scenario loadDraft(String name);     // 宽松（autosave，允许空目标/配方）
     public List<String> names();
     public boolean delete(String name);
     public static String sanitize(String name);
@@ -390,7 +394,8 @@ public final class RbKeyMappings {
 
 package com.jessetech.recipebalancer.mc.screen;
 /** 主界面（原生）：配方/目标编辑 + 求解 + 文本结果 + 场景保存载入。
- *  每次打开读取 `scenarios/autosave.json`，关闭/修改时自动写回（记住上次输入）。 */
+ *  每次打开用 loadDraft 读取 `scenarios/autosave.json`（允许未填目标/配方），
+ *  关闭/修改时自动写回（记住上次输入）。 */
 public final class BalancerScreen extends Screen { /* M2 */ }
 /** 配方编辑：原料/产物两列动态行（手动输入）。 */
 public final class RecipeEditScreen extends Screen { /* M2 */ }

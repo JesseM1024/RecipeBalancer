@@ -5,6 +5,43 @@
 
 ---
 
+## R7 · 2026-10-25 · autosave 允许未填目标/配方
+
+### 实测结果
+
+| 项 | 结果 |
+|---|---|
+| `gradlew test` | **BUILD SUCCESSFUL，70 tests, 0 failures**（新增 autosave 宽松读取测试） |
+| 实机部署 | 自动复制到 `1.21.1-NeoForge/mods/recipebalancer-0.1.0-1.21.1.jar`（2,267,897 B，22:59:49） |
+
+### 根因
+
+autosave **写入本身是成功的**（`ScenarioJson.dump` 不校验空目标/空配方），
+但下次打开时 `BalancerScreen.loadAutosave()` 用的是严格 `ScenarioJson.load()`：
+
+- `target_products` 为空 → `SchemaException("target_products 不能为空")`
+- `recipes` 为空同样被拒
+
+异常被 catch 后回落到 `blank()`，表现为“没保存/没记住”。
+
+### 修复
+
+1. `ScenarioJson.loadDraft(...)`：宽松读取，允许 `recipes` / `target_products` 缺失或为空；
+   已存在的每条配方仍按严格规则校验（数量、耗时、设备类型、未知键）。
+2. `ScenarioStore.loadDraft(name)`：仓库层的宽松入口。
+3. `BalancerScreen.loadAutosave()` 改用 `loadDraft`；手动「载入」仍是严格 `load`
+   （与 Python `io.py` 的合法场景 schema 保持一致）。
+4. 新增测试 `autosaveToleratesEmptyTargetsAndRecipesButManualLoadStaysStrict`：
+   - 空场景 autosave 可读回，严格 load 仍抛错；
+   - 有配方、无目标（用户实际场景）可读回。
+
+### 说明
+
+- 空场景仍可被「保存」写盘，但严格「载入」会拒绝——空场景不是可求解场景，这是有意区分。
+- 以后实机测试走 `gradlew test` 自动部署；dev 客户端不作为验收环境（用户已确认实例可算）。
+
+---
+
 ## R6 · 2026-10-25 · 求解缺类终极修复（shade）+ 自动保存草稿
 
 ### 实测结果
