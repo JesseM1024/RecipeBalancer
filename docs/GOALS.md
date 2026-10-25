@@ -25,7 +25,8 @@
 | MC 版本 | 1.21.1 |
 | 加载器 | NeoForge 21.1.209 |
 | 侧 | 纯客户端（`@Mod(dist = Dist.CLIENT)`），服务端无需安装 |
-| 实机测试实例 | `1.21.1-NeoForge`（HMCL，NeoForge 21.1.209 + JEI 19.70.0.460；`gradlew test` 后自动部署 jar） |
+| 开发 JEI | 19.39.0.372（最后一个声明兼容 NeoForge 21.1.209 的版本） |
+| 实机测试实例 | `1.21.1-NeoForge`（HMCL，NeoForge 21.1.246 + JEI 19.70.0.460；`gradlew test` 后自动部署 jar） |
 | Java | 21 |
 | 构建环境 | Gradle 9.2.1 + ModDevGradle 2.0.147（骨架复制自 logiscope，版本组合一致以复用全局缓存） |
 

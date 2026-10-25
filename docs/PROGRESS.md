@@ -5,6 +5,52 @@
 
 ---
 
+## R5 · 2026-10-25 · 实机闪退修复（JarJar）+ dev JEI 降到 19.39
+
+### 实测结果
+
+| 项 | 结果 |
+|---|---|
+| `gradlew test` | **BUILD SUCCESSFUL**，69 tests, 0 failures |
+| 产物 | `recipebalancer-0.1.0-1.21.1.jar` **2,057,067 B**；含 `META-INF/jarjar/commons-math3-3.6.1.jar` + `metadata.json`（range `[3.6.1,4.0)`） |
+| 实机部署 | 已覆盖 `1.21.1-NeoForge/mods/`（22:38），旧 jar 清理 |
+| 实机崩溃 | `crash-2026-10-25_22.32.43-client.txt`：`NoClassDefFoundError: org/apache/commons/math3/optim/linear/NoFeasibleSolutionException`，位于 `Balancer.solve:47`，点「求解」触发 |
+| 实例版本 | NeoForge **21.1.246**（崩溃栈确认），JEI 19.70.0.460 |
+| dev JEI | **19.39.0.372**（`neoforge.mods.toml` 要求 neoforge `[21.0.118-beta,)`） |
+
+### 根因与修复
+
+1. **闪退**：`commons-math3` 只以 `implementation` 进入 dev classpath，**未打进模组 jar**；
+   实机没有该库，`Balancer.solve` 实例化 `CommonsMath3LpSolver` 时类加载失败。
+   修复：`jarJar(implementation('org.apache.commons:commons-math3:3.6.1'))` + 版本区间 `[3.6.1,4.0)`；
+   产物已确认包含嵌套 jar 与 JarJar metadata。
+   UI 的求解入口同时补 `catch (LinkageError)`，未来再缺依赖时显示状态栏提示而不是崩游戏。
+2. **dev JEI**：19.70 / 19.42+ 的 `neoforge.mods.toml` 要求 `[21.1.238,)`，与 dev 的 21.1.209 冲突。
+   降到 **19.39.0.372**（要求 `[21.0.118-beta,)`），本模组可选依赖范围改为 `[19.39.0,)`；
+   实机 JEI 19.70 仍满足该范围。
+
+### 关于“发布日期”的核实
+
+- NeoForge 21.1.209 的 Maven `Last-Modified` = **2025-09-15**。
+- blamejared 上 JEI 19.x 的 `Last-Modified` 是镜像重传时间（19.27–19.39 均为 2026-07），
+  **不能当发布日期用**；版本兼容性应以 jar 内 `neoforge.mods.toml` 的 `versionRange` 为准。
+- 分界：**19.39.0.372 为 `[21.0.118-beta,)`；19.42.0.389 起为 `[21.1.238,)`**。
+
+### 本轮踩坑
+
+| # | 现象 | 根因 | 结论 |
+|---|---|---|---|
+| 1 | 实机点「求解」闪退 | `implementation` 不随 jar 分发 | 第三方库必须 JarJar/内嵌；dev 能跑 ≠ 实机能跑 |
+| 2 | dev 仍报 JEI 需要 21.1.238 | 19.70 的 loader 门槛高于 dev 版本 | 以 `mods.toml` 门槛选型，不能只看版本号或下载时间 |
+| 3 | UI 只捕获 RuntimeException | `NoClassDefFoundError` 是 `Error` | 求解入口补 `catch (LinkageError)`，降级为状态栏提示 |
+
+### 待验证
+
+- 重启实机后点「求解」：预期出报告且不闪退。
+- dev 客户端 JEI 19.39 的加载（本轮未成功自动启动 dev 客户端，仅核实依赖范围）。
+
+---
+
 ## R4 · 2026-10-25 · JEI 对齐实机 + 测试后自动部署 + 去化学化措辞
 
 ### 实测结果
@@ -14,11 +60,11 @@
 | `gradlew test` | **BUILD SUCCESSFUL**，69 tests, 0 failures（JEI 19.70.0.460 解析通过） |
 | 实机部署 | 自动复制到 `1.21.1-NeoForge/mods/recipebalancer-0.1.0-1.21.1.jar`（90,484 B），旧 `recipebalancer-*.jar` 已清理 |
 | 产物元数据 | `jei` optional `[19.70.0,)`；`neoforge` `[21.1.209,)`；`minecraft` `[1.21.1]` |
-| JEI 版本 | dev/实机统一 **19.70.0.460**（实例实测可配 NeoForge 21.1.209） |
+| JEI 版本 | 当时 dev/实机统一 **19.70.0.460**（R5 因 dev NeoForge 21.1.209 的 loader 门槛改回 19.39.0.372） |
 
 ### 本轮完成
 
-1. **JEI 版本修正**：19.44.0.405 → **19.70.0.460**。19.44 的 `neoforge.mods.toml` 声明
+1. **JEI 版本修正**：19.44.0.405 → **19.70.0.460**（R5 又下调到 19.39.0.372）。19.44 的 `neoforge.mods.toml` 声明
    `requires neoforge 21.1.239 or above`，与锁定的 21.1.209 冲突（截图报错），不是"版本低"而是"门槛高"。
 2. **依赖仓库补漏**：JEI 19.70 的传递依赖 `net.mezzdev.config:mezz_config-*` 只发布在 blamejared；
    在 `exclusiveContent` 白名单加入 `net.mezzdev.config`。

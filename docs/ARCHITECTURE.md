@@ -236,8 +236,10 @@ SCC 分解 → 每 SCC **最小反馈顶点集**（|SCC|≤12 精确枚举，按
 - scipy 映射：`A_ub/b_ub`（≤ 约束）→ `LinearConstraint(LEQ)`；等式约束 → `EQ`；
   **变量只有下界 0**（`restrictToNonNegative=true`），禁用配方用**删列**实现
   `x_j = 0`——commons-math3 无任意上下界 API，不做 bounds 适配层；big-M 直接写进目标向量（语义同 P0-C）。
-- **分发形态待定（R-06）**：JarJar 内嵌（NeoForge JarJar，版本区间收敛）vs 独立 jar 依赖。
-  开发期以 `implementation` 跑通，M1 结束时定夺并记入 PROGRESS。
+- **分发形态（R-06 已定）**：commons-math3 用 **JarJar 内嵌**
+  （`META-INF/jarjar/commons-math3-3.6.1.jar`，版本区间 `[3.6.1,4.0)`）。
+  2026-10-25 实机崩溃证明 `implementation` 只进 dev classpath、**不会随 jar 分发**，
+  生产环境点击求解直接 `NoClassDefFoundError`。
 - **多解问题（R-10）**：LP 最优解可退化不唯一，CM3 与 HiGHS 可能给出不同顶点。
   对拍按 §7 分层策略执行，**不追求逐位速率恒等**；差异必须记录。
 - **S-04 实测（2026-10-25）**：`epsilon=1e-10`、`maxIterations=200000`、变量非负 + 删列后，
@@ -438,7 +440,7 @@ final class GraphView {
 
 ## 五、JEI 集成（mc/jei/，M4）
 
-| 通道 | 用法 | JEI API（19.70.0.460，**逐项待核实 R-08**） |
+| 通道 | 用法 | JEI API（开发 19.39.0.372 / 实机 19.70.0.460，**逐项待核实 R-08**） |
 |---|---|---|
 | G-拖拽 | 从 JEI 物品列表把物品拖到界面配方槽 | `IGhostIngredientHandler<Screen>`：Screen 提供目标矩形集；落点回调拿 `ITypedIngredient` |
 | G-配方写入 | 界面内对某物品点"从 JEI 查配方"→ JEI lookup → 自动填原料/产物（数量带入，**耗时/设备手填**） | `IJeiRuntime.getRecipeManager()` → recipe lookup → `IRecipeWrapper` 的输入/输出 ingredient 列表 |
@@ -525,9 +527,9 @@ Java → JS 推送（`executeJavaScript`）：
 | R-03 | 无 AWT toolkit 进程里构造 KeyEvent | ⏸ 暂缓 | 恢复时 S-02；键码自映射 + CefKeyEvent 直填 |
 | R-04 | 中文 IME 输入（OSR 已知痛点） | ✅ 已消除 | 原生 `EditBox` 由 MC 处理 IME/粘贴 |
 | R-05 | CEF 内存 +~300MB | ⏸ 暂缓 | 恢复时配置开关 + 文档告知 |
-| R-06 | commons-math3 / gson 分发冲突（其他模组可能内嵌） | 低 | JarJar 版本区间 / `compileOnly`；M2 定最终形态 |
+| R-06 | commons-math3 / gson 分发冲突（其他模组可能内嵌） | 低 | commons-math3 已 **JarJar 内嵌**（区间 `[3.6.1,4.0)`）；gson 用加载器自带（`compileOnly`） |
 | R-07 | GUI scale 与坐标换算错位（点击偏） | 低 | 原生控件统一用 GUI 缩放坐标；验收含 150% DPI |
-| R-08 | JEI 19.70 API 逐行核实（lookup/ghost 签名） | 中 | 沿用 logiscope 的"逐行核实"纪律，动工前先读 API jar |
+| R-08 | JEI 19.39 / 19.70 API 逐行核实（lookup/ghost 签名） | 中 | 沿用 logiscope 的"逐行核实"纪律，动工前先读 API jar；以 dev 19.39 为编译基准 |
 | R-09 | CEF 帧位序（BGRA/RGBA） | ⏸ 暂缓 | 恢复时 S-03 |
 | R-10 | **LP 多解 / 数值条件差异导致与 Python 不一致** | 已降至低 | S-04 实测：9 场景数值 1e-9 内、结构集合一致；余留 `total_machine_count` ±1（ceil 边界），已记录并在测试中单列 |
 | R-11 | CEF 子进程崩溃 | ⏸ 暂缓 | 恢复时 `onBrowserClosed` → 降级 + 提示 |
@@ -544,7 +546,7 @@ Spikes（M1/M3 动工前先做，每个 ≤ 半天；⏸ 随 JCEF 暂缓）：
 - **S-03** onPaint 帧位序直拷验证 + 帧率实测 —— ⏸ 暂缓（R-09）。
 - **S-04** ✅ **已完成（2026-10-25）**：commons-math3 对 9 场景对拍，epsilon=1e-10；
   数值 1e-9 内、结构集合一致，唯一偏差 `total_machine_count` ±1（详见 PROGRESS R2）。
-- **S-05** JEI 19.70 API jar 逐行核实（lookup / ghost / ITypedIngredient）——输出到本文档附录。
+- **S-05** JEI 19.39 API jar（实机 19.70 向后兼容）逐行核实（lookup / ghost / ITypedIngredient）——输出到本文档附录。
 - **S-06** `GuiGraphics` 画布试验：300 节点 60fps、`RenderType.lines` 边宽、pose/scissor 平移缩放、CJK 标签裁剪 —— 决定 R-13/R-14/R-15。
 
 ## 十、目录结构（目标态）
@@ -575,8 +577,13 @@ RecipeBalancer/
 - 环境骨架复制自 `D:\dev\logiscope`（gradlew / wrapper 9.2.1 / MDG 2.0.147 /
   NeoForge 21.1.209 / Java 21 锁定 / UTF-8 元数据陷阱规避）——**复制而非引用**，
   两个模组完全独立；共享的只有 `~/.gradle` 全局缓存与 wrapper 发行版缓存。
-- JEI 对齐**实机测试实例** `1.21.1-NeoForge` 实装版本 **19.70.0.460**（NeoForge 21.1.209 下可加载）。
-  19.44.0.405 声明要求 NeoForge 21.1.239+，dev 运行期会直接报版本错误，已弃用。
+- JEI 版本策略（2026-10-25 R5）：
+  - **开发环境 19.39.0.372**：jar 内 `neoforge.mods.toml` 只要求 `neoforge [21.0.118-beta,)`，
+    是最后一个兼容 dev 锁定的 21.1.209 的版本；19.42.0.389 起要求 `[21.1.238,)`。
+  - **实机实例 19.70.0.460**：实例已升级 **NeoForge 21.1.246**（从崩溃栈确认），满足 JEI 的
+    `[21.1.238,)`，也满足本模组可选依赖范围 `[19.39.0,)`。
+  - Maven 的 `Last-Modified` 是该镜像的重传时间（JEI 19.x 多为 2026-07），**不能当发布日期用**；
+    版本选型以 jar 内 `neoforge.mods.toml` 的 loader 门槛为准。
   **groupId 已逐目录核实 = `mezz.jei`（不是老文档的 `mezz`）**；blamejared 上三件套齐全。
   仓库声明用 `exclusiveContent` 把 `mezz.jei` 组钉死在 blamejared（JEI 解析不再
   发请求给其它仓库，消除 neoforged 仓库波动的影响）。
