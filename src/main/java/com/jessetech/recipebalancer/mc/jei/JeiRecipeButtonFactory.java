@@ -16,6 +16,7 @@ import mezz.jei.api.recipe.advanced.IRecipeButtonControllerFactory;
 import mezz.jei.api.runtime.IJeiRuntime;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.renderer.Rect2i;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.ItemStack;
 
@@ -27,11 +28,10 @@ import java.util.Optional;
  */
 public final class JeiRecipeButtonFactory implements IRecipeButtonControllerFactory {
 
-    private final IDrawable icon = new PatternIcon();
-
     @Override
     public <T> IIconButtonController createButtonController(IRecipeLayoutDrawable<T> layout) {
-        return new Controller<>(layout, icon);
+        // 每个按钮独立图标实例，记录自己的绘制位置用于 hover 外框
+        return new Controller<>(layout, new PatternIcon());
     }
 
     /** 从参考图逐像素采样出的 13×13 图案（每格 1px 完全一致复制）。 */
@@ -62,21 +62,38 @@ public final class JeiRecipeButtonFactory implements IRecipeButtonControllerFact
             return 13;
         }
 
+        private int lastX = -1;
+        private int lastY = -1;
+
         @Override
         public void draw(GuiGraphics graphics, int x, int y) {
+            lastX = x;
+            lastY = y;
             for (int row = 0; row < PIXELS.length; row++) {
                 for (int col = 0; col < PIXELS[row].length; col++) {
                     graphics.fill(x + col, y + row, x + col + 1, y + row + 1, PIXELS[row][col]);
                 }
             }
         }
+
+        /** 鼠标悬浮时把最外圈黑框覆盖成白框，与 JEI 原生按钮一致。 */
+        void drawHoverBorder(GuiGraphics graphics) {
+            if (lastX < 0 || lastY < 0) {
+                return;
+            }
+            int white = 0xFFFFFFFF;
+            graphics.fill(lastX, lastY, lastX + 13, lastY + 1, white);
+            graphics.fill(lastX, lastY + 12, lastX + 13, lastY + 13, white);
+            graphics.fill(lastX, lastY, lastX + 1, lastY + 13, white);
+            graphics.fill(lastX + 12, lastY, lastX + 13, lastY + 13, white);
+        }
     }
 
     private static final class Controller<T> implements IIconButtonController {
         private final IRecipeLayoutDrawable<T> layout;
-        private final IDrawable icon;
+        private final PatternIcon icon;
 
-        private Controller(IRecipeLayoutDrawable<T> layout, IDrawable icon) {
+        private Controller(IRecipeLayoutDrawable<T> layout, PatternIcon icon) {
             this.layout = layout;
             this.icon = icon;
         }
@@ -97,6 +114,14 @@ public final class JeiRecipeButtonFactory implements IRecipeButtonControllerFact
             boolean visible = hasOutput();
             state.setVisible(visible);
             state.setActive(visible);
+        }
+
+        @Override
+        public void drawExtras(GuiGraphics graphics, Rect2i rect, int mouseX, int mouseY,
+                               float partialTick) {
+            if (rect.contains(mouseX, mouseY)) {
+                icon.drawHoverBorder(graphics);
+            }
         }
 
         @Override
