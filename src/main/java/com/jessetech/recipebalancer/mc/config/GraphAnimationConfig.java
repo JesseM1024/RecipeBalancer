@@ -21,7 +21,7 @@ public final class GraphAnimationConfig {
     private static final long CHECK_INTERVAL_MS = 1_000L;
     private static final Path FILE = FMLPaths.CONFIGDIR.get()
             .resolve("recipebalancer").resolve("graph-animation.properties");
-    private static final Settings DEFAULTS = new Settings(100.0, 2.0, 6.0, 38.0, 84.0);
+    private static final Settings DEFAULTS = new Settings(128.0, 1.0, 32.0, 32.0, 128.0);
 
     private static Settings cached = DEFAULTS;
     private static long lastCheckMillis;
@@ -68,7 +68,7 @@ public final class GraphAnimationConfig {
         double duration = parse(properties, "durationSeconds",
                 DEFAULTS.durationSeconds(), 0.1, 10.0);
         double distance = parse(properties, "stepDistance",
-                DEFAULTS.stepDistance(), 0.1, 20.0);
+                DEFAULTS.stepDistance(), 0.1, 100.0);
         double nodeGap = parse(properties, "nodeGap",
                 DEFAULTS.nodeGap(), 0.0, 200.0);
         double edgeLength = parse(properties, "edgeLength",
@@ -103,11 +103,11 @@ public final class GraphAnimationConfig {
                 # stepDistance: 单步最大位移（像素）
                 # nodeGap: 节点最小间距附加量（像素）
                 # edgeLength: 边/箭头自然长度（像素）
-                stepsPerSecond=100
-                durationSeconds=2.0
-                stepDistance=6.0
-                nodeGap=38
-                edgeLength=84
+                stepsPerSecond=128
+                durationSeconds=1.0
+                stepDistance=32.0
+                nodeGap=32
+                edgeLength=128
                 """, StandardCharsets.UTF_8);
     }
 }

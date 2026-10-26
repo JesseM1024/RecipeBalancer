@@ -18,11 +18,11 @@ MC 1.21.1 + NeoForge 21.1.209 **纯客户端**模组：产线配平自动计算�
 `config/recipebalancer/graph-animation.properties`
 
 ```properties
-stepsPerSecond=100
-durationSeconds=2.0
-stepDistance=6.0
-nodeGap=38
-edgeLength=84
+stepsPerSecond=128
+durationSeconds=1.0
+stepDistance=32.0
+nodeGap=32
+edgeLength=128
 ```
 
 - 约 1 秒热读取，无需重启；

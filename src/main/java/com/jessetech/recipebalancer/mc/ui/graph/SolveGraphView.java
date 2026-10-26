@@ -725,6 +725,8 @@ public final class SolveGraphView {
             other.x += ux * move;
             other.y += uy * move;
         }
+        // 3 层内（无论进出方向）的节点：相连边过长时把两端拉近。
+        pullLinkedNeighborhood(dragged);
         // 被拖节点不允许压到邻居
         for (GNode other : nearby(dragged, influence)) {
             if (other == dragged) {
@@ -738,6 +740,68 @@ public final class SolveGraphView {
                 double push = min - dist;
                 other.x += dx / dist * push;
                 other.y += dy / dist * push;
+            }
+        }
+    }
+
+    /**
+     * 从被拖节点出发做无向 BFS，收集 3 层内节点；
+     * 对其中过长的边施加拉近力，避免拖动时把间接相连的箭头拉得过长。
+     */
+    private void pullLinkedNeighborhood(GNode dragged) {
+        Map<GNode, Integer> depth = new HashMap<>();
+        depth.put(dragged, 0);
+        List<GNode> frontier = new ArrayList<>();
+        frontier.add(dragged);
+        for (int level = 1; level <= 3 && !frontier.isEmpty(); level++) {
+            List<GNode> next = new ArrayList<>();
+            for (GNode current : frontier) {
+                for (GEdge edge : edges) {
+                    GNode other = edge.from == current ? edge.to
+                            : edge.to == current ? edge.from : null;
+                    if (other != null && !depth.containsKey(other)) {
+                        depth.put(other, level);
+                        next.add(other);
+                    }
+                }
+            }
+            frontier = next;
+        }
+
+        double maxLength = edgeNaturalLength + nodeGap;
+        for (GEdge edge : edges) {
+            if (!depth.containsKey(edge.from) || !depth.containsKey(edge.to)) {
+                continue;
+            }
+            GNode a = edge.from;
+            GNode b = edge.to;
+            double dx = b.x - a.x;
+            double dy = b.y - a.y;
+            double dist = Math.max(0.001, Math.hypot(dx, dy));
+            if (dist <= maxLength) {
+                continue;
+            }
+            double min = minDistance(a, b);
+            double pull = Math.min(4.0, (dist - maxLength) * 0.12);
+            pull = Math.min(pull, Math.max(0.0, dist - min));
+            if (pull <= 0.0) {
+                continue;
+            }
+            double ux = dx / dist;
+            double uy = dy / dist;
+            boolean aAnchored = a == dragged;
+            boolean bAnchored = b == dragged;
+            if (aAnchored) {
+                b.x -= ux * pull;
+                b.y -= uy * pull;
+            } else if (bAnchored) {
+                a.x += ux * pull;
+                a.y += uy * pull;
+            } else {
+                a.x += ux * pull * 0.5;
+                a.y += uy * pull * 0.5;
+                b.x -= ux * pull * 0.5;
+                b.y -= uy * pull * 0.5;
             }
         }
     }
