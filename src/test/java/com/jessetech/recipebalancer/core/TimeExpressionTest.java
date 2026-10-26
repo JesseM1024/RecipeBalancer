@@ -1,5 +1,6 @@
 package com.jessetech.recipebalancer.core;
 
+import com.jessetech.recipebalancer.core.time.RateUnit;
 import com.jessetech.recipebalancer.core.time.TimeExpression;
 import com.jessetech.recipebalancer.core.time.TimeUnit;
 import org.junit.jupiter.api.Test;
@@ -38,6 +39,14 @@ class TimeExpressionTest {
         assertThrows(IllegalArgumentException.class, () -> TimeExpression.evaluate("abc"));
         assertThrows(IllegalArgumentException.class, () -> TimeExpression.toTicks("0", TimeUnit.TICK));
         assertThrows(IllegalArgumentException.class, () -> TimeExpression.toTicks("-1", TimeUnit.TICK));
+    }
+
+    @Test
+    void convertsRateUnitsFromPerTick() {
+        assertEquals(20.0, RateUnit.SECOND.fromPerTick(1.0), 1e-12);
+        assertEquals(1.0 / 20.0, RateUnit.SECOND.toPerTick(1.0), 1e-12);
+        assertEquals(1200.0, RateUnit.MINUTE.fromPerTick(1.0), 1e-12);
+        assertEquals(72000.0, RateUnit.HOUR.fromPerTick(1.0), 1e-12);
     }
 
     @Test

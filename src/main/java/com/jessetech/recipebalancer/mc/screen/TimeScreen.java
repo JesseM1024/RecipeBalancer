@@ -50,9 +50,10 @@ public final class TimeScreen extends Screen implements JeiPanelScreen {
         unitButton = addRenderableWidget(Button.builder(Component.literal(unit.label()), b -> cycleUnit())
                 .bounds(panelX + 164, panelY + 27, 64, 20).build());
 
-        addRenderableWidget(Button.builder(Component.literal("确定"), b -> confirm())
-                .bounds(panelX + 8, panelY + PANEL_H - 28, 104, 20).build());
+        // 取消左、确定右
         addRenderableWidget(Button.builder(Component.literal("取消"), b -> cancel())
+                .bounds(panelX + 8, panelY + PANEL_H - 28, 104, 20).build());
+        addRenderableWidget(Button.builder(Component.literal("确定"), b -> confirm())
                 .bounds(panelX + PANEL_W - 112, panelY + PANEL_H - 28, 104, 20).build());
 
         setInitialFocus(expressionBox);

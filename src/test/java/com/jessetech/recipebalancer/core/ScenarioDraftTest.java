@@ -62,6 +62,9 @@ class ScenarioDraftTest {
         draft.putTarget("铜锭", 1.5);
 
         assertEquals(List.of("铁锭", "铜锭"), List.copyOf(draft.targets().keySet()));
+        // 草稿内部每 tick；写出场景 JSON 时恢复为每秒
+        assertEquals(2.0, draft.targets().get("铁锭"), 1e-12);
+        assertEquals(40.0, draft.toScenario().targetProducts().get("铁锭"), 1e-12);
         assertThrows(IllegalArgumentException.class, () -> draft.putTarget(" ", 1.0));
         assertThrows(IllegalArgumentException.class, () -> draft.putTarget("铁锭", 0.0));
         assertThrows(IllegalArgumentException.class, () -> draft.putTarget("铁锭", Double.NaN));

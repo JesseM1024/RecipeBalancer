@@ -17,7 +17,11 @@ import java.util.TreeSet;
  */
 public final class ScenarioDraft {
 
+    /** 场景 JSON/Python 的 target_products 是每秒；草稿内部统一每 tick。 */
+    private static final double TICKS_PER_SECOND = 20.0;
+
     private final List<Recipe> recipes = new ArrayList<>();
+    /** 目标产物数量：每 tick 的产出量（不是每秒）。 */
     private final Map<String, Double> targets = new LinkedHashMap<>();
     private SolveOptions options = SolveOptions.defaults();
 
@@ -35,7 +39,8 @@ public final class ScenarioDraft {
         recipes.clear();
         recipes.addAll(scenario.recipes());
         targets.clear();
-        targets.putAll(scenario.targetProducts());
+        scenario.targetProducts().forEach((item, perSecond) ->
+                targets.put(item, perSecond / TICKS_PER_SECOND));
         options = scenario.options();
     }
 
@@ -147,6 +152,8 @@ public final class ScenarioDraft {
     }
 
     public Scenario toScenario() {
-        return new Scenario(recipes, targets, options);
+        Map<String, Double> perSecond = new LinkedHashMap<>();
+        targets.forEach((item, perTick) -> perSecond.put(item, perTick * TICKS_PER_SECOND));
+        return new Scenario(recipes, perSecond, options);
     }
 }

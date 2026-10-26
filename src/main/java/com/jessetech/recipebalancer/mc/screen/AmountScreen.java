@@ -1,5 +1,6 @@
 package com.jessetech.recipebalancer.mc.screen;
 
+import com.jessetech.recipebalancer.core.time.RateUnit;
 import com.jessetech.recipebalancer.core.time.TimeExpression;
 import com.jessetech.recipebalancer.mc.itemmap.ItemKeyMapper;
 import com.jessetech.recipebalancer.mc.jei.JeiScreenSupport;
@@ -11,10 +12,10 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
 /**
- * 通用“物品 + 用量”编辑屏（AE Select Amount 的简化版）。
+ * 通用“物品 + 用量”编辑屏。
  *
- * <p>用于：配方原料/产物用量、目标产物、设备标记。
- * 物品栏可以输入任意 registry id（整合包没有也能标记，界面用彩色占位格）。
+ * <p>配方原料/产物/设备用无量纲数量；目标产物用速率（/t、/s、/m、/h），
+ * 内部回调统一返回**每 tick 数量**（与 ScenarioDraft 一致）。
  */
 public final class AmountScreen extends Screen implements JeiPanelScreen {
 
@@ -25,49 +26,68 @@ public final class AmountScreen extends Screen implements JeiPanelScreen {
     private final Screen parent;
     private final String title;
     private final boolean amountEditable;
+    private final boolean rateMode;
     private final Callback callback;
-    private String itemKey;
-    private double amount;
+    private final String itemKey;
     private String status = "";
+    private RateUnit rateUnit = RateUnit.SECOND;
     private EditBox keyBox;
     private EditBox amountBox;
+    private Button unitButton;
 
     public AmountScreen(Screen parent, String title, String itemKey, double amount,
                         boolean amountEditable, Callback callback) {
+        this(parent, title, itemKey, amount, amountEditable, false, callback);
+    }
+
+    /** rateMode=true：amount 为每 tick 数量，界面显示速率单位。 */
+    public AmountScreen(Screen parent, String title, String itemKey, double amount,
+                        boolean amountEditable, boolean rateMode, Callback callback) {
         super(Component.literal(title));
         this.parent = parent;
         this.title = title;
         this.itemKey = ItemKeyMapper.normalize(itemKey);
-        this.amount = amount;
         this.amountEditable = amountEditable;
+        this.rateMode = rateMode;
         this.callback = callback;
+        // 目标速率默认用 /s 展示，内部仍存每 tick
+        this.amount = rateMode ? RateUnit.SECOND.fromPerTick(amount) : amount;
     }
+
+    private double amount;
 
     private int panelX = 40;
     private int panelY = 40;
-    private int panelW = 220;
-    private int panelH = 168;
+    private int panelW = 236;
+    private int panelH = 208;
 
     @Override
     protected void init() {
         panelX = (width - panelW) / 2;
         panelY = (height - panelH) / 2;
 
-        keyBox = new EditBox(font, panelX + 8, panelY + 28, panelW - 16, 18,
+        // 图标槽在注册名输入框左侧；真名/注册名放在它们下方
+        keyBox = new EditBox(font, panelX + 30, panelY + 32, panelW - 38, 18,
                 Component.literal("物品注册名"));
         keyBox.setMaxLength(128);
         keyBox.setValue(itemKey);
         addRenderableWidget(keyBox);
 
         if (amountEditable) {
-            amountBox = new EditBox(font, panelX + 8, panelY + 52, 112, 18,
+            int amountWidth = rateMode ? 104 : 112;
+            amountBox = new EditBox(font, panelX + 8, panelY + 90, amountWidth, 18,
                     Component.literal("用量"));
             amountBox.setMaxLength(64);
             amountBox.setValue(TimeExpression.formatEditableNumber(amount));
             addRenderableWidget(amountBox);
+            if (rateMode) {
+                unitButton = addRenderableWidget(Button.builder(
+                                Component.literal(rateUnit.label()), b -> cycleRateUnit())
+                        .bounds(panelX + 116, panelY + 89, 60, 20).build());
+            }
         }
 
-        int buttonY = panelY + 76;
+        int buttonY = panelY + 114;
         int buttonW = 48;
         int gap = 3;
         addRenderableWidget(Button.builder(Component.literal("+1"), b -> adjust(1))
@@ -90,9 +110,10 @@ public final class AmountScreen extends Screen implements JeiPanelScreen {
                     .bounds(panelX + 8 + 3 * (buttonW + gap), buttonY + 24, buttonW, 20).build());
         }
 
-        addRenderableWidget(Button.builder(Component.literal("确定"), b -> confirm())
-                .bounds(panelX + 8, panelY + panelH - 26, 100, 20).build());
+        // 取消左、确定右
         addRenderableWidget(Button.builder(Component.literal("取消"), b -> cancel())
+                .bounds(panelX + 8, panelY + panelH - 26, 100, 20).build());
+        addRenderableWidget(Button.builder(Component.literal("确定"), b -> confirm())
                 .bounds(panelX + panelW - 108, panelY + panelH - 26, 100, 20).build());
 
         if (amountEditable && amountBox != null) {
@@ -101,6 +122,22 @@ public final class AmountScreen extends Screen implements JeiPanelScreen {
             setInitialFocus(keyBox);
         }
         JeiScreenSupport.notifyGuiInit(this);
+    }
+
+    private void cycleRateUnit() {
+        if (!rateMode) {
+            return;
+        }
+        double perTick = amount;
+        try {
+            perTick = rateUnit.toPerTick(Double.parseDouble(amountBox.getValue().trim()));
+        } catch (NumberFormatException ignored) {
+            // 当前输入不合法时只切换单位显示
+        }
+        rateUnit = rateUnit.next();
+        amount = rateUnit.fromPerTick(perTick);
+        amountBox.setValue(TimeExpression.formatEditableNumber(amount));
+        unitButton.setMessage(Component.literal(rateUnit.label()));
     }
 
     private void adjust(double delta) {
@@ -135,6 +172,9 @@ public final class AmountScreen extends Screen implements JeiPanelScreen {
                 status = "用量必须为正数";
                 return;
             }
+            if (rateMode) {
+                value = rateUnit.toPerTick(value);
+            }
         }
         callback.accept(key, value);
         minecraft.setScreen(parent);
@@ -156,24 +196,26 @@ public final class AmountScreen extends Screen implements JeiPanelScreen {
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         super.render(graphics, mouseX, mouseY, partialTick);
 
-        graphics.drawString(font, "物品 / 注册名", panelX + 8, panelY + 16, AeStyle.MUTED, false);
-        if (amountEditable) {
-            graphics.drawString(font, "用量", panelX + 126, panelY + 40, AeStyle.MUTED, false);
-        }
+        graphics.drawString(font, "物品 / 注册名", panelX + 8, panelY + 22, AeStyle.MUTED, false);
+        AeStyle.slot(graphics, panelX + 8, panelY + 32);
 
         String previewKey = ItemKeyMapper.normalize(keyBox.getValue());
         if (!previewKey.isEmpty()) {
-            AeStyle.slot(graphics, panelX + 126, panelY + 52);
-            ItemKeyMapper.renderIcon(graphics, font, previewKey, panelX + 126, panelY + 52, null);
+            ItemKeyMapper.renderIcon(graphics, font, previewKey, panelX + 8, panelY + 32, null);
             String name = ItemKeyMapper.displayName(previewKey);
-            graphics.drawString(font, font.plainSubstrByWidth(name, panelW - 154),
-                    panelX + 146, panelY + 52, AeStyle.TEXT, false);
-            graphics.drawString(font, font.plainSubstrByWidth(previewKey, panelW - 154),
-                    panelX + 146, panelY + 64, AeStyle.MUTED, false);
+            graphics.drawString(font, font.plainSubstrByWidth(name, panelW - 16),
+                    panelX + 8, panelY + 54, AeStyle.TEXT, false);
+            graphics.drawString(font, font.plainSubstrByWidth(previewKey, panelW - 16),
+                    panelX + 8, panelY + 65, AeStyle.MUTED, false);
+        }
+
+        if (amountEditable) {
+            graphics.drawString(font, rateMode ? "速率" : "用量",
+                    panelX + 8, panelY + 79, AeStyle.MUTED, false);
         }
 
         if (!status.isEmpty()) {
-            graphics.drawString(font, status, panelX + 8, panelY + panelH - 38,
+            graphics.drawString(font, status, panelX + 8, panelY + panelH - 44,
                     AeStyle.WARN, false);
         }
     }
