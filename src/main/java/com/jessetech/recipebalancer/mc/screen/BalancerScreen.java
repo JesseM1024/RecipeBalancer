@@ -11,6 +11,7 @@ import com.jessetech.recipebalancer.core.report.TextReporter;
 import com.jessetech.recipebalancer.core.solve.Balancer;
 import com.jessetech.recipebalancer.core.time.TimeExpression;
 import com.jessetech.recipebalancer.mc.itemmap.ItemKeyMapper;
+import com.jessetech.recipebalancer.mc.jei.JeiScreenSupport;
 import com.jessetech.recipebalancer.mc.ui.AeStyle;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.gui.GuiGraphics;
@@ -184,13 +185,16 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
         addRenderableWidget(Button.builder(Component.literal("求解"), b -> solveNow())
                 .bounds(panelX + 4 + 4 * (optionW + 2), paramsY, 36, 18).build());
 
-        // 写入/新建放到耗时格下面的空白列
+        // 写入/新建放到耗时格下面，并排两枚 20×16，避免小窗口压到背包
         addRenderableWidget(Button.builder(Component.literal("写入"),
                         b -> commitPattern(true))
-                .bounds(equipmentX, encodingY + 38, 40, 16).build());
+                .bounds(equipmentX, encodingY + 38, 20, 16).build());
         addRenderableWidget(Button.builder(Component.literal("新建"),
                         b -> newPattern())
-                .bounds(equipmentX, encodingY + 56, 40, 16).build());
+                .bounds(equipmentX + 20, encodingY + 38, 20, 16).build());
+
+        // resize 后 Minecraft 不会补发 Init.Post，JEI 会一直用旧属性；手动通知
+        JeiScreenSupport.notifyGuiInit(this);
     }
 
     private static ScenarioDraft loadAutosave() {

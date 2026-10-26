@@ -3,6 +3,7 @@ package com.jessetech.recipebalancer.mc.screen;
 import com.jessetech.recipebalancer.core.io.ScenarioStore;
 import com.jessetech.recipebalancer.core.model.Scenario;
 import com.jessetech.recipebalancer.core.model.ScenarioDraft;
+import com.jessetech.recipebalancer.mc.jei.JeiScreenSupport;
 import com.jessetech.recipebalancer.mc.ui.AeStyle;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
@@ -60,6 +61,7 @@ public final class ScenarioListScreen extends Screen implements JeiPanelScreen {
                 .bounds(panelX + 212, panelY + PANEL_H - 53, 44, 20).build());
         addRenderableWidget(Button.builder(Component.literal("返回"), b -> minecraft.setScreen(parent))
                 .bounds(panelX + 8, panelY + PANEL_H - 27, 80, 20).build());
+        JeiScreenSupport.notifyGuiInit(this);
     }
 
     private void saveCurrent() {

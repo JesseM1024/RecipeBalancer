@@ -2,6 +2,7 @@ package com.jessetech.recipebalancer.mc.screen;
 
 import com.jessetech.recipebalancer.core.time.TimeExpression;
 import com.jessetech.recipebalancer.mc.itemmap.ItemKeyMapper;
+import com.jessetech.recipebalancer.mc.jei.JeiScreenSupport;
 import com.jessetech.recipebalancer.mc.ui.AeStyle;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
@@ -99,6 +100,7 @@ public final class AmountScreen extends Screen implements JeiPanelScreen {
         } else {
             setInitialFocus(keyBox);
         }
+        JeiScreenSupport.notifyGuiInit(this);
     }
 
     private void adjust(double delta) {

@@ -2,6 +2,7 @@ package com.jessetech.recipebalancer.mc.screen;
 
 import com.jessetech.recipebalancer.core.time.TimeExpression;
 import com.jessetech.recipebalancer.core.time.TimeUnit;
+import com.jessetech.recipebalancer.mc.jei.JeiScreenSupport;
 import com.jessetech.recipebalancer.mc.ui.AeStyle;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
@@ -55,6 +56,7 @@ public final class TimeScreen extends Screen implements JeiPanelScreen {
                 .bounds(panelX + PANEL_W - 112, panelY + PANEL_H - 28, 104, 20).build());
 
         setInitialFocus(expressionBox);
+        JeiScreenSupport.notifyGuiInit(this);
     }
 
     private void cycleUnit() {
