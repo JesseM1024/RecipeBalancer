@@ -2,159 +2,151 @@ package com.jessetech.recipebalancer.mc.screen;
 
 import com.jessetech.recipebalancer.RecipeBalancerMod;
 import com.jessetech.recipebalancer.core.io.ScenarioStore;
+import com.jessetech.recipebalancer.core.model.Objective;
 import com.jessetech.recipebalancer.core.model.Recipe;
-import com.jessetech.recipebalancer.core.model.Scenario;
+import com.jessetech.recipebalancer.core.model.RecipePattern;
 import com.jessetech.recipebalancer.core.model.ScenarioDraft;
 import com.jessetech.recipebalancer.core.model.SolveResult;
 import com.jessetech.recipebalancer.core.report.TextReporter;
 import com.jessetech.recipebalancer.core.solve.Balancer;
+import com.jessetech.recipebalancer.core.time.TimeExpression;
+import com.jessetech.recipebalancer.mc.itemmap.ItemKeyMapper;
+import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
-import net.minecraft.util.FormattedCharSequence;
+import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.item.ItemStack;
 import net.neoforged.fml.loading.FMLPaths;
 
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 
 /**
- * 原生主界面（M2）：配方/目标编辑 + 求解 + 文本结果 + 场景保存/载入。
+ * M3 主界面：仿 AE 样板编码终端的紧凑布局。
  *
- * <p>契约 C6：本类只做绘制与事件分发；求解在 {@link Balancer}、编辑状态在
- * {@link ScenarioDraft}、报告在 {@link TextReporter}。
+ * <p>上方配方库、中央编码区（3×3 原料 / 3×3 产物 / 设备 / 耗时）、下方玩家背包。
+ * 左键从背包拿起物品、点格子放置/删除；中键改用量或自定义物品；右键配方库两次删除。
+ * 求解进入二级结果页，避免挤占一级界面。
  */
 public final class BalancerScreen extends Screen {
 
-    private static final int PAD = 8;
-    private static final int ROW_H = 22;
+    private static final int SLOT = 16;
+    private static final int GRID = 3;
+    private static final int LIB_COLS = 4;
+    private static final int LIB_ROWS = 2;
+    private static final int TARGET_SLOTS = 6;
+    private static final int INV_COLS = 9;
+    private static final int INV_ROWS = 4;
+    private static final long DELETE_WINDOW_MS = 500L;
+
     private static final ScenarioStore STORE = new ScenarioStore(
             FMLPaths.CONFIGDIR.get().resolve("recipebalancer").resolve("scenarios"));
 
-    private ScenarioDraft draft = loadAutosave();
-    private SolveResult result;
+    private final ScenarioDraft draft = loadAutosave();
+    private final RecipePattern pattern = new RecipePattern();
+    private int editingIndex = -1;
+    private String carriedKey = "";
+    private String status = "左键取物品→点格子放置；中键改量；右键配方库两次删除";
     private String scenarioName = "default";
-    private String status = "添加配方与目标产物后点「求解」";
 
-    private int selectedRecipe = -1;
-    private String selectedTarget;
-    private double recipeScroll;
-    private double targetScroll;
-    private double reportScroll;
+    private int libraryScroll;
+    private int lastRightClickIndex = -1;
+    private long lastRightClickTime;
 
-    private int leftX;
-    private int leftY;
-    private int leftW;
-    private int leftH;
-    private int recipeListY;
-    private int recipeListH;
-    private int targetListY;
-    private int targetListH;
-    private int rightX;
-    private int rightY;
-    private int rightW;
-    private int rightH;
-    private int reportY;
-    private int reportH;
+    private int panelX;
+    private int panelY;
+    private int panelW;
+    private int panelH;
+    private int topY;
+    private int targetY;
+    private int libraryLabelY;
+    private int libraryY;
+    private int encodingLabelY;
+    private int encodingY;
+    private int inventoryLabelY;
+    private int inventoryY;
+    private int statusY;
+    private int inputX;
+    private int outputX;
+    private int equipmentX;
+    private int inventoryX;
 
-    private List<FormattedCharSequence> reportLines = List.of();
     private Button objectiveButton;
-    private Button autoRawButton;
-    private Button autoSeedButton;
-    private Button autoBootstrapButton;
-    private EditBox nameBox;
+    private Button rawButton;
+    private Button seedButton;
+    private Button bootstrapButton;
 
     public BalancerScreen() {
-        super(Component.literal("RecipeBalancer · 产线配平"));
+        super(Component.literal("RecipeBalancer · 配方编码终端"));
     }
 
     @Override
     protected void init() {
-        leftX = PAD;
-        leftY = 30;
-        // 窄窗口（GUI 缩放 3 时约 320×240）也要保证右栏至少 120px，不能溢出屏幕
-        leftW = Math.max(170, Math.min((width - 3 * PAD) * 45 / 100, width - 3 * PAD - 170));
-        leftH = Math.max(110, height - 52 - leftY);
-        rightX = leftX + leftW + PAD;
-        rightY = leftY;
-        rightW = Math.max(120, width - rightX - PAD);
-        rightH = leftH;
+        panelW = Math.min(330, width - 8);
+        panelH = Math.min(238, height - 8);
+        panelX = (width - panelW) / 2;
+        panelY = (height - panelH) / 2;
 
-        recipeListY = leftY + 18;
-        recipeListH = Math.max(38, Math.min(leftH * 38 / 100, leftH - 120));
-        targetListY = recipeListY + recipeListH + 48;
-        targetListH = Math.max(18, leftY + leftH - 28 - targetListY);
+        topY = panelY + 4;
+        targetY = topY + 17;
+        libraryLabelY = targetY + 17;
+        libraryY = libraryLabelY + 10;
+        encodingLabelY = libraryY + LIB_ROWS * SLOT + 4;
+        encodingY = encodingLabelY + 10;
+        inventoryLabelY = encodingY + GRID * SLOT + 4;
+        inventoryY = inventoryLabelY + 10;
+        statusY = panelY + panelH - 10;
 
-        reportY = rightY + 72;
-        reportH = Math.max(30, rightY + rightH - reportY - 6);
+        inputX = panelX + 4;
+        outputX = inputX + GRID * SLOT + 18;
+        equipmentX = outputX + GRID * SLOT + 6;
+        inventoryX = panelX + 4;
 
-        recipeScroll = clamp(recipeScroll, 0, Math.max(0, draft.recipeCount() * ROW_H - recipeListH));
-        targetScroll = clamp(targetScroll, 0, Math.max(0, draft.targets().size() * ROW_H - targetListH));
+        libraryScroll = Math.max(0, Math.min(libraryScroll,
+                Math.max(0, recipeRows() - LIB_ROWS)));
 
-        int recipeButtonWidth = Math.max(34, (leftW - 9) / 4);
-        int recipeButtonY = recipeListY + recipeListH + 3;
-        addRenderableWidget(Button.builder(Component.literal("添加"), b -> openRecipeEditor(-1))
-                .bounds(leftX, recipeButtonY, recipeButtonWidth, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("编辑"), b -> openRecipeEditor(selectedRecipe))
-                .bounds(leftX + recipeButtonWidth + 3, recipeButtonY, recipeButtonWidth, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("删除"), b -> deleteRecipe())
-                .bounds(leftX + 2 * (recipeButtonWidth + 3), recipeButtonY, recipeButtonWidth, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("启/禁"), b -> toggleRecipe())
-                .bounds(leftX + 3 * (recipeButtonWidth + 3), recipeButtonY, recipeButtonWidth, 20).build());
+        int topButtonW = 38;
+        int topButtonX = panelX + panelW - 4 - 3 * (topButtonW + 2);
+        addRenderableWidget(Button.builder(Component.literal("目标"), b -> openTargets())
+                .bounds(topButtonX, topY, topButtonW, 16).build());
+        addRenderableWidget(Button.builder(Component.literal("载入"), b -> openScenarios())
+                .bounds(topButtonX + topButtonW + 2, topY, topButtonW, 16).build());
+        addRenderableWidget(Button.builder(Component.literal("求解"), b -> solveNow())
+                .bounds(topButtonX + 2 * (topButtonW + 2), topY, topButtonW, 16).build());
 
-        int targetButtonWidth = Math.max(48, (leftW - 6) / 3);
-        int targetButtonY = leftY + leftH - 22;
-        addRenderableWidget(Button.builder(Component.literal("加目标"), b -> openTargetEditor(null))
-                .bounds(leftX, targetButtonY, targetButtonWidth, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("改目标"), b -> openTargetEditor(selectedTarget))
-                .bounds(leftX + targetButtonWidth + 3, targetButtonY, targetButtonWidth, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("删目标"), b -> deleteTarget())
-                .bounds(leftX + 2 * (targetButtonWidth + 3), targetButtonY, targetButtonWidth, 20).build());
+        addRenderableWidget(Button.builder(Component.literal("写入"),
+                        b -> commitPattern(true))
+                .bounds(equipmentX + 48, encodingY, 38, 16).build());
+        addRenderableWidget(Button.builder(Component.literal("新建"),
+                        b -> newPattern())
+                .bounds(equipmentX + 48, encodingY + 20, 38, 16).build());
 
-        // 2×2 选项布局：窄窗口（右栏 ~120px）也不会把按钮挤出屏幕
-        int optionWidth = Math.max(46, (rightW - 3) / 2);
-        objectiveButton = addRenderableWidget(Button.builder(Component.literal("目标"), b -> draft.toggleObjective())
-                .bounds(rightX, rightY + 2, optionWidth, 20).build());
-        autoRawButton = addRenderableWidget(Button.builder(Component.literal("原料"), b -> draft.toggleAutoDetectRaw())
-                .bounds(rightX + optionWidth + 3, rightY + 2, optionWidth, 20).build());
-        autoSeedButton = addRenderableWidget(Button.builder(Component.literal("种子"), b -> draft.toggleAutoDetectSeed())
-                .bounds(rightX, rightY + 24, optionWidth, 20).build());
-        autoBootstrapButton = addRenderableWidget(Button.builder(Component.literal("投料"), b -> draft.toggleAutoBootstrap())
-                .bounds(rightX + optionWidth + 3, rightY + 24, optionWidth, 20).build());
-
-        addRenderableWidget(Button.builder(Component.literal("求解"), b -> solve())
-                .bounds(rightX, rightY + 46, 70, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("清空"), b -> clearAll())
-                .bounds(rightX + 74, rightY + 46, 70, 20).build());
-
-        nameBox = new EditBox(font, PAD + 44, height - 44, 130, 18, Component.literal("场景名"));
-        nameBox.setMaxLength(48);
-        nameBox.setValue(scenarioName);
-        addRenderableWidget(nameBox);
-        addRenderableWidget(Button.builder(Component.literal("保存"), b -> saveScenario())
-                .bounds(PAD + 180, height - 44, 52, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("载入"), b -> loadScenario())
-                .bounds(PAD + 236, height - 44, 52, 20).build());
-
-        rebuildReport();
-        persistDraft();
+        int optionW = 58;
+        objectiveButton = addRenderableWidget(Button.builder(Component.literal("目标:设备"),
+                        b -> draft.toggleObjective())
+                .bounds(panelX + 156, inventoryY, optionW, 16).build());
+        rawButton = addRenderableWidget(Button.builder(Component.literal("原料:开"),
+                        b -> draft.toggleAutoDetectRaw())
+                .bounds(panelX + 156 + optionW + 3, inventoryY, optionW, 16).build());
+        seedButton = addRenderableWidget(Button.builder(Component.literal("种子:开"),
+                        b -> draft.toggleAutoDetectSeed())
+                .bounds(panelX + 156, inventoryY + 18, optionW, 16).build());
+        bootstrapButton = addRenderableWidget(Button.builder(Component.literal("投料:开"),
+                        b -> draft.toggleAutoBootstrap())
+                .bounds(panelX + 156 + optionW + 3, inventoryY + 18, optionW, 16).build());
     }
 
-    /** 每次打开界面读取上次自动保存的草稿（跨重启）。 */
     private static ScenarioDraft loadAutosave() {
         try {
-            // 宽松载入：允许还没填目标产物/配方就退出，下次继续编辑
             return ScenarioDraft.from(STORE.loadDraft("autosave"));
         } catch (RuntimeException e) {
             return ScenarioDraft.blank();
         }
     }
 
-    /** 自动保存当前输入，避免关闭界面/重启后丢失。失败只写状态栏，不打断流程。 */
     private void persistDraft() {
         try {
             STORE.save("autosave", draft.toScenario());
@@ -163,266 +155,618 @@ public final class BalancerScreen extends Screen {
         }
     }
 
+    // ------------------------------------------------------------------
+    // 渲染
+    // ------------------------------------------------------------------
+
     @Override
     public void renderBackground(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         graphics.fill(0, 0, width, height, 0xE0101010);
-        graphics.fill(0, height - 52, width, height, 0x70000000);
-        graphics.fill(leftX, leftY, leftX + leftW, leftY + leftH, 0x50101010);
-        graphics.fill(rightX, rightY, rightX + rightW, rightY + rightH, 0x50101010);
+        graphics.fill(panelX, panelY, panelX + panelW, panelY + panelH, 0xF0202020);
+        graphics.fill(panelX, panelY, panelX + panelW, topY + 15, 0xF0303030);
+        graphics.fill(panelX, panelY + 15, panelX + panelW, panelY + 16, 0xFF505050);
 
-        graphics.drawString(font, "配方 (" + draft.recipeCount() + ")", leftX + 4, leftY + 4,
-                0xFFE0A0, false);
-        graphics.drawString(font, "目标产物 (" + draft.targets().size() + ")", leftX + 4,
-                targetListY - 14, 0xFFE0A0, false);
+        graphics.drawString(font, "配方编码终端", panelX + 4, topY + 4, 0xFFE0E0E0, false);
 
-        drawRecipeRows(graphics, mouseX, mouseY);
-        drawTargetRows(graphics, mouseX, mouseY);
-        drawReport(graphics);
+        graphics.drawString(font, "目标", panelX + 4, targetY + 4, 0xFFB0B0B0, false);
+        drawTargets(graphics, mouseX, mouseY);
+
+        graphics.drawString(font, "配方库 (" + draft.recipeCount() + ")", panelX + 4,
+                libraryLabelY, 0xFFB0B0B0, false);
+        drawLibrary(graphics, mouseX, mouseY);
+
+        graphics.drawString(font, "编码", panelX + 4, encodingLabelY, 0xFFB0B0B0, false);
+        if (editingIndex >= 0) {
+            graphics.drawString(font, "R" + editingIndex, panelX + 30, encodingLabelY,
+                    0xFFFFD080, false);
+        }
+        drawEncoding(graphics, mouseX, mouseY);
+
+        graphics.drawString(font, "背包", panelX + 4, inventoryLabelY, 0xFFB0B0B0, false);
+        drawInventory(graphics, mouseX, mouseY);
+
+        graphics.drawString(font, font.plainSubstrByWidth(status, panelW - 8), panelX + 4,
+                statusY, 0xFFFFD080, false);
+    }
+
+    private void drawTargets(GuiGraphics graphics, int mouseX, int mouseY) {
+        List<Map.Entry<String, Double>> entries = new ArrayList<>(draft.targets().entrySet());
+        for (int i = 0; i < TARGET_SLOTS; i++) {
+            int x = panelX + 30 + i * (SLOT + 1);
+            int y = targetY;
+            drawSlot(graphics, x, y);
+            if (i < entries.size()) {
+                Map.Entry<String, Double> entry = entries.get(i);
+                ItemKeyMapper.renderIcon(graphics, font, entry.getKey(), x, y,
+                        amountText(entry.getValue()));
+            }
+        }
+        if (entries.size() > TARGET_SLOTS) {
+            graphics.drawString(font, "+" + (entries.size() - TARGET_SLOTS),
+                    panelX + 30 + TARGET_SLOTS * (SLOT + 1), targetY + 4, 0xFFB0B0B0, false);
+        }
+    }
+
+    private void drawLibrary(GuiGraphics graphics, int mouseX, int mouseY) {
+        int total = draft.recipeCount();
+        libraryScroll = Math.max(0, Math.min(libraryScroll,
+                Math.max(0, recipeRows() - LIB_ROWS)));
+        graphics.fill(panelX + 2, libraryY - 2, panelX + 8 + LIB_COLS * (SLOT + 1),
+                libraryY + LIB_ROWS * SLOT, 0x30000000);
+        if (total == 0) {
+            graphics.drawString(font, "（空）在下方编码后点「写入」", panelX + 6, libraryY + 4,
+                    0xFF808080, false);
+            return;
+        }
+        for (int row = 0; row < LIB_ROWS; row++) {
+            for (int col = 0; col < LIB_COLS; col++) {
+                int index = (libraryScroll + row) * LIB_COLS + col;
+                if (index >= total) {
+                    continue;
+                }
+                int x = panelX + 4 + col * (SLOT + 1);
+                int y = libraryY + row * SLOT;
+                drawSlot(graphics, x, y);
+                if (index == editingIndex) {
+                    graphics.fill(x - 1, y - 1, x + SLOT + 1, y - 1 + 1, 0xFFFFD080);
+                    graphics.fill(x - 1, y + SLOT, x + SLOT + 1, y + SLOT + 1, 0xFFFFD080);
+                }
+                Recipe recipe = draft.recipes().get(index);
+                String productKey = recipe.productList().keySet().stream().findFirst().orElse("");
+                if (productKey.isEmpty()) {
+                    graphics.drawString(font, "?", x + 5, y + 4, 0xFFFF8080, false);
+                } else {
+                    ItemKeyMapper.renderIcon(graphics, font, productKey, x, y, null);
+                }
+                if (!recipe.equType().isBlank()) {
+                    PoseStack pose = graphics.pose();
+                    pose.pushPose();
+                    pose.translate(x + 10, y + 10, 0);
+                    pose.scale(0.5f, 0.5f, 1.0f);
+                    ItemKeyMapper.renderIcon(graphics, font, recipe.equType(), 0, 0, null);
+                    pose.popPose();
+                }
+            }
+        }
+    }
+
+    private void drawEncoding(GuiGraphics graphics, int mouseX, int mouseY) {
+        graphics.drawString(font, "原料", inputX, encodingLabelY, 0xFF90C0FF, false);
+        graphics.drawString(font, "产物", outputX, encodingLabelY, 0xFF90FF90, false);
+        graphics.drawString(font, "→", inputX + GRID * SLOT + 4, encodingY + 18,
+                0xFFB0B0B0, false);
+
+        for (int i = 0; i < RecipePattern.SLOTS; i++) {
+            int inX = inputX + (i % GRID) * SLOT;
+            int inY = encodingY + (i / GRID) * SLOT;
+            drawSlot(graphics, inX, inY);
+            if (pattern.inputKey(i) != null) {
+                ItemKeyMapper.renderIcon(graphics, font, pattern.inputKey(i), inX, inY,
+                        amountText(pattern.inputAmount(i)));
+            }
+
+            int outX = outputX + (i % GRID) * SLOT;
+            int outY = encodingY + (i / GRID) * SLOT;
+            drawSlot(graphics, outX, outY);
+            if (pattern.outputKey(i) != null) {
+                ItemKeyMapper.renderIcon(graphics, font, pattern.outputKey(i), outX, outY,
+                        amountText(pattern.outputAmount(i)));
+            }
+        }
+
+        graphics.drawString(font, "设备", equipmentX + 18, encodingY + 4, 0xFFC0C0C0, false);
+        drawSlot(graphics, equipmentX, encodingY);
+        if (!pattern.equipmentKey().isBlank()) {
+            ItemKeyMapper.renderIcon(graphics, font, pattern.equipmentKey(), equipmentX,
+                    encodingY, null);
+        }
+
+        graphics.drawString(font, "耗时", equipmentX + 18, encodingY + 24, 0xFFC0C0C0, false);
+        int timeY = encodingY + 20;
+        drawSlot(graphics, equipmentX, timeY);
+        String time = TimeExpression.formatNumber(pattern.timeTicks()) + "t";
+        if (font.width(time) > SLOT) {
+            time = TimeExpression.formatNumber(pattern.timeTicks() / 20.0) + "s";
+        }
+        graphics.drawString(font, font.plainSubstrByWidth(time, SLOT), equipmentX + 1,
+                timeY + 4, 0xFFFFD080, false);
+    }
+
+    private void drawInventory(GuiGraphics graphics, int mouseX, int mouseY) {
+        Inventory inventory = minecraft == null || minecraft.player == null
+                ? null : minecraft.player.getInventory();
+        for (int row = 0; row < INV_ROWS; row++) {
+            for (int col = 0; col < INV_COLS; col++) {
+                int x = inventoryX + col * SLOT;
+                int y = inventoryY + row * SLOT;
+                drawSlot(graphics, x, y);
+                if (inventory == null) {
+                    continue;
+                }
+                int index = row < 3 ? 9 + row * 9 + col : col;
+                ItemStack stack = inventory.getItem(index);
+                if (!stack.isEmpty()) {
+                    graphics.renderItem(stack, x, y);
+                    graphics.renderItemDecorations(font, stack, x, y);
+                }
+            }
+        }
+        graphics.fill(inventoryX, inventoryY + 3 * SLOT - 1,
+                inventoryX + INV_COLS * SLOT, inventoryY + 3 * SLOT, 0x40FFFFFF);
+    }
+
+    private static void drawSlot(GuiGraphics graphics, int x, int y) {
+        graphics.fill(x, y, x + SLOT, y + SLOT, 0x60000000);
+        graphics.fill(x, y, x + SLOT, y + 1, 0x30FFFFFF);
+        graphics.fill(x, y + SLOT - 1, x + SLOT, y + SLOT, 0x50000000);
+    }
+
+    private static String amountText(double amount) {
+        if (Math.abs(amount - 1.0) < 1e-9) {
+            return "";
+        }
+        return TimeExpression.formatNumber(amount);
     }
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        if (objectiveButton != null) {
-            objectiveButton.setMessage(Component.literal(
-                    draft.options().objective() == com.jessetech.recipebalancer.core.model.Objective.MACHINE
-                            ? "设备" : "配方"));
-            autoRawButton.setMessage(Component.literal("原料" + onOff(draft.options().autoDetectRaw())));
-            autoSeedButton.setMessage(Component.literal("种子" + onOff(draft.options().autoDetectSeed())));
-            autoBootstrapButton.setMessage(Component.literal("投料" + onOff(draft.options().autoBootstrap())));
-        }
+        updateOptionLabels();
         super.render(graphics, mouseX, mouseY, partialTick);
 
-        graphics.drawString(font, "场景名", PAD, height - 39, 0xA0A0A0, false);
-        graphics.drawString(font, status, PAD, height - 18, 0xFFD080, false);
-    }
-
-    private static String onOff(boolean enabled) {
-        return enabled ? ":开" : ":关";
-    }
-
-    private void drawRecipeRows(GuiGraphics graphics, int mouseX, int mouseY) {
-        int total = draft.recipeCount();
-        double maxScroll = Math.max(0, total * ROW_H - recipeListH);
-        recipeScroll = clamp(recipeScroll, 0, maxScroll);
-
-        graphics.fill(leftX, recipeListY, leftX + leftW, recipeListY + recipeListH, 0x30000000);
-        graphics.enableScissor(leftX, recipeListY, leftX + leftW, recipeListY + recipeListH);
-        if (total == 0) {
-            graphics.drawString(font, "（空）点下方「添加」", leftX + 4, recipeListY + 4,
-                    0x808080, false);
+        if (!carriedKey.isEmpty()) {
+            ItemKeyMapper.renderIcon(graphics, font, carriedKey, mouseX - 8, mouseY - 8, null);
         }
-        for (int i = 0; i < total; i++) {
-            int y = recipeListY - (int) recipeScroll + i * ROW_H;
-            if (y + ROW_H < recipeListY || y > recipeListY + recipeListH) {
-                continue;
-            }
-            boolean hover = inside(mouseX, mouseY, leftX, y, leftW, ROW_H);
-            if (i == selectedRecipe) {
-                graphics.fill(leftX, y, leftX + leftW, y + ROW_H - 1, 0x804A90D9);
-            } else if (hover) {
-                graphics.fill(leftX, y, leftX + leftW, y + ROW_H - 1, 0x30FFFFFF);
-            }
-            String text = summary(i);
-            int color = draft.isRecipeEnabled(i) ? 0xE0E0E0 : 0x808080;
-            graphics.drawString(font, font.plainSubstrByWidth(text, leftW - 8), leftX + 4, y + 7,
-                    color, false);
-        }
-        graphics.disableScissor();
+        drawTooltips(graphics, mouseX, mouseY);
     }
 
-    private void drawTargetRows(GuiGraphics graphics, int mouseX, int mouseY) {
-        List<String> keys = new ArrayList<>(draft.targets().keySet());
-        double maxScroll = Math.max(0, keys.size() * ROW_H - targetListH);
-        targetScroll = clamp(targetScroll, 0, maxScroll);
-
-        graphics.fill(leftX, targetListY, leftX + leftW, targetListY + targetListH, 0x30000000);
-        graphics.enableScissor(leftX, targetListY, leftX + leftW, targetListY + targetListH);
-        if (keys.isEmpty()) {
-            graphics.drawString(font, "（空）点「加目标」", leftX + 4, targetListY + 4, 0x808080, false);
-        }
-        for (int i = 0; i < keys.size(); i++) {
-            int y = targetListY - (int) targetScroll + i * ROW_H;
-            if (y + ROW_H < targetListY || y > targetListY + targetListH) {
-                continue;
-            }
-            String item = keys.get(i);
-            boolean selected = item.equals(selectedTarget);
-            boolean hover = inside(mouseX, mouseY, leftX, y, leftW, ROW_H);
-            if (selected) {
-                graphics.fill(leftX, y, leftX + leftW, y + ROW_H - 1, 0x804A90D9);
-            } else if (hover) {
-                graphics.fill(leftX, y, leftX + leftW, y + ROW_H - 1, 0x30FFFFFF);
-            }
-            String text = item + " × " + formatAmount(draft.targets().get(item)) + "/s";
-            graphics.drawString(font, font.plainSubstrByWidth(text, leftW - 8), leftX + 4, y + 7,
-                    0xE0E0E0, false);
-        }
-        graphics.disableScissor();
+    private void updateOptionLabels() {
+        objectiveButton.setMessage(Component.literal(draft.options().objective() == Objective.MACHINE
+                ? "目标:设备" : "目标:配方"));
+        rawButton.setMessage(Component.literal("原料:" + onOff(draft.options().autoDetectRaw())));
+        seedButton.setMessage(Component.literal("种子:" + onOff(draft.options().autoDetectSeed())));
+        bootstrapButton.setMessage(Component.literal("投料:" + onOff(draft.options().autoBootstrap())));
     }
 
-    private void drawReport(GuiGraphics graphics) {
-        int lineHeight = font.lineHeight + 1;
-        double maxScroll = Math.max(0, reportLines.size() * lineHeight - reportH);
-        reportScroll = clamp(reportScroll, 0, maxScroll);
+    private static String onOff(boolean value) {
+        return value ? "开" : "关";
+    }
 
-        graphics.fill(rightX, reportY, rightX + rightW, reportY + reportH, 0x40000000);
-        graphics.enableScissor(rightX, reportY, rightX + rightW, reportY + reportH);
-        int y = reportY + 4 - (int) reportScroll;
-        for (FormattedCharSequence line : reportLines) {
-            if (y + font.lineHeight >= reportY && y <= reportY + reportH) {
-                graphics.drawString(font, line, rightX + 4, y, 0xD0D0D0, false);
+    private void drawTooltips(GuiGraphics graphics, int mouseX, int mouseY) {
+        Inventory inventory = minecraft == null || minecraft.player == null
+                ? null : minecraft.player.getInventory();
+        int invIndex = inventoryIndexAt(mouseX, mouseY);
+        if (inventory != null && invIndex >= 0) {
+            ItemStack stack = inventory.getItem(invIndex);
+            if (!stack.isEmpty()) {
+                graphics.renderTooltip(font, stack, mouseX, mouseY);
+                return;
             }
-            y += lineHeight;
         }
-        graphics.disableScissor();
+
+        int library = libraryIndexAt(mouseX, mouseY);
+        if (library >= 0) {
+            Recipe recipe = draft.recipes().get(library);
+            String product = recipe.productList().keySet().stream().findFirst().orElse("?");
+            List<Component> lines = new ArrayList<>();
+            lines.add(Component.literal("R" + library + " · " + ItemKeyMapper.displayName(product)));
+            lines.add(Component.literal("产物: " + summary(recipe.productList()))
+                    .withStyle(style -> style.withColor(0xFF90FF90)));
+            lines.add(Component.literal("原料: " + summary(recipe.sourceList()))
+                    .withStyle(style -> style.withColor(0xFF90C0FF)));
+            lines.add(Component.literal("设备: " + recipe.equType()
+                    + " · 耗时 " + TimeExpression.formatTicks(recipe.time() * 20.0))
+                    .withStyle(style -> style.withColor(0xFFC0C0C0)));
+            lines.add(Component.literal("左键载入编辑 · 右键两次删除")
+                    .withStyle(style -> style.withColor(0xFF808080)));
+            graphics.renderComponentTooltip(font, lines, mouseX, mouseY);
+            return;
+        }
+
+        int[] slot = encodingSlotAt(mouseX, mouseY);
+        if (slot != null) {
+            String key = slot[0] == 0 ? pattern.inputKey(slot[1]) : pattern.outputKey(slot[1]);
+            double amount = slot[0] == 0 ? pattern.inputAmount(slot[1]) : pattern.outputAmount(slot[1]);
+            if (key != null) {
+                ItemKeyMapper.renderTooltip(graphics, font, key, mouseX, mouseY);
+                return;
+            }
+        }
+
+        if (inside(mouseX, mouseY, equipmentX, encodingY, SLOT, SLOT)) {
+            if (pattern.equipmentKey().isBlank()) {
+                graphics.renderTooltip(font, Component.literal("设备标记：左键放置手持物品 / 中键自定义"),
+                        mouseX, mouseY);
+            } else {
+                ItemKeyMapper.renderTooltip(graphics, font, pattern.equipmentKey(), mouseX, mouseY);
+            }
+            return;
+        }
+        if (inside(mouseX, mouseY, equipmentX, encodingY + 20, SLOT, SLOT)) {
+            List<Component> lines = List.of(
+                    Component.literal("耗时 " + TimeExpression.formatTicks(pattern.timeTicks())),
+                    Component.literal("精确: " + TimeExpression.formatExactTicks(pattern.timeTicks()))
+                            .withStyle(style -> style.withColor(0xFF808080)),
+                    Component.literal("左键/中键编辑，支持 + - * / ^").withStyle(style ->
+                            style.withColor(0xFF808080)));
+            graphics.renderComponentTooltip(font, lines, mouseX, mouseY);
+            return;
+        }
+
+        int target = targetSlotAt(mouseX, mouseY);
+        if (target >= 0) {
+            List<Map.Entry<String, Double>> entries = new ArrayList<>(draft.targets().entrySet());
+            if (target < entries.size()) {
+                Map.Entry<String, Double> entry = entries.get(target);
+                ItemKeyMapper.renderTooltip(graphics, font, entry.getKey(), mouseX, mouseY);
+            } else {
+                graphics.renderTooltip(font, Component.literal("空目标槽：左键从手持标记 / 中键自定义"),
+                        mouseX, mouseY);
+            }
+        }
     }
 
-    private String summary(int index) {
-        Recipe recipe = draft.recipes().get(index);
-        String prefix = draft.isRecipeEnabled(index) ? "" : "[禁用] ";
-        return prefix + "R" + index + " " + recipe.equType() + " "
-                + String.format(Locale.ROOT, "%.2fs", recipe.time())
-                + "  " + items(recipe.sourceList()) + " -> " + items(recipe.productList());
-    }
-
-    private static String items(Map<String, Double> amounts) {
+    private static String summary(Map<String, Double> amounts) {
         StringBuilder builder = new StringBuilder();
-        int index = 0;
+        int count = 0;
         for (Map.Entry<String, Double> entry : amounts.entrySet()) {
-            if (index >= 3) {
-                builder.append(" …");
+            if (count++ > 0) {
+                builder.append(" + ");
+            }
+            if (count > 4) {
+                builder.append("…");
                 break;
             }
-            if (index > 0) {
-                builder.append("+");
-            }
-            builder.append(entry.getKey()).append("×").append(formatAmount(entry.getValue()));
-            index++;
+            builder.append(ItemKeyMapper.displayName(entry.getKey()))
+                    .append("×").append(TimeExpression.formatNumber(entry.getValue()));
         }
         return builder.toString();
     }
 
-    private void rebuildReport() {
-        // 防御：配方被子屏修改后，旧解的速率数组可能和新配方列表长度不一致
-        if (result != null && result.recipeRates().size() != draft.recipeCount()) {
-            result = null;
-        }
-        String text;
-        if (result == null) {
-            text = "尚未求解。\n\n1) 添加配方（原料 / 产物 / 耗时 / 设备）\n"
-                    + "2) 添加目标产物\n3) 点击「求解」\n\n"
-                    + "快捷键 K 可随时关闭/打开本界面。";
-        } else {
-            text = TextReporter.format(result, draft.recipes());
-        }
-        List<FormattedCharSequence> lines = new ArrayList<>();
-        int wrapWidth = Math.max(40, rightW - 12);
-        for (String raw : text.split("\n", -1)) {
-            if (raw.isEmpty()) {
-                lines.add(FormattedCharSequence.EMPTY);
-            } else {
-                lines.addAll(font.split(Component.literal(raw), wrapWidth));
+    // ------------------------------------------------------------------
+    // 命中测试
+    // ------------------------------------------------------------------
+
+    private int recipeRows() {
+        return (draft.recipeCount() + LIB_COLS - 1) / LIB_COLS;
+    }
+
+    private int libraryIndexAt(double mouseX, double mouseY) {
+        for (int row = 0; row < LIB_ROWS; row++) {
+            for (int col = 0; col < LIB_COLS; col++) {
+                int x = panelX + 4 + col * (SLOT + 1);
+                int y = libraryY + row * SLOT;
+                if (inside(mouseX, mouseY, x, y, SLOT, SLOT)) {
+                    int index = (libraryScroll + row) * LIB_COLS + col;
+                    return index < draft.recipeCount() ? index : -1;
+                }
             }
         }
-        reportLines = lines;
-        reportScroll = 0;
+        return -1;
     }
+
+    private int targetSlotAt(double mouseX, double mouseY) {
+        for (int i = 0; i < TARGET_SLOTS; i++) {
+            int x = panelX + 30 + i * (SLOT + 1);
+            if (inside(mouseX, mouseY, x, targetY, SLOT, SLOT)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    /** [0=输入,1=输出, index]；不在格子上返回 null。 */
+    private int[] encodingSlotAt(double mouseX, double mouseY) {
+        for (int i = 0; i < RecipePattern.SLOTS; i++) {
+            int inX = inputX + (i % GRID) * SLOT;
+            int inY = encodingY + (i / GRID) * SLOT;
+            if (inside(mouseX, mouseY, inX, inY, SLOT, SLOT)) {
+                return new int[]{0, i};
+            }
+            int outX = outputX + (i % GRID) * SLOT;
+            int outY = encodingY + (i / GRID) * SLOT;
+            if (inside(mouseX, mouseY, outX, outY, SLOT, SLOT)) {
+                return new int[]{1, i};
+            }
+        }
+        return null;
+    }
+
+    private int inventoryIndexAt(double mouseX, double mouseY) {
+        for (int row = 0; row < INV_ROWS; row++) {
+            for (int col = 0; col < INV_COLS; col++) {
+                int x = inventoryX + col * SLOT;
+                int y = inventoryY + row * SLOT;
+                if (inside(mouseX, mouseY, x, y, SLOT, SLOT)) {
+                    return row < 3 ? 9 + row * 9 + col : col;
+                }
+            }
+        }
+        return -1;
+    }
+
+    // ------------------------------------------------------------------
+    // 交互
+    // ------------------------------------------------------------------
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        int target = targetSlotAt(mouseX, mouseY);
+        if (target >= 0) {
+            handleTargetClick(target, button);
+            return true;
+        }
+
+        int library = libraryIndexAt(mouseX, mouseY);
+        if (library >= 0) {
+            handleLibraryClick(library, button);
+            return true;
+        }
+
+        int[] slot = encodingSlotAt(mouseX, mouseY);
+        if (slot != null) {
+            handleEncodingClick(slot[0], slot[1], button);
+            return true;
+        }
+
+        if (inside(mouseX, mouseY, equipmentX, encodingY, SLOT, SLOT)) {
+            handleEquipmentClick(button);
+            return true;
+        }
+        if (inside(mouseX, mouseY, equipmentX, encodingY + 20, SLOT, SLOT)) {
+            openTimeEditor();
+            return true;
+        }
+
+        int inventory = inventoryIndexAt(mouseX, mouseY);
+        if (inventory >= 0) {
+            handleInventoryClick(inventory, button);
+            return true;
+        }
+
         if (button == 0) {
-            if (inside(mouseX, mouseY, leftX, recipeListY, leftW, recipeListH)) {
-                int index = (int) ((mouseY - recipeListY + recipeScroll) / ROW_H);
-                if (index >= 0 && index < draft.recipeCount()) {
-                    selectedRecipe = index;
-                    return true;
-                }
-            }
-            if (inside(mouseX, mouseY, leftX, targetListY, leftW, targetListH)) {
-                int index = (int) ((mouseY - targetListY + targetScroll) / ROW_H);
-                List<String> keys = new ArrayList<>(draft.targets().keySet());
-                if (index >= 0 && index < keys.size()) {
-                    selectedTarget = keys.get(index);
-                    return true;
-                }
-            }
+            carriedKey = "";
         }
         return super.mouseClicked(mouseX, mouseY, button);
     }
 
+    private void handleTargetClick(int slot, int button) {
+        List<Map.Entry<String, Double>> entries = new ArrayList<>(draft.targets().entrySet());
+        if (button == 1) {
+            if (slot < entries.size()) {
+                String key = entries.get(slot).getKey();
+                draft.removeTarget(key);
+                onDraftChanged();
+                status = "已删除目标: " + key;
+            }
+            return;
+        }
+        if (button == 2) {
+            String key = slot < entries.size() ? entries.get(slot).getKey() : "";
+            double amount = slot < entries.size() ? entries.get(slot).getValue() : 1.0;
+            openTargetAmount(key, amount);
+            return;
+        }
+        if (button == 0) {
+            if (slot >= entries.size()) {
+                if (!carriedKey.isEmpty()) {
+                    draft.putTarget(carriedKey, 1.0);
+                    onDraftChanged();
+                    status = "已添加目标: " + carriedKey;
+                } else {
+                    openTargetAmount("", 1.0);
+                }
+            } else {
+                Map.Entry<String, Double> entry = entries.get(slot);
+                openTargetAmount(entry.getKey(), entry.getValue());
+            }
+        }
+    }
+
+    private void openTargetAmount(String key, double amount) {
+        minecraft.setScreen(new AmountScreen(this, "目标产物", key, amount, true,
+                (newKey, newAmount) -> {
+                    if (!newKey.equals(key)) {
+                        draft.removeTarget(key);
+                    }
+                    draft.putTarget(newKey, newAmount);
+                    onDraftChanged();
+                    status = "目标: " + newKey + " × " + TimeExpression.formatNumber(newAmount) + "/s";
+                }));
+    }
+
+    private void handleLibraryClick(int index, int button) {
+        if (button == 0) {
+            loadPattern(index);
+            return;
+        }
+        if (button == 1) {
+            long now = System.currentTimeMillis();
+            if (lastRightClickIndex == index && now - lastRightClickTime <= DELETE_WINDOW_MS) {
+                deleteRecipe(index);
+                lastRightClickIndex = -1;
+            } else {
+                lastRightClickIndex = index;
+                lastRightClickTime = now;
+                status = "再次右键删除 R" + index;
+            }
+        }
+    }
+
+    private void handleEncodingClick(int side, int index, int button) {
+        String key = side == 0 ? pattern.inputKey(index) : pattern.outputKey(index);
+        double amount = side == 0 ? pattern.inputAmount(index) : pattern.outputAmount(index);
+        boolean input = side == 0;
+        if (button == 0) {
+            if (!carriedKey.isEmpty()) {
+                if (input) {
+                    pattern.putInput(index, carriedKey, 1.0);
+                } else {
+                    pattern.putOutput(index, carriedKey, 1.0);
+                }
+                status = "已标记 " + ItemKeyMapper.displayName(carriedKey);
+            } else if (key != null) {
+                if (input) {
+                    pattern.removeInput(index);
+                } else {
+                    pattern.removeOutput(index);
+                }
+                status = "已移除格子";
+            }
+            return;
+        }
+        if (button == 2) {
+            openPatternAmount(input, index, key == null ? "" : key, amount);
+        }
+    }
+
+    private void openPatternAmount(boolean input, int index, String key, double amount) {
+        String originalKey = key == null ? "" : key;
+        double initialAmount = amount > 0 ? amount : 1.0;
+        minecraft.setScreen(new AmountScreen(this, input ? "原料用量" : "产物用量", originalKey,
+                initialAmount, true, (newKey, newAmount) -> {
+                    if (newKey.equals(originalKey)) {
+                        if (input) {
+                            pattern.setInputAmount(index, newAmount);
+                        } else {
+                            pattern.setOutputAmount(index, newAmount);
+                        }
+                    } else if (input) {
+                        pattern.putInput(index, newKey, newAmount);
+                    } else {
+                        pattern.putOutput(index, newKey, newAmount);
+                    }
+                    status = (input ? "原料 " : "产物 ") + newKey + " × "
+                            + TimeExpression.formatNumber(newAmount);
+                }));
+    }
+
+    private void handleEquipmentClick(int button) {
+        if (button == 0 && !carriedKey.isEmpty()) {
+            pattern.setEquipmentKey(carriedKey);
+            status = "设备: " + ItemKeyMapper.displayName(carriedKey);
+            return;
+        }
+        minecraft.setScreen(new AmountScreen(this, "设备标记", pattern.equipmentKey(), 1.0, false,
+                (key, ignored) -> {
+                    pattern.setEquipmentKey(key);
+                    status = "设备: " + ItemKeyMapper.displayName(key);
+                }));
+    }
+
+    private void handleInventoryClick(int index, int button) {
+        if (button == 0) {
+            ItemStack stack = minecraft.player == null ? ItemStack.EMPTY
+                    : minecraft.player.getInventory().getItem(index);
+            if (!stack.isEmpty()) {
+                carriedKey = ItemKeyMapper.of(stack);
+                status = "手持: " + stack.getHoverName().getString();
+            } else {
+                carriedKey = "";
+            }
+        } else if (button == 1) {
+            carriedKey = "";
+        }
+    }
+
+    private void openTimeEditor() {
+        minecraft.setScreen(new TimeScreen(this, pattern.timeTicks(), ticks -> {
+            pattern.setTimeTicks(ticks);
+            status = "耗时: " + TimeExpression.formatTicks(ticks);
+        }));
+    }
+
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
-        if (inside(mouseX, mouseY, leftX, recipeListY, leftW, recipeListH)) {
-            recipeScroll -= scrollY * ROW_H * 2;
-            return true;
-        }
-        if (inside(mouseX, mouseY, leftX, targetListY, leftW, targetListH)) {
-            targetScroll -= scrollY * ROW_H * 2;
-            return true;
-        }
-        if (inside(mouseX, mouseY, rightX, reportY, rightW, reportH)) {
-            reportScroll -= scrollY * (font.lineHeight + 1) * 2;
+        if (mouseX >= panelX && mouseY >= libraryY - 2
+                && mouseY < libraryY + LIB_ROWS * SLOT) {
+            libraryScroll = Math.max(0, Math.min(libraryScroll + (scrollY < 0 ? 1 : -1),
+                    Math.max(0, recipeRows() - LIB_ROWS)));
             return true;
         }
         return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
     }
 
-    private void openRecipeEditor(int index) {
-        if (index >= draft.recipeCount()) {
-            index = -1;
-        }
-        result = null; // 编辑回来后旧解必然过期
-        rebuildReport();
-        minecraft.setScreen(new RecipeEditScreen(this, draft, index));
+    // ------------------------------------------------------------------
+    // 配方库/编码操作
+    // ------------------------------------------------------------------
+
+    private void loadPattern(int index) {
+        Recipe recipe = draft.recipes().get(index);
+        pattern.load(recipe);
+        editingIndex = index;
+        carriedKey = "";
+        status = pattern.truncated()
+                ? "R" + index + " 已载入；超过 9 格的物品未显示"
+                : "R" + index + " 已载入编码区";
     }
 
-    private void deleteRecipe() {
-        if (selectedRecipe < 0) {
-            status = "先选中一条配方";
+    private boolean commitPattern(boolean showStatus) {
+        try {
+            Recipe recipe = pattern.toRecipe();
+            if (editingIndex >= 0 && editingIndex < draft.recipeCount()) {
+                draft.replaceRecipe(editingIndex, recipe);
+            } else {
+                draft.addRecipe(recipe);
+                editingIndex = draft.recipeCount() - 1;
+            }
+            persistDraft();
+            status = (showStatus ? "已写入 R" + editingIndex : "已保存编码")
+                    + (pattern.truncated() ? "（超过 9 格的部分未写入）" : "");
+            return true;
+        } catch (RuntimeException e) {
+            if (showStatus) {
+                status = "写入失败: " + e.getMessage();
+            }
+            return false;
+        }
+    }
+
+    private void newPattern() {
+        pattern.clear();
+        editingIndex = -1;
+        carriedKey = "";
+        status = "新建配方编码";
+    }
+
+    private void deleteRecipe(int index) {
+        draft.removeRecipe(index);
+        if (editingIndex == index) {
+            editingIndex = -1;
+            pattern.clear();
+        } else if (editingIndex > index) {
+            editingIndex--;
+        }
+        persistDraft();
+        status = "已删除 R" + index;
+    }
+
+    private void solveNow() {
+        if (pattern.hasContent() && !commitPattern(false)) {
+            status = "编码未完成：至少要有产物、设备和正耗时";
             return;
         }
-        draft.removeRecipe(selectedRecipe);
-        if (selectedRecipe >= draft.recipeCount()) {
-            selectedRecipe = draft.recipeCount() - 1;
-        }
-        result = null;
-        rebuildReport();
-        persistDraft();
-        status = "已删除配方";
-    }
-
-    private void toggleRecipe() {
-        if (selectedRecipe < 0) {
-            status = "先选中一条配方";
-            return;
-        }
-        draft.toggleRecipeEnabled(selectedRecipe);
-        persistDraft();
-        status = draft.isRecipeEnabled(selectedRecipe) ? "已启用 R" + selectedRecipe : "已禁用 R" + selectedRecipe;
-    }
-
-    private void openTargetEditor(String original) {
-        result = null;
-        rebuildReport();
-        minecraft.setScreen(new TargetEditScreen(this, draft, original));
-    }
-
-    private void deleteTarget() {
-        if (selectedTarget == null) {
-            status = "先选中一个目标";
-            return;
-        }
-        draft.removeTarget(selectedTarget);
-        status = "已删除目标: " + selectedTarget;
-        selectedTarget = null;
-        result = null;
-        rebuildReport();
-        persistDraft();
-    }
-
-    private void solve() {
         if (draft.recipeCount() == 0) {
-            status = "至少添加 1 条配方";
+            status = "至少写入 1 条配方";
             return;
         }
         if (draft.targets().isEmpty()) {
@@ -430,65 +774,30 @@ public final class BalancerScreen extends Screen {
             return;
         }
         try {
-            result = Balancer.solve(draft.toScenario());
-            status = result.success() ? "求解完成" : "求解失败: " + result.message();
+            SolveResult result = Balancer.solve(draft.toScenario());
+            persistDraft();
+            minecraft.setScreen(new SolveScreen(this, TextReporter.format(result, draft.recipes()),
+                    result.success()));
         } catch (RuntimeException | LinkageError e) {
-            // LinkageError：生产环境缺依赖（如 commons-math3 未内嵌）时不要崩游戏，界面给出提示
             RecipeBalancerMod.LOGGER.error("[RecipeBalancer] 求解失败", e);
-            result = null;
             status = "求解失败: " + e;
         }
-        rebuildReport();
-        persistDraft();
     }
 
-    private void clearAll() {
-        draft.clear();
-        result = null;
-        selectedRecipe = -1;
-        selectedTarget = null;
-        rebuildReport();
-        persistDraft();
-        status = "已清空";
+    void openTargets() {
+        minecraft.setScreen(new TargetListScreen(this, draft));
     }
 
-    private void saveScenario() {
-        try {
-            scenarioName = ScenarioStore.sanitize(nameBox.getValue());
-            Path path = STORE.save(scenarioName, draft.toScenario());
-            nameBox.setValue(scenarioName);
-            status = "已保存: " + path.getFileName();
-        } catch (RuntimeException e) {
-            status = "保存失败: " + e.getMessage();
-        }
-    }
-
-    private void loadScenario() {
-        String requested = nameBox.getValue();
-        try {
-            Scenario scenario = STORE.load(requested);
-            scenarioName = ScenarioStore.sanitize(requested);
-            draft.loadFrom(scenario);
-            selectedRecipe = -1;
-            selectedTarget = null;
-            result = null;
-            rebuildReport();
-            if (minecraft != null) {
-                minecraft.execute(() -> {
-                    if (minecraft.screen == this) {
-                        rebuildWidgets();
-                    }
-                });
-            }
-            persistDraft();
-            status = "已载入: " + scenarioName;
-        } catch (RuntimeException e) {
-            status = "载入失败: " + e.getMessage();
-        }
+    private void openScenarios() {
+        minecraft.setScreen(new ScenarioListScreen(this, STORE, draft));
     }
 
     @Override
     public void onClose() {
+        // 关界面前把编码区未写入的内容落库，避免 K 关闭丢配方
+        if (pattern.hasContent()) {
+            commitPattern(false);
+        }
         persistDraft();
         if (minecraft != null) {
             minecraft.setScreen(null);
@@ -497,8 +806,7 @@ public final class BalancerScreen extends Screen {
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        // K 关闭（与打开同一键位）；EditBox 聚焦时不抢按键，避免输入 k 被吞
-        if (modifiers == 0 && !(getFocused() instanceof EditBox)
+        if (modifiers == 0 && !(getFocused() instanceof net.minecraft.client.gui.components.EditBox)
                 && com.jessetech.recipebalancer.mc.keybind.RbKeyMappings.OPEN.matches(keyCode, scanCode)) {
             onClose();
             return true;
@@ -511,18 +819,24 @@ public final class BalancerScreen extends Screen {
         return false;
     }
 
+    // ------------------------------------------------------------------
+    // 子屏回调
+    // ------------------------------------------------------------------
+
+    void onDraftChanged() {
+        persistDraft();
+    }
+
+    void onScenarioLoaded(String name) {
+        scenarioName = name;
+        pattern.clear();
+        editingIndex = -1;
+        carriedKey = "";
+        status = "已载入配方集: " + name;
+        persistDraft();
+    }
+
     private static boolean inside(double x, double y, int rx, int ry, int rw, int rh) {
         return x >= rx && x < rx + rw && y >= ry && y < ry + rh;
-    }
-
-    private static double clamp(double value, double min, double max) {
-        return Math.max(min, Math.min(max, value));
-    }
-
-    private static String formatAmount(double value) {
-        if (value == Math.rint(value) && Math.abs(value) < 1.0e9) {
-            return Long.toString((long) value);
-        }
-        return Double.toString(value);
     }
 }

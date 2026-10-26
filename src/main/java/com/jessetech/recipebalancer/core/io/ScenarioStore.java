@@ -49,6 +49,7 @@ public final class ScenarioStore {
             stream.filter(path -> path.getFileName().toString().endsWith(".json"))
                     .map(path -> path.getFileName().toString())
                     .map(name -> name.substring(0, name.length() - ".json".length()))
+                    .filter(name -> !"autosave".equals(name))
                     .forEach(names::add);
         } catch (IOException e) {
             throw new UncheckedIOException("列举场景失败: " + directory, e);
