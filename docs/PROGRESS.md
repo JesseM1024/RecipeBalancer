@@ -5,6 +5,53 @@
 
 ---
 
+## R24 · 2026-10-26 · 非物品 ingredient（流体/化学品）与 B 单位
+
+### 实测结果
+
+| 项 | 结果 |
+|---|---|
+| `gradlew test` | **81 tests, 0 failures**（新增 IngredientKey 编码测试） |
+| 产物 | `recipebalancer-0.1.0-1.21.1.jar` **2,330,323 B** |
+| 实机部署 | 已复制到 `1.21.1-NeoForge/mods/`（18:32:49） |
+| 未验证 | 实机流体/化学品 ghost 与加号 |
+
+### 身份
+
+- 新增 `IngredientKey`：
+  `ingredient|base64(typeUid)|base64(uniqueId)|base64(displayName)`
+- 非物品 key 与物品 key 一样参与 RecipePattern / Scenario JSON / 求解，
+  只是 UI 用彩色占位块 + 显示名首字渲染。
+- `displayName` / `registryName` / tooltip / 求解报告可读名均支持非物品。
+
+### B 单位
+
+- JEI item：数量 = `ItemStack.getCount()`。
+- 非物品：数量 = `IIngredientHelper.getAmount() / 1000.0`。
+  - 500 mB 水 → **0.5**；
+  - 1000 mB → 1.0。
+- `AmountScreen` 对非物品显示 `用量（B）`；目标速率单位显示 `B/t`、`B/s` 等。
+- 草稿/求解仍按 double 数量参与 LP，不感知具体是物品还是流体。
+
+### JEI 接入
+
+- Ghost：`JeiGhostHandler` 不再只接受 ItemStack，
+  通过 `JeiIngredientMapper` 接受任意 `ITypedIngredient`，落点写入 B 数量。
+- 配方加号：INPUT/OUTPUT 取 `getDisplayedIngredient()`（或首个 ingredient），
+  流体/化学品同样带入，输出数量按 B。
+- 设备：仍优先 JEI 左侧第一个物品催化剂；
+  若 layout CATALYST 是非物品，也能写入设备 key。
+
+### 限制
+
+| # | 限制 | 说明 |
+|---|---|---|
+| 1 | 非物品图标为占位色块 | 尚未接 JEI `IIngredientRenderer` 绘制真实流体贴图 |
+| 2 | R/U 仍只支持 ItemStack | 非物品悬停查询未接 |
+| 3 | 化学品数量按 mB 假设 | 若某 mod 的 helper amount 不是 mB，需要该 mod 适配 |
+
+---
+
 ## R23 · 2026-10-26 · 药水按物品 tooltip / 1px 图标 / 首个催化剂
 
 ### 实测结果
