@@ -1,5 +1,6 @@
 package com.jessetech.recipebalancer.core.time;
 
+import java.math.BigDecimal;
 import java.util.Locale;
 
 /**
@@ -53,17 +54,29 @@ public final class TimeExpression {
         return formatNumber(unit.fromTicks(ticks)) + " " + unit.label();
     }
 
-    /** 精确 tick 展示（tooltip 用）。 */
+    /** 精确 tick 展示（tooltip / 二级预览用）：保留 double 的完整十进制，不量化。 */
     public static String formatExactTicks(double ticks) {
-        return formatNumber(ticks) + " t";
+        return formatEditableNumber(ticks) + " t";
     }
 
+    /** 一级界面展示：3 位小数足够；编辑数据请用 {@link #formatEditableNumber(double)}。 */
     public static String formatNumber(double value) {
-        String text = String.format(Locale.ROOT, "%.6f", value);
+        String text = String.format(Locale.ROOT, "%.3f", value);
         if (text.contains(".")) {
             text = text.replaceAll("0+$", "").replaceAll("\\.$", "");
         }
         return text.isEmpty() || "-0".equals(text) ? "0" : text;
+    }
+
+    /**
+     * 编辑框里的数值：不截断小数，保持 double 的实际十进制表示。
+     * 例如 0.00000000001 → "0.00000000001"，而不是 "0"。
+     */
+    public static String formatEditableNumber(double value) {
+        if (!Double.isFinite(value)) {
+            return Double.toString(value);
+        }
+        return BigDecimal.valueOf(value).stripTrailingZeros().toPlainString();
     }
 
     private static final class Parser {

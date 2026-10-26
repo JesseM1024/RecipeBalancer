@@ -111,7 +111,7 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
 
         // 固定区域：工作区名/参数/目标/配方库/编码/背包/状态
         // 编码最多 4 行；剩余高度全部给配方库
-        int fixed = 178;
+        int fixed = 168;
         int available = Math.max(3 * SLOT, panelH - fixed);
         targetRows = 2;
         visibleRows = 4;
@@ -138,7 +138,7 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
         }
 
         topY = panelY + 3;
-        paramsY = topY + 32;
+        paramsY = topY + 20;
         targetLabelY = paramsY + 20;
         targetY = targetLabelY + 9;
         libraryLabelY = targetY + targetRows * SLOT + 2;
@@ -159,17 +159,18 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
         encodingScrollRow = Math.max(0, Math.min(encodingScrollRow, maxEncodingScroll()));
         targetScrollRow = Math.max(0, Math.min(targetScrollRow, maxTargetScroll()));
 
-        nameBox = new EditBox(font, panelX + 30, topY, panelW - 74, 16,
+        nameBox = new EditBox(font, panelX + 30, topY, panelW - 108, 16,
                 Component.literal("工作区名"));
         nameBox.setMaxLength(48);
         nameBox.setValue(scenarioName);
         addRenderableWidget(nameBox);
-        // 载入/存储改为上下排列，高度压缩到 14，和写入/新建一致
-        int workspaceButtonX = panelX + panelW - 4 - 36;
+        // 载入/存储保持一行，仅压缩按钮高度到 14
+        int storeX = panelX + panelW - 4 - 34;
+        int loadX = storeX - 36;
         addRenderableWidget(Button.builder(Component.literal("载入"), b -> loadWorkspace())
-                .bounds(workspaceButtonX, topY, 36, 14).build());
+                .bounds(loadX, topY + 1, 34, 14).build());
         addRenderableWidget(Button.builder(Component.literal("存储"), b -> storeWorkspace())
-                .bounds(workspaceButtonX, topY + 16, 36, 14).build());
+                .bounds(storeX, topY + 1, 34, 14).build());
 
         int optionW = 30;
         objectiveButton = addRenderableWidget(Button.builder(Component.literal("目标:设备"),

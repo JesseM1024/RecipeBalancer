@@ -62,8 +62,8 @@ public final class AmountScreen extends Screen implements JeiPanelScreen {
         if (amountEditable) {
             amountBox = new EditBox(font, panelX + 8, panelY + 52, 112, 18,
                     Component.literal("用量"));
-            amountBox.setMaxLength(32);
-            amountBox.setValue(TimeExpression.formatNumber(amount));
+            amountBox.setMaxLength(64);
+            amountBox.setValue(TimeExpression.formatEditableNumber(amount));
             addRenderableWidget(amountBox);
         }
 
@@ -114,7 +114,7 @@ public final class AmountScreen extends Screen implements JeiPanelScreen {
             current = amount;
         }
         current = Math.max(0.0, current + delta);
-        amountBox.setValue(TimeExpression.formatNumber(current));
+        amountBox.setValue(TimeExpression.formatEditableNumber(current));
     }
 
     private void confirm() {

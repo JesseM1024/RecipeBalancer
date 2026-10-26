@@ -44,7 +44,7 @@ public final class TimeScreen extends Screen implements JeiPanelScreen {
         expressionBox = new EditBox(font, panelX + 8, panelY + 28, 150, 18,
                 Component.literal("耗时表达式"));
         expressionBox.setMaxLength(128);
-        expressionBox.setValue(TimeExpression.formatNumber(unit.fromTicks(ticks)));
+        expressionBox.setValue(TimeExpression.formatEditableNumber(unit.fromTicks(ticks)));
         addRenderableWidget(expressionBox);
 
         unitButton = addRenderableWidget(Button.builder(Component.literal(unit.label()), b -> cycleUnit())
@@ -69,7 +69,7 @@ public final class TimeScreen extends Screen implements JeiPanelScreen {
         unit = unit.next();
         if (preserved > 0) {
             ticks = preserved;
-            expressionBox.setValue(TimeExpression.formatNumber(unit.fromTicks(ticks)));
+            expressionBox.setValue(TimeExpression.formatEditableNumber(unit.fromTicks(ticks)));
         }
         unitButton.setMessage(Component.literal(unit.label()));
     }
