@@ -100,13 +100,13 @@ public final class SolveGraphView {
         final String key;
         final int recipeId;
         final Category category;
-        final int machines;
+        final long machines;
         int index;
         double x;
         double y;
 
         private GNode(boolean recipe, String key, int recipeId,
-                      Category category, int machines) {
+                      Category category, long machines) {
             this.recipe = recipe;
             this.key = key;
             this.recipeId = recipeId;
@@ -159,7 +159,7 @@ public final class SolveGraphView {
             }
             Recipe recipe = recipes.get(index);
             GNode node = new GNode(true, recipe.equType(), index, null,
-                    (int) Math.ceil(rate * recipe.time()));
+                    (long) Math.ceil(rate * recipe.time()));
             recipeNodes.put(index, node);
             nodes.add(node);
         }
@@ -1423,7 +1423,7 @@ public final class SolveGraphView {
         graphics.fill(x, y, x + RECIPE, y + 1, 0x40FFFFFF);
         String id = "R" + node.recipeId;
         graphics.drawString(font, id, x + 3, y + 3, 0xFF3A2A10, false);
-        String count = "x" + TimeExpression.formatCompact(node.machines);
+        String count = "x" + TimeExpression.formatCompact((double) node.machines);
         graphics.drawString(font, count,
                 x + RECIPE / 2 - font.width(count) / 2,
                 y + RECIPE - 10, 0xFF3A2A10, false);

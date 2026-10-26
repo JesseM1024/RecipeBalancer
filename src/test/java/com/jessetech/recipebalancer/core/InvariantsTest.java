@@ -85,9 +85,9 @@ class InvariantsTest {
             assertEquals(entry.getValue(), result.equipmentUsage().get(entry.getKey()), TOL,
                     name + " 设备并行量: " + entry.getKey());
         }
-        int total = 0;
+        long total = 0L;
         for (double usage : result.equipmentUsage().values()) {
-            total += (int) Math.ceil(usage);
+            total += (long) Math.ceil(usage);
         }
         assertEquals(total, result.totalMachineCount(), name + " 总设备数");
     }

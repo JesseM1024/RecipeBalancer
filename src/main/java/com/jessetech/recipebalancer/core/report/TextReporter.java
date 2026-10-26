@@ -54,7 +54,7 @@ public final class TextReporter {
         lines.add(RULE);
 
         Map<String, List<MachineDetail>> machineDetail = new LinkedHashMap<>();
-        int totalMachineCount = 0;
+        long totalMachineCount = 0L;
 
         for (int index = 0; index < solution.recipeRates().size(); index++) {
             double rate = solution.recipeRates().get(index);
@@ -64,8 +64,8 @@ public final class TextReporter {
             Recipe recipe = recipes.get(index);
 
             double parallel = rate * recipe.time();
-            int required = (int) Math.ceil(parallel);
-            totalMachineCount += required;
+            long required = ceilToLong(parallel);
+            totalMachineCount = saturatedAdd(totalMachineCount, required);
 
             machineDetail.computeIfAbsent(recipe.equType(), ignored -> new ArrayList<>())
                     .add(new MachineDetail(index, parallel, required));
@@ -125,17 +125,17 @@ public final class TextReporter {
 
         lines.add("");
         lines.add(">>设备统计");
-        int minEquipmentParallel = 0;
+        long minEquipmentParallel = 0L;
         for (String equipment : new TreeSet<>(machineDetail.keySet())) {
             lines.add("");
             lines.add("> " + equipment);
 
             double parallelSum = 0.0;
-            int requiredSum = 0;
+            long requiredSum = 0L;
             List<MachineDetail> details = machineDetail.get(equipment);
             for (MachineDetail detail : details) {
                 parallelSum += detail.parallel();
-                requiredSum += detail.required();
+                requiredSum = saturatedAdd(requiredSum, detail.required());
                 lines.add("");
                 lines.add("   [R" + detail.recipeId() + "]");
                 lines.add("      实际并行数: " + fixed3(detail.parallel()));
@@ -145,10 +145,10 @@ public final class TextReporter {
                 lines.add("");
                 lines.add("   实际并行数和: " + fixed3(parallelSum));
                 lines.add("");
-                lines.add("   最小设备数和: " + (int) Math.ceil(parallelSum));
+                lines.add("   最小设备数和: " + ceilToLong(parallelSum));
                 lines.add("   单配方设备数和: " + requiredSum);
             }
-            minEquipmentParallel += (int) Math.ceil(parallelSum);
+            minEquipmentParallel = saturatedAdd(minEquipmentParallel, ceilToLong(parallelSum));
         }
 
         lines.add("");
@@ -188,6 +188,20 @@ public final class TextReporter {
         return String.format(Locale.ROOT, "%.3f", value);
     }
 
-    private record MachineDetail(int recipeId, double parallel, int required) {
+    private record MachineDetail(int recipeId, double parallel, long required) {
+    }
+
+    private static long ceilToLong(double value) {
+        if (!Double.isFinite(value)) {
+            return Long.MAX_VALUE;
+        }
+        return (long) Math.ceil(value);
+    }
+
+    private static long saturatedAdd(long a, long b) {
+        if (b > 0 && a > Long.MAX_VALUE - b) {
+            return Long.MAX_VALUE;
+        }
+        return a + b;
     }
 }

@@ -193,9 +193,9 @@ public final class Balancer {
             Recipe recipe = recipes.get(index);
             equipmentUsage.merge(recipe.equType(), rates[index] * recipe.time(), Double::sum);
         }
-        int totalMachineCount = 0;
+        long totalMachineCount = 0L;
         for (double usage : equipmentUsage.values()) {
-            totalMachineCount += (int) Math.ceil(usage);
+            totalMachineCount = saturatedAdd(totalMachineCount, ceilToLong(usage));
         }
 
         return new SolveResult(boxed(rates), netFlow, externalInputs, finalOutputs,
@@ -208,6 +208,21 @@ public final class Balancer {
                                        String message) {
         return new SolveResult(List.of(), Map.of(), Map.of(), Map.of(), Map.of(), 0,
                 inferredRaw, inferredSeed, Map.of(), false, message);
+    }
+
+    /** 双精度并行数向上取整为长整形；超出范围时饱和，避免回绕。 */
+    private static long ceilToLong(double value) {
+        if (!Double.isFinite(value)) {
+            return Long.MAX_VALUE;
+        }
+        return (long) Math.ceil(value);
+    }
+
+    private static long saturatedAdd(long a, long b) {
+        if (b > 0 && a > Long.MAX_VALUE - b) {
+            return Long.MAX_VALUE;
+        }
+        return a + b;
     }
 
     private static List<Double> boxed(double[] values) {

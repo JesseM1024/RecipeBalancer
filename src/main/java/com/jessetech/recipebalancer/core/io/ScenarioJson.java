@@ -155,7 +155,8 @@ public final class ScenarioJson {
             }
 
             JsonElement time = recipe.get("time");
-            if (!isNumber(time) || time.getAsDouble() <= 0) {
+            double timeSeconds = time != null && isNumber(time) ? time.getAsDouble() : Double.NaN;
+            if (!Double.isFinite(timeSeconds) || timeSeconds <= 0) {
                 throw new SchemaException("配方 [" + index + "].time 必须为正数");
             }
             JsonElement equType = recipe.get("equType");
@@ -163,7 +164,7 @@ public final class ScenarioJson {
                 throw new SchemaException("配方 [" + index + "].equType 必须为非空字符串");
             }
 
-            recipes.add(new Recipe(sources, products, time.getAsDouble(), equType.getAsString()));
+            recipes.add(new Recipe(sources, products, timeSeconds, equType.getAsString()));
         }
         return recipes;
     }
@@ -178,10 +179,12 @@ public final class ScenarioJson {
             if (item.isEmpty()) {
                 throw new SchemaException("配方 [" + index + "]." + key + " 存在非法物品名: " + item);
             }
-            if (!isNumber(entry.getValue()) || entry.getValue().getAsDouble() <= 0) {
+            double amount = isNumber(entry.getValue())
+                    ? entry.getValue().getAsDouble() : Double.NaN;
+            if (!Double.isFinite(amount) || amount <= 0) {
                 throw new SchemaException("配方 [" + index + "]." + key + "[" + item + "] 数量必须为正数");
             }
-            amounts.put(item, entry.getValue().getAsDouble());
+            amounts.put(item, amount);
         }
         return amounts;
     }
@@ -274,7 +277,11 @@ public final class ScenarioJson {
             if (!isNumber(entry.getValue())) {
                 throw new SchemaException(field + "[" + entry.getKey() + "] 必须为数字");
             }
-            values.put(entry.getKey(), entry.getValue().getAsDouble());
+            double value = entry.getValue().getAsDouble();
+            if (!Double.isFinite(value)) {
+                throw new SchemaException(field + "[" + entry.getKey() + "] 必须为有限双精度数");
+            }
+            values.put(entry.getKey(), value);
         }
         return values;
     }
