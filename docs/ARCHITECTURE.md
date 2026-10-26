@@ -20,12 +20,15 @@
 ┌────────────────────────────────────────────────────────────────────────┐
 │ MC 集成层  mc/                                                            │
 │   keybind/RbKeyMappings      快捷键 → 打开/关闭界面                     │
-│   screen/BalancerScreen      主界面：编辑 / 结果 / 流程图三页签          │
-│   screen/InventoryPickerScreen 背包拾取小屏（点选物品标记）             │
-│   ui/widget/*                数值框 / 物品槽 / 滚动列表 / 按钮条        │
-│   ui/graph/GraphView         流程图绘制（GuiGraphics：节点/边/图标）    │
-│   itemmap/ItemStackKeyMapper  ItemStack/FluidStack ↔ ItemKey(String)   │
-│   jei/JeiBridge              JEI 软依赖隔离层（装了才激活）            │
+│   screen/BalancerScreen      配方编码终端：配方库 / 编码区 / 背包        │
+│   screen/AmountScreen        用量编辑（+1/+10/+100/+1000、自定义物品）  │
+│   screen/TimeScreen          耗时表达式 + 单位（t/秒/分/时）            │
+│   screen/TargetListScreen    目标产物列表                               │
+│   screen/ScenarioListScreen  已保存配方集：载入 / 另存 / 删除           │
+│   screen/SolveScreen         二级求解报告页                             │
+│   ui/graph/GraphView         流程图绘制（GuiGraphics：节点/边/图标，M5）│
+│   itemmap/ItemKeyMapper      注册名 ↔ 图标 / 未注册物品占位渲染         │
+│   jei/JeiBridge              JEI 软依赖隔离层（装了才激活，M4）         │
 ├────────────────────────────────────────────────────────────────────────┤
 │ 渲染层  cef/（备选·暂缓，不在主链路；恢复条件见 §二）                     │
 │   CefHost / RbRenderHandler / FrameTexture / InputForwarder / JsBridge │
@@ -38,9 +41,11 @@
 │   detect/   RawDetector, SeedDetector, CyclicDeficitDetector(+Tarjan)  │
 │   solve/    LpSolver(接口) → CommonsMath3LpSolver；Balancer(编排)       │
 │   bootstrap/PerfectCycleBootstrapper（最小反馈顶点集→启动投料）        │
+│   time/     TimeExpression / TimeUnit（表达式解析；UI 内部统一 t）      │
+│   model/    RecipePattern（编码草稿：9+9 格 + 设备 + tick 耗时）        │
 │   layout/   LayeredLayout（SCC 凝聚 → 分层 → 交叉最少化，M5）          │
 │   io/       ScenarioJson（Gson；schema 与 Python io.py 同构）          │
-│   report/   TextReporter（文本报告，界面与导出复用）                   │
+│   report/   TextReporter（文本报告，二级结果页复用）                   │
 ├────────────────────────────────────────────────────────────────────────┤
 │ 数据层  config/recipebalancer/scenarios/*.json（场景持久化，跨版本兼容）│
 └────────────────────────────────────────────────────────────────────────┘
@@ -226,7 +231,7 @@ SCC 分解 → 每 SCC **最小反馈顶点集**（|SCC|≤12 精确枚举，按
 | （新增）场景仓库 | `io/ScenarioStore` | 纯 Java、目录注入（MC 侧 `config/recipebalancer/scenarios`）；文件名白名单防目录穿越；可脱离游戏单测 |
 | `report.py` | `report/TextReporter` | 文本报告移植（主界面与导出复用） |
 | `visualize.py`（pyvis） | **不移植图形库** → `core/layout/LayeredLayout` + `mc/ui/graph/GraphView` | 配色语义对齐；HTML 导出单独走模板（C5） |
-| `gui.py`（tkinter） | **不移植** → `mc/screen/BalancerScreen` + `mc/ui/widget/*` | 交互约定（600ms 防抖、单位归一化、回车添加）在原生界面复刻 |
+| `gui.py`（tkinter） | **不移植** → `mc/screen/BalancerScreen` + `AmountScreen` + `TimeScreen` | 改为 AE 样板编码终端式交互；输入单位归一化到 tick，写入 schema 时换算为秒 |
 
 ### 3.3 LP 后端：commons-math3（备选 ojAlgo）
 
@@ -369,6 +374,30 @@ public final class ScenarioDraft {
     public void putTarget(String item, double amount);
     public Scenario toScenario();
 }
+
+/** 编码终端草稿：9 原料格 + 9 产物格 + 设备 + tick 耗时。
+ *  toRecipe() 在写入 core 时 tick/20 转秒，保证场景 JSON 与 Python 仍同构。 */
+public final class RecipePattern {
+    public void load(Recipe recipe);
+    public void putInput(int index, String key, double amount);
+    public void putOutput(int index, String key, double amount);
+    public void setEquipmentKey(String key);
+    public void setTimeTicks(double ticks);
+    public Recipe toRecipe();
+}
+```
+
+```java
+package com.jessetech.recipebalancer.core.time;
+
+/** 表达式 + 单位；UI 内部统一 tick。 */
+public final class TimeExpression {
+    public static double evaluate(String expression);              // + - * / ^ 与括号
+    public static double toTicks(String expression, TimeUnit unit);
+    public static String formatTicks(double ticks);                // 自动选单位
+    public static String formatExactTicks(double ticks);
+}
+public enum TimeUnit { TICK, SECOND, MINUTE, HOUR }
 ```
 
 ### 4.2 LP 后端实现（core/solve/，M1）
@@ -393,21 +422,33 @@ public final class RbKeyMappings {
 }
 
 package com.jessetech.recipebalancer.mc.screen;
-/** 主界面（原生）：配方/目标编辑 + 求解 + 文本结果 + 场景保存载入。
- *  每次打开用 loadDraft 读取 `scenarios/autosave.json`（允许未填目标/配方），
- *  关闭/修改时自动写回（记住上次输入）。 */
-public final class BalancerScreen extends Screen { /* M2 */ }
-/** 配方编辑：原料/产物两列动态行（手动输入）。 */
-public final class RecipeEditScreen extends Screen { /* M2 */ }
-/** 目标产物编辑。 */
-public final class TargetEditScreen extends Screen { /* M2 */ }
-/** 背包拾取小屏（点选物品标记）。 */
+/** 配方编码终端（M3）：上方配方库、中央 3×3 原料/3×3 产物 + 设备 + 耗时、下方玩家背包。
+ *  左键从背包取物→点格子放置/删除；中键改量或自定义；右键配方库两次删除。
+ *  每次打开用 loadDraft 读取 `scenarios/autosave.json`（允许未填目标/配方）。 */
+public final class BalancerScreen extends Screen { /* M3 */ }
+/** 通用用量编辑：物品图标 + 注册名 + 数字框 + ±快捷按钮。 */
+public final class AmountScreen extends Screen { /* M3 */ }
+/** 耗时编辑：表达式 + t/秒/分/时；确定后统一转 tick。 */
+public final class TimeScreen extends Screen { /* M3 */ }
+/** 目标产物列表（左键编辑 / 右键删除）。 */
+public final class TargetListScreen extends Screen { /* M3 */ }
+/** 已保存配方集列表：载入 / 另存 / 删除。 */
+public final class ScenarioListScreen extends Screen { /* M3 */ }
+/** 二级求解报告页（滚动文本）。 */
+public final class SolveScreen extends Screen { /* M3 */ }
+/** 背包拾取小屏（点选物品标记，M4 与 JEI 通道一起）。 */
 public final class InventoryPickerScreen extends Screen { /* M4 */ }
 
 package com.jessetech.recipebalancer.mc.itemmap;
-public final class ItemStackKeyMapper {
-    public static String of(ItemStack stack);        // v1: "item|<registry_id>"；组件指纹见 O-2
-    public static ItemStack toStack(String itemKey);
+public final class ItemKeyMapper {
+    public static String of(ItemStack stack);        // "minecraft:iron_ingot"
+    public static ItemStack stack(String itemKey);   // 未注册返回 EMPTY
+    public static boolean exists(String itemKey);
+    public static String displayName(String itemKey);
+    public static String registryName(String itemKey);
+    public static String shortLabel(String itemKey); // 未知物品：中文首字 / ASCII 前 3 字母
+    public static void renderIcon(GuiGraphics g, Font font, String key, int x, int y, String amount);
+    public static void renderTooltip(GuiGraphics g, Font font, String key, int mouseX, int mouseY);
 }
 ```
 
@@ -567,8 +608,8 @@ RecipeBalancer/
 │   ├── gen_test_fixtures.py                               # 从上游 conftest 导出 9 个场景 JSON
 ├── src/main/java/com/jessetech/recipebalancer/
 │   ├── RecipeBalancerMod.java
-│   ├── core/          # ★ C1：零 MC 依赖（model/matrix/detect/solve/bootstrap/io/report/layout）
-│   ├── mc/            # keybind / screen / ui / itemmap / jei
+│   ├── core/          # ★ C1：零 MC 依赖（model/matrix/detect/solve/bootstrap/time/io/report/layout）
+│   ├── mc/            # keybind / screen（编码终端/用量/耗时/目标/配方集/求解）/ itemmap / jei
 │   └── cef/           # ⏸ 备选（host / render / input / scheme / bridge）
 ├── src/main/resources/
 │   ├── assets/recipebalancer/lang/   # 键位名（en_us / zh_cn）
