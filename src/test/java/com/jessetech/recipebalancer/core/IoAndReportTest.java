@@ -123,6 +123,19 @@ class IoAndReportTest {
     }
 
     @Test
+    void perTickReportMatchesGraphUnits() {
+        Scenario scenario = TestSupport.scenario("ebf_cycle");
+        SolveResult result = Balancer.solve(scenario);
+        String report = TextReporter.formatPerTick(result, scenario.recipes());
+
+        assertTrue(report.contains("流量单位 /t"));
+        // 原每秒 0.2 的外部 TiO2 -> 0.010 /t
+        assertTrue(report.contains("TiO2: 0.010  /t"));
+        // 原每秒 200 的 TiCl4 输入 -> 10.000 /t
+        assertTrue(report.contains("TiCl4: 10.000  /t"));
+    }
+
+    @Test
     void reportFailureShowsMessage() {
         SolveResult failure = new SolveResult(List.of(), Map.of(), Map.of(), Map.of(), Map.of(), 0,
                 java.util.Set.of(), Map.of(), Map.of(), false, "infeasible");

@@ -948,7 +948,7 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
             persistDraft();
             // 报告里把 stack|base64 替换成“物品名 [效果/时长]”，不改变磁盘数据
             String report = ItemKeyMapper.prettyText(
-                    TextReporter.format(result, draft.recipes()));
+                    TextReporter.formatPerTick(result, draft.recipes()));
             minecraft.setScreen(new SolveScreen(this, report, result,
                     draft.recipes(), new java.util.LinkedHashMap<>(draft.targets()),
                     draft.options().autoBootstrap(), result.success()));

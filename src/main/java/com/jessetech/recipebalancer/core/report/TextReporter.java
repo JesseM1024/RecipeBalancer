@@ -31,7 +31,18 @@ public final class TextReporter {
     private TextReporter() {
     }
 
+    /** 默认报告：流量沿用 Python 的每秒语义（供金标准对拍/导出）。 */
     public static String format(SolveResult solution, List<Recipe> recipes) {
+        return format(solution, recipes, 1.0, false);
+    }
+
+    /** MC 结果页：所有流量/速率统一显示 /t，与流程图一致。 */
+    public static String formatPerTick(SolveResult solution, List<Recipe> recipes) {
+        return format(solution, recipes, 1.0 / 20.0, true);
+    }
+
+    private static String format(SolveResult solution, List<Recipe> recipes,
+                                 double flowScale, boolean perTick) {
         if (!solution.success()) {
             return "\n求解失败:\n" + solution.message() + "\n";
         }
@@ -39,7 +50,7 @@ public final class TextReporter {
         List<String> lines = new ArrayList<>();
         lines.add("");
         lines.add(RULE);
-        lines.add("配方运行方案");
+        lines.add(perTick ? "配方运行方案（流量单位 /t）" : "配方运行方案");
         lines.add(RULE);
 
         Map<String, List<MachineDetail>> machineDetail = new LinkedHashMap<>();
@@ -65,11 +76,14 @@ public final class TextReporter {
             lines.add("设备并行数: " + fixed3(parallel));
             lines.add("需要设备数: " + required);
 
+            String suffix = perTick ? "  /t" : "";
             for (Map.Entry<String, Double> entry : recipe.sourceList().entrySet()) {
-                lines.add("  - " + entry.getKey() + ": " + fixed3(entry.getValue() * rate));
+                lines.add("  - " + entry.getKey() + ": "
+                        + fixed3(entry.getValue() * rate * flowScale) + suffix);
             }
             for (Map.Entry<String, Double> entry : recipe.productList().entrySet()) {
-                lines.add("  + " + entry.getKey() + ": " + fixed3(entry.getValue() * rate));
+                lines.add("  + " + entry.getKey() + ": "
+                        + fixed3(entry.getValue() * rate * flowScale) + suffix);
             }
         }
 
@@ -100,14 +114,14 @@ public final class TextReporter {
         appendAmounts(lines, solution.bootstrapInventory());
 
         lines.add("");
-        lines.add(">>原料输入");
+        lines.add(perTick ? ">>原料输入（/t）" : ">>原料输入");
         lines.add("");
-        appendAmounts(lines, solution.externalInputs());
+        appendAmounts(lines, solution.externalInputs(), flowScale, perTick);
 
         lines.add("");
-        lines.add(">>副产物产出");
+        lines.add(perTick ? ">>副产物产出（/t）" : ">>副产物产出");
         lines.add("");
-        appendAmounts(lines, solution.finalOutputs());
+        appendAmounts(lines, solution.finalOutputs(), flowScale, perTick);
 
         lines.add("");
         lines.add(">>设备统计");
@@ -155,6 +169,18 @@ public final class TextReporter {
         }
         for (Map.Entry<String, Double> entry : new TreeMap<>(amounts).entrySet()) {
             lines.add("  " + entry.getKey() + ": " + fixed3(entry.getValue()));
+        }
+    }
+
+    private static void appendAmounts(List<String> lines, Map<String, Double> amounts,
+                                      double scale, boolean perTick) {
+        if (amounts.isEmpty()) {
+            lines.add("无");
+            return;
+        }
+        String suffix = perTick ? "  /t" : "";
+        for (Map.Entry<String, Double> entry : new TreeMap<>(amounts).entrySet()) {
+            lines.add("  " + entry.getKey() + ": " + fixed3(entry.getValue() * scale) + suffix);
         }
     }
 
