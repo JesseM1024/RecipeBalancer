@@ -1163,21 +1163,21 @@ public final class SolveGraphView {
                 ItemKeyMapper.displayName(recipe.equType())).withStyle(ChatFormatting.BOLD));
         double perSecond = result.recipeRates().get(node.recipeId);
         lines.add(Lang.c("设备并行: %s  设备数: %s",
-                        TimeExpression.formatNumber(perSecond * recipe.time()),
+                        TimeExpression.formatEditableNumber(perSecond * recipe.time()),
                         node.machines)
                 .withStyle(ChatFormatting.GRAY));
         double ratePerTick = perSecond / 20.0;
         lines.add(Lang.c("运行速率: %s /t",
-                TimeExpression.formatNumber(ratePerTick)));
+                TimeExpression.formatEditableNumber(ratePerTick)));
         lines.add(Lang.c("输入 (/t):").withStyle(ChatFormatting.GREEN));
         for (Map.Entry<String, Double> entry : recipe.sourceList().entrySet()) {
             lines.add(Lang.c("  - %s × %s", ItemKeyMapper.displayName(entry.getKey()),
-                    TimeExpression.formatNumber(entry.getValue() * ratePerTick)));
+                    TimeExpression.formatEditableNumber(entry.getValue() * ratePerTick)));
         }
         lines.add(Lang.c("输出 (/t):").withStyle(ChatFormatting.GOLD));
         for (Map.Entry<String, Double> entry : recipe.productList().entrySet()) {
             lines.add(Lang.c("  + %s × %s", ItemKeyMapper.displayName(entry.getKey()),
-                    TimeExpression.formatNumber(entry.getValue() * ratePerTick)));
+                    TimeExpression.formatEditableNumber(entry.getValue() * ratePerTick)));
         }
         return lines;
     }
