@@ -21,11 +21,14 @@ MC 1.21.1 + NeoForge 21.1.209 **纯客户端**模组：产线配平自动计算�
 stepsPerSecond=100
 durationSeconds=2.0
 stepDistance=6.0
+nodeGap=38
+edgeLength=84
 ```
 
 - 约 1 秒热读取，无需重启；
 - `stepsPerSecond`、`stepDistance` 可在动画中生效；
-- `durationSeconds` 在下一次打开流程图时生效。
+- `durationSeconds` 在下一次打开流程图时生效；
+- `nodeGap`、`edgeLength` 在创建流程图时读取，重新打开结果页生效。
 
 ## 语言
 

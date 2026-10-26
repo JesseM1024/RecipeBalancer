@@ -47,8 +47,8 @@ public final class SolveGraphView {
     private static final int RECIPE_FILL = 0xFFE8A33D;
     private static final int BORDER = 0xFF4A4A4A;
     private static final int EDGE = 0xFF9A9A9A;
-    private static final double NODE_GAP = 38.0;
-    private static final double EDGE_REST = 84.0;
+    private double nodeGap = 38.0;
+    private double edgeNaturalLength = 84.0;
     private double autoStepSeconds = 1.0 / 100.0;
     private long autoDurationNanos = 2_000_000_000L;
     private double autoMaxMove = 6.0;
@@ -139,6 +139,9 @@ public final class SolveGraphView {
         this.recipes = recipes;
         this.targets = targets == null ? Map.of() : new LinkedHashMap<>(targets);
         this.inventoryEnabled = inventoryEnabled;
+        GraphAnimationConfig.Settings settings = GraphAnimationConfig.get();
+        this.nodeGap = settings.nodeGap();
+        this.edgeNaturalLength = settings.edgeLength();
         build();
         layout();
     }
@@ -225,7 +228,7 @@ public final class SolveGraphView {
         // 1) 节点斥力 + 最短距离约束；2) 边弹簧（固定自然长度）；
         // 3) 向心/圆环势能；4) 碰撞松弛；5) 交叉/穿节点的局部能量搜索。
         double k = 52.0;
-        double restLength = EDGE_REST;
+        double restLength = edgeNaturalLength;
         int iterations = nodes.size() > 180 ? 140 : 260;
         for (int iteration = 0; iteration < iterations; iteration++) {
             double temperature = Math.max(1.0, k * (1.0 - iteration / (double) iterations));
@@ -305,9 +308,9 @@ public final class SolveGraphView {
         cameraReady = false;
     }
 
-    private static double minDistance(GNode a, GNode b) {
+    private double minDistance(GNode a, GNode b) {
         return (a.recipe ? RECIPE : MATERIAL) / 2.0
-                + (b.recipe ? RECIPE : MATERIAL) / 2.0 + NODE_GAP;
+                + (b.recipe ? RECIPE : MATERIAL) / 2.0 + nodeGap;
     }
 
     /** 碰撞松弛：保证节点/标签区域至少保有固定间距。 */
@@ -546,7 +549,7 @@ public final class SolveGraphView {
                 move += (min * 1.3 - dist) * 0.14;
             }
             if (connected(dragged, other)) {
-                double rest = EDGE_REST;
+                double rest = edgeNaturalLength;
                 move += (rest - dist) * 0.075;
             }
             move = Math.max(-6.0, Math.min(6.0, move));
@@ -607,7 +610,7 @@ public final class SolveGraphView {
                 double dx = node.x - other.x;
                 double dy = node.y - other.y;
                 double dist = Math.max(0.001, Math.hypot(dx, dy));
-                double spring = (dist - EDGE_REST) * 0.025;
+                double spring = (dist - edgeNaturalLength) * 0.025;
                 moveX -= dx / dist * spring;
                 moveY -= dy / dist * spring;
             }
