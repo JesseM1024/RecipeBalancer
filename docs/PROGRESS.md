@@ -5,6 +5,53 @@
 
 ---
 
+## R20 · 2026-10-26 · 药水/组件物品身份修复
+
+### 实测结果
+
+| 项 | 结果 |
+|---|---|
+| `gradlew test` | **80 tests, 0 failures** |
+| 产物 | `recipebalancer-0.1.0-1.21.1.jar` **2,318,083 B** |
+| 实机部署 | 已复制到 `1.21.1-NeoForge/mods/`（17:41:55） |
+| 未验证 | **实机药水 JEI 加号/拖拽冒烟** |
+
+### 根因
+
+`ItemKeyMapper.of(ItemStack)` 之前只返回 registry id：
+
+```java
+return BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
+```
+
+药水的 `potion_contents`（以及附魔/自定义名等）组件全部丢失。
+`stack(key)` 再构造时只剩默认 `minecraft:potion`，JEI 加号/ghost 拖入就显示为
+`Lingering Uncraftable Potion`，无法参与酿造配方。
+
+### 修复
+
+- 组件补丁为空时仍存普通 registry id（保持旧存档/兼容）。
+- 有组件时存：
+
+```
+stack|<base64( ItemStack.CODEC JSON )>
+```
+
+- 使用 `RegistryOps.create(JsonOps.INSTANCE, level.registryAccess())` 编解码，
+  保留 `potion_contents`、自定义名、附魔、damage 等全部数据。
+- `stack(key)` 反序列化并缓存；`displayName`/图标/ghost/JEI 加号都恢复成药水真实变体。
+- `registryName` 只显示底层物品 id，tooltip 不再出现 base64。
+- 组件 key 很长，`AmountScreen` 的 key 输入框上限从 128 放宽到 4096，
+  避免打开用量页再确定时把 key 截断。
+
+### 限制
+
+- 场景 JSON 里的组件 key 是不透明 base64 字符串；Python 侧按不同物品字符串处理，
+  不认识具体药水语义。求解本身不关心。
+- 极端情况下没有 level registry access 时退化为普通 registry id（仅启动早期，正常游戏内不会）。
+
+---
+
 ## R19 · 2026-10-26 · M4：JEI ghost 拖拽 + 配方加号导入
 
 ### 实测结果

@@ -458,12 +458,13 @@ public final class RecipeBalancerJeiPlugin implements IModPlugin {
 
 package com.jessetech.recipebalancer.mc.itemmap;
 public final class ItemKeyMapper {
-    public static String of(ItemStack stack);        // "minecraft:iron_ingot"
-    public static ItemStack stack(String itemKey);   // 未注册返回 EMPTY
+    /** 无组件：registry id；有组件：stack|&lt;base64(ItemStack.CODEC JSON)&gt;（药水/附魔/自定义名）。 */
+    public static String of(ItemStack stack);
+    public static ItemStack stack(String itemKey);   // 未注册/解析失败返回 EMPTY
     public static boolean exists(String itemKey);
     public static String displayName(String itemKey);
-    public static String registryName(String itemKey);
-    public static String shortLabel(String itemKey); // 未知物品：中文首字 / ASCII 前 3 字母
+    public static String registryName(String itemKey); // 组件物品只显示底层 registry id
+    public static String shortLabel(String itemKey);
     public static void renderIcon(GuiGraphics g, Font font, String key, int x, int y, String amount);
     public static void renderTooltip(GuiGraphics g, Font font, String key, int mouseX, int mouseY);
 }
