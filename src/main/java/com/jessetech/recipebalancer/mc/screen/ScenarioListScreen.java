@@ -42,7 +42,7 @@ public final class ScenarioListScreen extends Screen implements JeiPanelScreen {
 
     @Override
     protected void init() {
-        panelX = Math.max(4, Math.min((width - PANEL_W) / 2, width - 210 - PANEL_W));
+        panelX = (width - PANEL_W) / 2;
         panelY = (height - PANEL_H) / 2;
         listY = panelY + 28;
         listH = PANEL_H - 104;
