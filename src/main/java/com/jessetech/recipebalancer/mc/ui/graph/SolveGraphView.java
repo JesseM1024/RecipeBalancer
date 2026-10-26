@@ -782,7 +782,12 @@ public final class SolveGraphView {
                 continue;
             }
             double min = minDistance(a, b);
-            double pull = Math.min(4.0, (dist - maxLength) * 0.12);
+            // 超过两倍自然长度视为严重拉长：取消 4px/帧限速，
+            // 按超出量比例快速拉回。
+            boolean extreme = dist > edgeNaturalLength * 2.0;
+            double pull = extreme
+                    ? (dist - maxLength) * 0.5
+                    : Math.min(4.0, (dist - maxLength) * 0.12);
             pull = Math.min(pull, Math.max(0.0, dist - min));
             if (pull <= 0.0) {
                 continue;
@@ -1079,6 +1084,8 @@ public final class SolveGraphView {
         }
         graphics.pose().popPose();
         graphics.disableScissor();
+        // 节点图标走独立缓冲；先 flush 再画图例，避免图标盖住图例。
+        graphics.flush();
 
         drawLegend(graphics, font, areaX, areaY);
         graphics.drawString(font, Lang.t("拖动平移 · 滚轮缩放 · 流量单位 /t"),
@@ -1156,21 +1163,21 @@ public final class SolveGraphView {
                 ItemKeyMapper.displayName(recipe.equType())).withStyle(ChatFormatting.BOLD));
         double perSecond = result.recipeRates().get(node.recipeId);
         lines.add(Lang.c("设备并行: %s  设备数: %s",
-                        TimeExpression.formatEditableNumber(perSecond * recipe.time()),
+                        TimeExpression.formatNumber(perSecond * recipe.time()),
                         node.machines)
                 .withStyle(ChatFormatting.GRAY));
         double ratePerTick = perSecond / 20.0;
         lines.add(Lang.c("运行速率: %s /t",
-                TimeExpression.formatEditableNumber(ratePerTick)));
+                TimeExpression.formatNumber(ratePerTick)));
         lines.add(Lang.c("输入 (/t):").withStyle(ChatFormatting.GREEN));
         for (Map.Entry<String, Double> entry : recipe.sourceList().entrySet()) {
             lines.add(Lang.c("  - %s × %s", ItemKeyMapper.displayName(entry.getKey()),
-                    TimeExpression.formatEditableNumber(entry.getValue() * ratePerTick)));
+                    TimeExpression.formatNumber(entry.getValue() * ratePerTick)));
         }
         lines.add(Lang.c("输出 (/t):").withStyle(ChatFormatting.GOLD));
         for (Map.Entry<String, Double> entry : recipe.productList().entrySet()) {
             lines.add(Lang.c("  + %s × %s", ItemKeyMapper.displayName(entry.getKey()),
-                    TimeExpression.formatEditableNumber(entry.getValue() * ratePerTick)));
+                    TimeExpression.formatNumber(entry.getValue() * ratePerTick)));
         }
         return lines;
     }
@@ -1247,10 +1254,29 @@ public final class SolveGraphView {
     private void drawLegend(GuiGraphics graphics, Font font, int areaX, int areaY) {
         int x = areaX + 4;
         int y = areaY + 4;
-        String legend = Lang.t("橙=配方  绿=输入  蓝=中间  红=启动  黄=副产  紫=目标");
-        int width = font.width(legend) + 8;
-        graphics.fill(x, y, x + width, y + 13, 0xB0C6C6C6);
-        graphics.drawString(font, legend, x + 4, y + 3, AeStyle.TEXT, false);
+        String[] labels = {
+                Lang.t("配方"), Lang.t("输入"), Lang.t("中间"),
+                Lang.t("启动"), Lang.t("副产"), Lang.t("目标")
+        };
+        int[] colors = {
+                RECIPE_FILL, INPUT, INTERMEDIATE, STARTUP, BYPRODUCT, TARGET
+        };
+        int gap = 8;
+        int total = 8;
+        for (String label : labels) {
+            total += font.width(label) + gap;
+        }
+        // 不透明底，保证底下的节点/图标不会透出来。
+        graphics.fill(x, y, x + total, y + 17, 0xFFC6C6C6);
+        int cursor = x + 4;
+        for (int i = 0; i < labels.length; i++) {
+            int width = font.width(labels[i]);
+            graphics.drawString(font, labels[i], cursor, y + 2, AeStyle.TEXT, false);
+            // 与节点一致的色条画在文字下方。
+            graphics.fill(cursor, y + 12, cursor + width, y + 15, colors[i]);
+            cursor += width + gap;
+        }
+        graphics.flush();
     }
 
     /**
@@ -1397,17 +1423,18 @@ public final class SolveGraphView {
         graphics.fill(x, y, x + RECIPE, y + 1, 0x40FFFFFF);
         String id = "R" + node.recipeId;
         graphics.drawString(font, id, x + 3, y + 3, 0xFF3A2A10, false);
-        String count = "x" + node.machines;
-        graphics.drawString(font, count, x + RECIPE - 3 - font.width(count),
-                y + 3, 0xFF3A2A10, false);
+        String count = "x" + TimeExpression.formatCompact(node.machines);
+        graphics.drawString(font, count,
+                x + RECIPE / 2 - font.width(count) / 2,
+                y + RECIPE - 10, 0xFF3A2A10, false);
 
         if (showIcons && !node.key.isBlank() && !ItemKeyMapper.stack(node.key).isEmpty()) {
-            ItemKeyMapper.renderIcon(graphics, font, node.key, x + 11, y + 15, null);
+            ItemKeyMapper.renderIcon(graphics, font, node.key, x + 12, y + 12, null);
         } else {
             String initial = node.key.isBlank() ? "?" : shortInitial(
                     ItemKeyMapper.displayName(node.key));
             graphics.drawString(font, initial, x + RECIPE / 2 - font.width(initial) / 2,
-                    y + 19, 0xFF3A2A10, false);
+                    y + 16, 0xFF3A2A10, false);
         }
         if (showLabels) {
             String name = node.key.isBlank() ? Lang.t("配方")
