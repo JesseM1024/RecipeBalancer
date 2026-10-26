@@ -291,6 +291,10 @@ public final class SolveGraphView {
         collisionRelax();
         minimizeCrossings(targetRadius);
         collisionRelax();
+        // pyvis 的 forceAtlas2 只负责把图铺开，不能保证边不交叉。
+        // 这里再做一次全局交叉能量退火，允许节点跳出单点局部最优。
+        optimizeGlobalCrossings(targetRadius);
+        collisionRelax();
 
         minX = Double.MAX_VALUE;
         minY = Double.MAX_VALUE;
@@ -453,6 +457,171 @@ public final class SolveGraphView {
             }
         }
         return cost;
+    }
+
+    /**
+     * 全局布局能量：边交叉、近平行重叠、边穿节点、节点重叠、边自然长度、圆盘向心。
+     * 与 localCost 不同，这里每次评估整张图，用于跳出单节点局部最优。
+     */
+    private double totalLayoutCost(double targetRadius) {
+        double cost = 0.0;
+        for (GNode node : nodes) {
+            double dist = Math.hypot(node.x, node.y);
+            cost += dist * dist * 0.0012;
+            if (dist > targetRadius) {
+                double over = dist - targetRadius;
+                cost += over * over * 0.02;
+            }
+        }
+        for (int i = 0; i < nodes.size(); i++) {
+            GNode a = nodes.get(i);
+            for (int j = i + 1; j < nodes.size(); j++) {
+                GNode b = nodes.get(j);
+                double d = Math.hypot(a.x - b.x, a.y - b.y);
+                double min = minDistance(a, b);
+                if (d < min) {
+                    double gap = min - d;
+                    cost += gap * gap * 12.0;
+                }
+            }
+        }
+        for (GEdge edge : edges) {
+            double length = Math.hypot(edge.to.x - edge.from.x,
+                    edge.to.y - edge.from.y);
+            double lengthGap = length - edgeNaturalLength;
+            cost += lengthGap * lengthGap * 0.001;
+        }
+        for (int i = 0; i < edges.size(); i++) {
+            GEdge a = edges.get(i);
+            for (int j = i + 1; j < edges.size(); j++) {
+                GEdge b = edges.get(j);
+                if (a.from == b.from || a.from == b.to
+                        || a.to == b.from || a.to == b.to) {
+                    continue;
+                }
+                if (segmentsIntersect(a.from.x, a.from.y, a.to.x, a.to.y,
+                        b.from.x, b.from.y, b.to.x, b.to.y)) {
+                    cost += 6000.0;
+                } else {
+                    double gap = segmentDistance(a.from.x, a.from.y, a.to.x, a.to.y,
+                            b.from.x, b.from.y, b.to.x, b.to.y);
+                    if (gap < 14.0) {
+                        cost += (14.0 - gap) * 180.0;
+                    }
+                }
+            }
+            for (GNode node : nodes) {
+                if (node == a.from || node == a.to) {
+                    continue;
+                }
+                if (pointSegmentDistance(node.x, node.y,
+                        a.from.x, a.from.y, a.to.x, a.to.y) < 14.0) {
+                    cost += 1500.0;
+                }
+            }
+        }
+        return cost;
+    }
+
+    /**
+     * 全局模拟退火：单节点随机移动，按整张图的能量接受/回退。
+     * 交叉惩罚远高于边长，因此优先消除交叉；温度降低后逐步收敛。
+     */
+    private void optimizeGlobalCrossings(double targetRadius) {
+        if (nodes.size() < 4 || edges.size() < 2 || edges.size() > 240) {
+            return;
+        }
+        double current = totalLayoutCost(targetRadius);
+        double best = current;
+        double[] bestX = new double[nodes.size()];
+        double[] bestY = new double[nodes.size()];
+        for (int i = 0; i < nodes.size(); i++) {
+            bestX[i] = nodes.get(i).x;
+            bestY[i] = nodes.get(i).y;
+        }
+
+        Random random = new Random(0x0C0FFEEL);
+        int iterations = edges.size() <= 120 ? 1800 : 900;
+        double temperature = 3000.0;
+        for (int iteration = 0; iteration < iterations; iteration++) {
+            GNode node = nodes.get(random.nextInt(nodes.size()));
+            double oldX = node.x;
+            double oldY = node.y;
+            if (random.nextDouble() < 0.12) {
+                // 少量全局重定位，避免一直困在同一个局部极小值。
+                double angle = random.nextDouble() * Math.PI * 2.0;
+                double radius = targetRadius * Math.sqrt(random.nextDouble());
+                node.x = Math.cos(angle) * radius;
+                node.y = Math.sin(angle) * radius;
+            } else {
+                double angle = random.nextDouble() * Math.PI * 2.0;
+                double radius = 8.0 + random.nextDouble() * 52.0;
+                node.x += Math.cos(angle) * radius;
+                node.y += Math.sin(angle) * radius;
+            }
+            double next = totalLayoutCost(targetRadius);
+            double delta = next - current;
+            boolean accept = delta <= 0.0
+                    || random.nextDouble() < Math.exp(-delta / temperature);
+            if (accept) {
+                current = next;
+                if (current < best - 1e-6) {
+                    best = current;
+                    for (int i = 0; i < nodes.size(); i++) {
+                        bestX[i] = nodes.get(i).x;
+                        bestY[i] = nodes.get(i).y;
+                    }
+                }
+            } else {
+                node.x = oldX;
+                node.y = oldY;
+            }
+            temperature = Math.max(2.0, temperature * 0.997);
+        }
+        for (int i = 0; i < nodes.size(); i++) {
+            nodes.get(i).x = bestX[i];
+            nodes.get(i).y = bestY[i];
+        }
+        refineBySwaps(targetRadius);
+    }
+
+    /**
+     * 两两交换位置的全局下降：解决“两个节点交换后才不交叉”的局部最优。
+     * 只在节点/边数较少时启用，避免初始化过慢。
+     */
+    private void refineBySwaps(double targetRadius) {
+        if (nodes.size() > 60 || edges.size() > 160) {
+            return;
+        }
+        double current = totalLayoutCost(targetRadius);
+        for (int pass = 0; pass < 2; pass++) {
+            boolean changed = false;
+            for (int i = 0; i < nodes.size(); i++) {
+                for (int j = i + 1; j < nodes.size(); j++) {
+                    GNode a = nodes.get(i);
+                    GNode b = nodes.get(j);
+                    double ax = a.x;
+                    double ay = a.y;
+                    a.x = b.x;
+                    a.y = b.y;
+                    b.x = ax;
+                    b.y = ay;
+                    double next = totalLayoutCost(targetRadius);
+                    if (next + 1e-6 < current) {
+                        current = next;
+                        changed = true;
+                    } else {
+                        b.x = a.x;
+                        b.y = a.y;
+                        a.x = ax;
+                        a.y = ay;
+                    }
+                }
+            }
+            if (!changed) {
+                break;
+            }
+        }
     }
 
     private static double segmentDistance(double ax, double ay, double bx, double by,
