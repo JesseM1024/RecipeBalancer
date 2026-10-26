@@ -46,7 +46,9 @@ public final class SolveGraphView {
     private static final int BORDER = 0xFF4A4A4A;
     private static final int EDGE = 0xFF9A9A9A;
     private static final double NODE_GAP = 38.0;
-    private static final double EDGE_REST = 68.0;
+    private static final double EDGE_REST = 84.0;
+    private static final long AUTO_SETTLE_NANOS = 1_500_000_000L;
+    private static final double AUTO_STEP_SECONDS = 1.0 / 60.0;
 
     private enum Category {
         INPUT, INTERMEDIATE, STARTUP, BYPRODUCT, TARGET
@@ -81,6 +83,14 @@ public final class SolveGraphView {
     private double dragOffsetX;
     private double dragOffsetY;
     private int settleSteps;
+
+    private boolean autoSettlePending = true;
+    private boolean autoSettling;
+    private GNode autoAnchor;
+    private long autoSettleEndNanos;
+    private long autoSettleLastNanos;
+    private double autoSettleAccumulator;
+    private int autoSettleStepCounter;
 
     private static final class GNode {
         final boolean recipe;
@@ -270,9 +280,6 @@ public final class SolveGraphView {
         collisionRelax();
         minimizeCrossings(targetRadius);
         collisionRelax();
-        // 打开流程图时自动“原地收缩”：等价于手动拖动后再松手，
-        // 但不依赖用户操作，直接得到更紧凑的初始布局。
-        compactLayout();
 
         minX = Double.MAX_VALUE;
         minY = Double.MAX_VALUE;
@@ -461,6 +468,8 @@ public final class SolveGraphView {
         }
         draggingNode = hit;
         settleSteps = 0;
+        autoSettling = false;
+        autoSettlePending = false;
         dragOffsetX = worldX - hit.x;
         dragOffsetY = worldY - hit.y;
         return true;
@@ -577,13 +586,96 @@ public final class SolveGraphView {
         }
     }
 
-    /** 打开时自动收缩；不每轮全量碰撞，降低启动耗时。 */
-    private void compactLayout() {
-        int steps = nodes.size() > 160 ? 50 : 90;
-        for (int i = 0; i < steps; i++) {
-            settleStep(i % 8 == 0);
+    /**
+     * 启动动画：选中一个节点并“按住不动”，即它固定在原地，
+     * 但它对邻居的斥力/相连弹簧持续求解，约 1.5 秒后松手。
+     */
+    private void startAutoSettleIfNeeded(long now) {
+        if (!autoSettlePending) {
+            return;
         }
-        collisionRelax();
+        autoSettlePending = false;
+        if (nodes.isEmpty()) {
+            return;
+        }
+        autoAnchor = chooseAutoAnchor();
+        autoSettling = true;
+        autoSettleEndNanos = now + AUTO_SETTLE_NANOS;
+        autoSettleLastNanos = now;
+        autoSettleAccumulator = 0.0;
+        autoSettleStepCounter = 0;
+    }
+
+    private void updateAutoSettle(long now) {
+        if (!autoSettling) {
+            return;
+        }
+        double dt = Math.max(0.0, Math.min(0.05,
+                (now - autoSettleLastNanos) / 1_000_000_000.0));
+        autoSettleLastNanos = now;
+        autoSettleAccumulator += dt;
+        int guard = 0;
+        while (autoSettleAccumulator >= AUTO_STEP_SECONDS
+                && now < autoSettleEndNanos && guard < 4) {
+            autoSettleAccumulator -= AUTO_STEP_SECONDS;
+            autoSettleStepCounter++;
+            autoSettleStep();
+            guard++;
+        }
+        if (now >= autoSettleEndNanos) {
+            autoSettling = false;
+            collisionRelax();
+        }
+    }
+
+    private void autoSettleStep() {
+        if (autoAnchor == null) {
+            return;
+        }
+        double anchorX = autoAnchor.x;
+        double anchorY = autoAnchor.y;
+        // 模拟“按住该节点”：邻居受局部力，全局边弹簧继续收缩。
+        elasticStep(autoAnchor);
+        autoAnchor.x = anchorX;
+        autoAnchor.y = anchorY;
+        settleStep(false);
+        autoAnchor.x = anchorX;
+        autoAnchor.y = anchorY;
+        if (autoSettleStepCounter % 8 == 0) {
+            collisionRelax();
+            autoAnchor.x = anchorX;
+            autoAnchor.y = anchorY;
+        }
+    }
+
+    private GNode chooseAutoAnchor() {
+        GNode best = nodes.get(0);
+        int bestDegree = -1;
+        double bestDistance = Double.MAX_VALUE;
+        double centerX = 0.0;
+        double centerY = 0.0;
+        for (GNode node : nodes) {
+            centerX += node.x;
+            centerY += node.y;
+        }
+        centerX /= nodes.size();
+        centerY /= nodes.size();
+        for (GNode node : nodes) {
+            int degree = 0;
+            for (GEdge edge : edges) {
+                if (edge.from == node || edge.to == node) {
+                    degree++;
+                }
+            }
+            double distance = Math.hypot(node.x - centerX, node.y - centerY);
+            if (degree > bestDegree
+                    || (degree == bestDegree && distance < bestDistance)) {
+                best = node;
+                bestDegree = degree;
+                bestDistance = distance;
+            }
+        }
+        return best;
     }
 
     private boolean connected(GNode a, GNode b) {
@@ -669,6 +761,10 @@ public final class SolveGraphView {
         if (!cameraReady || cameraAreaW != areaW || cameraAreaH != areaH) {
             resetCamera(areaW, areaH);
         }
+        long now = System.nanoTime();
+        startAutoSettleIfNeeded(now);
+        updateAutoSettle(now);
+
         if (draggingNode != null) {
             elasticStep(draggingNode);
         } else if (settleSteps > 0) {
@@ -690,19 +786,20 @@ public final class SolveGraphView {
         double viewMinY = (-panY) / zoom - 120;
         double viewMaxY = (areaH - panY) / zoom + 120;
         // LOD 阈值放低：只有缩得非常小才省略元素。
-        boolean showLabels = zoom >= 0.24;
-        boolean showIcons = zoom >= 0.16;
+        boolean showNodeLabels = zoom >= 0.26;
+        boolean showEdgeLabels = zoom >= 0.33;
+        boolean showIcons = zoom >= 0.22;
 
         graphics.pose().pushPose();
         graphics.pose().translate(areaX + panX, areaY + panY, 0);
         graphics.pose().scale((float) zoom, (float) zoom, 1.0f);
-        drawEdges(graphics, font, viewMinX, viewMaxX, viewMinY, viewMaxY, showLabels);
+        drawEdges(graphics, font, viewMinX, viewMaxX, viewMinY, viewMaxY, showEdgeLabels);
         for (GNode node : nodes) {
             if (node.x < viewMinX || node.x > viewMaxX
                     || node.y < viewMinY || node.y > viewMaxY) {
                 continue;
             }
-            drawNode(graphics, font, node, showLabels, showIcons);
+            drawNode(graphics, font, node, showNodeLabels, showIcons);
         }
         graphics.pose().popPose();
         graphics.disableScissor();
