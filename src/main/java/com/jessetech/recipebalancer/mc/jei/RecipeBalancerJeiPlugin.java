@@ -8,6 +8,7 @@ import com.jessetech.recipebalancer.mc.screen.TimeScreen;
 import mezz.jei.api.IModPlugin;
 import mezz.jei.api.JeiPlugin;
 import mezz.jei.api.gui.handlers.IGuiProperties;
+import mezz.jei.api.registration.IAdvancedRegistration;
 import mezz.jei.api.registration.IGuiHandlerRegistration;
 import mezz.jei.api.runtime.IJeiRuntime;
 import net.minecraft.client.gui.screens.Screen;
@@ -51,6 +52,13 @@ public final class RecipeBalancerJeiPlugin implements IModPlugin {
                 screen -> properties(screen, screen));
         registration.addGuiScreenHandler(ScenarioListScreen.class,
                 screen -> properties(screen, screen));
+        registration.addGhostIngredientHandler(BalancerScreen.class, new JeiGhostHandler());
+    }
+
+    @Override
+    public void registerAdvanced(IAdvancedRegistration registration) {
+        registration.addRecipeButtonFactory(new JeiRecipeButtonFactory(
+                registration.getJeiHelpers().getGuiHelper()));
     }
 
     private static <T extends Screen & JeiPanelScreen> IGuiProperties properties(

@@ -54,7 +54,8 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
             FMLPaths.CONFIGDIR.get().resolve("recipebalancer").resolve("scenarios"));
 
     private final ScenarioDraft draft = loadAutosave();
-    private final RecipePattern pattern = new RecipePattern();
+    private final RecipePattern pattern;
+    private final boolean fromJei;
     private int editingIndex = -1;
     private String carriedKey = "";
     private String status = "左键取物品→点格子放置；中键改量；右键配方库两次删除";
@@ -93,7 +94,21 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
     private EditBox nameBox;
 
     public BalancerScreen() {
+        this(new RecipePattern(), false);
+    }
+
+    /** JEI 配方加号：带一个预填的编码草稿打开终端。 */
+    public BalancerScreen(RecipePattern pattern) {
+        this(pattern, true);
+    }
+
+    private BalancerScreen(RecipePattern pattern, boolean fromJei) {
         super(Component.literal("RecipeBalancer · 配方编码终端"));
+        this.pattern = pattern;
+        this.fromJei = fromJei;
+        if (fromJei) {
+            status = "已从 JEI 导入编码；请检查设备/产物后点「写入」";
+        }
     }
 
     @Override
@@ -1004,6 +1019,66 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
 
     private static boolean inside(double x, double y, int rx, int ry, int rw, int rh) {
         return x >= rx && x < rx + rw && y >= ry && y < ry + rh;
+    }
+
+    // ------------------------------------------------------------------
+    // JEI ghost 拖拽 / 配方加号
+    // ------------------------------------------------------------------
+
+    public enum GhostKind {
+        INPUT, OUTPUT, EQUIPMENT, TARGET
+    }
+
+    public record GhostSlot(GhostKind kind, int index, int x, int y) {
+    }
+
+    /** 当前可见、可接收 ghost 的槽位（屏幕绝对坐标）。 */
+    public java.util.List<GhostSlot> ghostSlots() {
+        java.util.List<GhostSlot> result = new java.util.ArrayList<>();
+        for (int row = 0; row < visibleRows; row++) {
+            int y = encodingY + row * SLOT;
+            for (int col = 0; col < GRID_COLS; col++) {
+                int index = (encodingScrollRow + row) * GRID_COLS + col;
+                if (index < RecipePattern.MAX_INPUTS) {
+                    result.add(new GhostSlot(GhostKind.INPUT, index, inputX + col * SLOT, y));
+                }
+            }
+            for (int col = 0; col < OUTPUT_COLS; col++) {
+                int index = (encodingScrollRow + row) * OUTPUT_COLS + col;
+                if (index < RecipePattern.MAX_OUTPUTS) {
+                    result.add(new GhostSlot(GhostKind.OUTPUT, index, outputX + col * SLOT, y));
+                }
+            }
+        }
+        result.add(new GhostSlot(GhostKind.EQUIPMENT, 0, equipmentX, encodingY));
+        for (int row = 0; row < targetRows; row++) {
+            for (int col = 0; col < TARGET_COLS; col++) {
+                int index = (targetScrollRow + row) * TARGET_COLS + col;
+                result.add(new GhostSlot(GhostKind.TARGET, index,
+                        panelX + 4 + col * SLOT, targetY + row * SLOT));
+            }
+        }
+        return result;
+    }
+
+    public void applyGhost(GhostKind kind, int index, String key) {
+        if (key == null || key.isBlank()) {
+            return;
+        }
+        switch (kind) {
+            case INPUT -> pattern.putInput(index, key, 1.0);
+            case OUTPUT -> pattern.putOutput(index, key, 1.0);
+            case EQUIPMENT -> pattern.setEquipmentKey(key);
+            case TARGET -> {
+                if (draft.targets().size() >= MAX_TARGETS && !draft.targets().containsKey(key)) {
+                    status = "目标最多 " + MAX_TARGETS + " 个";
+                    return;
+                }
+                draft.putTarget(key, 1.0);
+                onDraftChanged();
+            }
+        }
+        status = "JEI ghost: " + ItemKeyMapper.displayName(key);
     }
 
     // JEI 非 ContainerScreen 渲染（RecipeBalancerJeiPlugin 使用）
