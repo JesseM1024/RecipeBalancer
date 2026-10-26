@@ -111,7 +111,7 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
 
         // 固定区域：工作区名/参数/目标/配方库/编码/背包/状态
         // 编码最多 4 行；剩余高度全部给配方库
-        int fixed = 168;
+        int fixed = 178;
         int available = Math.max(3 * SLOT, panelH - fixed);
         targetRows = 2;
         visibleRows = 4;
@@ -138,7 +138,7 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
         }
 
         topY = panelY + 3;
-        paramsY = topY + 20;
+        paramsY = topY + 32;
         targetLabelY = paramsY + 20;
         targetY = targetLabelY + 9;
         libraryLabelY = targetY + targetRows * SLOT + 2;
@@ -159,16 +159,17 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
         encodingScrollRow = Math.max(0, Math.min(encodingScrollRow, maxEncodingScroll()));
         targetScrollRow = Math.max(0, Math.min(targetScrollRow, maxTargetScroll()));
 
-        nameBox = new EditBox(font, panelX + 30, topY, panelW - 106, 16,
+        nameBox = new EditBox(font, panelX + 30, topY, panelW - 74, 16,
                 Component.literal("工作区名"));
         nameBox.setMaxLength(48);
         nameBox.setValue(scenarioName);
         addRenderableWidget(nameBox);
-        int workspaceButtonX = panelX + panelW - 4 - 2 * 34 - 2;
+        // 载入/存储改为上下排列，高度压缩到 14，和写入/新建一致
+        int workspaceButtonX = panelX + panelW - 4 - 36;
         addRenderableWidget(Button.builder(Component.literal("载入"), b -> loadWorkspace())
-                .bounds(workspaceButtonX, topY, 34, 18).build());
+                .bounds(workspaceButtonX, topY, 36, 14).build());
         addRenderableWidget(Button.builder(Component.literal("存储"), b -> storeWorkspace())
-                .bounds(workspaceButtonX + 36, topY, 34, 18).build());
+                .bounds(workspaceButtonX, topY + 16, 36, 14).build());
 
         int optionW = 30;
         objectiveButton = addRenderableWidget(Button.builder(Component.literal("目标:设备"),
@@ -186,13 +187,13 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
         addRenderableWidget(Button.builder(Component.literal("求解"), b -> solveNow())
                 .bounds(panelX + 4 + 4 * (optionW + 2), paramsY, 36, 18).build());
 
-        // 写入/新建放到耗时格下面，并排两枚 20×16，避免小窗口压到背包
+        // 写入/新建恢复上下排列；高度压缩到 14，正好能塞进耗时下方
         addRenderableWidget(Button.builder(Component.literal("写入"),
                         b -> commitPattern(true))
-                .bounds(equipmentX, encodingY + 38, 20, 16).build());
+                .bounds(equipmentX, encodingY + 38, 40, 14).build());
         addRenderableWidget(Button.builder(Component.literal("新建"),
                         b -> newPattern())
-                .bounds(equipmentX + 20, encodingY + 38, 20, 16).build());
+                .bounds(equipmentX, encodingY + 54, 40, 14).build());
 
         // resize 后 Minecraft 不会补发 Init.Post，JEI 会一直用旧属性；手动通知
         JeiScreenSupport.notifyGuiInit(this);
@@ -364,14 +365,16 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
                     encodingY, null);
         }
 
-        graphics.drawString(font, "耗时", equipmentX + 18, encodingY + 24, AeStyle.MUTED, false);
+        graphics.drawString(font, "耗时", equipmentX + 18, encodingY + 11, AeStyle.MUTED, false);
         int timeY = encodingY + 20;
         AeStyle.slot(graphics, equipmentX, timeY);
-        String time = TimeExpression.formatNumber(pattern.timeTicks()) + "t";
-        if (font.width(time) > SLOT) {
-            time = TimeExpression.formatNumber(pattern.timeTicks() / 20.0) + "s";
-        }
-        graphics.drawString(font, font.plainSubstrByWidth(time, SLOT), equipmentX + 1,
+        // 时间值画在槽右侧空白里；空间不足时去掉单位，保证小数不被截成 0
+        int valueX = equipmentX + 18;
+        int valueWidth = Math.max(20, panelW - (valueX - panelX) - 2);
+        String value = TimeExpression.formatNumber(pattern.timeTicks());
+        String withUnit = value + "t";
+        String time = font.width(withUnit) <= valueWidth ? withUnit : value;
+        graphics.drawString(font, font.plainSubstrByWidth(time, valueWidth), valueX,
                 timeY + 5, AeStyle.TEXT, false);
     }
 

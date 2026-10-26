@@ -47,5 +47,8 @@ class TimeExpressionTest {
         assertEquals("1 分", TimeExpression.formatTicks(1200));
         assertEquals("1 时", TimeExpression.formatTicks(72000));
         assertEquals("1.5 秒", TimeExpression.formatTicks(30));
+        // 小数值不能被四舍五入成 0
+        assertEquals("0.001 t", TimeExpression.formatTicks(0.001));
+        assertEquals("0.001", TimeExpression.formatNumber(0.001));
     }
 }

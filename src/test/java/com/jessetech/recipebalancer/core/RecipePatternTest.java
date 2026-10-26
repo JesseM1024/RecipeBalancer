@@ -71,6 +71,7 @@ class RecipePatternTest {
         assertThrows(IllegalArgumentException.class, pattern::toRecipe);
 
         pattern.putOutput(0, "ingot", 1.0);
-        assertEquals(1.0, pattern.toRecipe().time(), 1e-12);
+        // 新配方默认耗时 1 tick = 0.05 秒
+        assertEquals(0.05, pattern.toRecipe().time(), 1e-12);
     }
 }

@@ -47,7 +47,7 @@ public final class TimeExpression {
         return ticks;
     }
 
-    /** 展示：自动选单位，最多两位小数（去掉末尾 0）。 */
+    /** 展示：自动选单位，最多六位小数（去掉末尾 0），保留 0.001t 这类小值。 */
     public static String formatTicks(double ticks) {
         TimeUnit unit = TimeUnit.bestFor(ticks);
         return formatNumber(unit.fromTicks(ticks)) + " " + unit.label();
@@ -59,7 +59,7 @@ public final class TimeExpression {
     }
 
     public static String formatNumber(double value) {
-        String text = String.format(Locale.ROOT, "%.2f", value);
+        String text = String.format(Locale.ROOT, "%.6f", value);
         if (text.contains(".")) {
             text = text.replaceAll("0+$", "").replaceAll("\\.$", "");
         }

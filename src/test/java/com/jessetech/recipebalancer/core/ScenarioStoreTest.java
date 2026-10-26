@@ -74,6 +74,20 @@ class ScenarioStoreTest {
     }
 
     @Test
+    void preservesSubTickRecipeTimeThroughJson() {
+        ScenarioStore store = new ScenarioStore(directory);
+        // 0.001 tick = 0.00005 秒；不能因为 JSON/展示四舍五入变成 0
+        ScenarioDraft draft = ScenarioDraft.blank();
+        draft.addRecipe(new Recipe(Map.of("ore", 1.0), Map.of("ingot", 1.0),
+                0.00005, "furnace"));
+        store.save("autosave", draft.toScenario());
+
+        Scenario loaded = store.loadDraft("autosave");
+        assertEquals(0.00005, loaded.recipes().get(0).time(), 1e-15);
+        assertEquals(0.001, loaded.recipes().get(0).time() * 20.0, 1e-15);
+    }
+
+    @Test
     void autosaveToleratesEmptyTargetsAndRecipesButManualLoadStaysStrict() {
         ScenarioStore store = new ScenarioStore(directory);
 

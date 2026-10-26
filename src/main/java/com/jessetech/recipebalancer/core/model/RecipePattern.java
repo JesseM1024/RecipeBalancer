@@ -22,14 +22,14 @@ public final class RecipePattern {
     private final String[] outputKeys = new String[MAX_OUTPUTS];
     private final double[] outputAmounts = new double[MAX_OUTPUTS];
     private String equipmentKey = "";
-    private double timeTicks = 20.0;
+    private double timeTicks = 1.0;
     private boolean truncated;
 
     public void clear() {
         clear(inputKeys, inputAmounts);
         clear(outputKeys, outputAmounts);
         equipmentKey = "";
-        timeTicks = 20.0;
+        timeTicks = 1.0;
         truncated = false;
     }
 
