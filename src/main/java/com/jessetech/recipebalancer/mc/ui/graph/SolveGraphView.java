@@ -129,6 +129,36 @@ public final class SolveGraphView {
         }
     }
 
+    /** 双向边使用的二次贝塞尔弧。 */
+    private static final class EdgeCurve {
+        final double x1;
+        final double y1;
+        final double x2;
+        final double y2;
+        final double cx;
+        final double cy;
+
+        private EdgeCurve(double x1, double y1, double x2, double y2,
+                          double cx, double cy) {
+            this.x1 = x1;
+            this.y1 = y1;
+            this.x2 = x2;
+            this.y2 = y2;
+            this.cx = cx;
+            this.cy = cy;
+        }
+
+        double pointX(double t) {
+            double mt = 1.0 - t;
+            return mt * mt * x1 + 2 * mt * t * cx + t * t * x2;
+        }
+
+        double pointY(double t) {
+            double mt = 1.0 - t;
+            return mt * mt * y1 + 2 * mt * t * cy + t * t * y2;
+        }
+    }
+
     public SolveGraphView(SolveResult result, List<Recipe> recipes) {
         this(result, recipes, Map.of(), false);
     }
@@ -1132,8 +1162,26 @@ public final class SolveGraphView {
         GEdge best = null;
         double bestDistance = 7.0;
         for (GEdge edge : edges) {
-            double distance = pointSegmentDistance(wx, wy,
-                    edge.from.x, edge.from.y, edge.to.x, edge.to.y);
+            double distance;
+            EdgeCurve curve = curveFor(edge);
+            if (curve != null) {
+                distance = Double.MAX_VALUE;
+                double prevX = curve.x1;
+                double prevY = curve.y1;
+                int segments = 14;
+                for (int i = 1; i <= segments; i++) {
+                    double t = i / (double) segments;
+                    double x = curve.pointX(t);
+                    double y = curve.pointY(t);
+                    distance = Math.min(distance,
+                            pointSegmentDistance(wx, wy, prevX, prevY, x, y));
+                    prevX = x;
+                    prevY = y;
+                }
+            } else {
+                distance = pointSegmentDistance(wx, wy,
+                        edge.from.x, edge.from.y, edge.to.x, edge.to.y);
+            }
             if (distance < bestDistance) {
                 bestDistance = distance;
                 best = edge;
@@ -1320,6 +1368,11 @@ public final class SolveGraphView {
     }
 
     private void drawEdgeGeometry(VertexConsumer consumer, Matrix4f matrix, GEdge edge) {
+        EdgeCurve curve = curveFor(edge);
+        if (curve != null) {
+            drawCurvedEdge(consumer, matrix, edge, curve);
+            return;
+        }
         double sx = edge.from.x;
         double sy = edge.from.y;
         double ex = edge.to.x;
@@ -1348,7 +1401,44 @@ public final class SolveGraphView {
                 thickness + 1, EDGE);
     }
 
-    private void drawEdgeLabel(GuiGraphics graphics, Font font, GEdge edge) {
+    private void drawCurvedEdge(VertexConsumer consumer, Matrix4f matrix,
+                                GEdge edge, EdgeCurve curve) {
+        int thickness = 1 + Math.min(4, (int) Math.sqrt(Math.max(0.0, edge.flow)) * 2);
+        int segments = 14;
+        double prevX = curve.x1;
+        double prevY = curve.y1;
+        for (int i = 1; i <= segments; i++) {
+            double t = i / (double) segments;
+            double x = curve.pointX(t);
+            double y = curve.pointY(t);
+            addLine(consumer, matrix, prevX, prevY, x, y, thickness, EDGE);
+            prevX = x;
+            prevY = y;
+        }
+        // 弧线末端的切线方向，用于箭头。
+        double tx = curve.x2 - curve.cx;
+        double ty = curve.y2 - curve.cy;
+        double len = Math.max(1e-6, Math.hypot(tx, ty));
+        tx /= len;
+        ty /= len;
+        double backX = curve.x2 - tx * 7;
+        double backY = curve.y2 - ty * 7;
+        double px = -ty;
+        double py = tx;
+        addLine(consumer, matrix, curve.x2, curve.y2,
+                backX + px * 3.5, backY + py * 3.5, thickness + 1, EDGE);
+        addLine(consumer, matrix, curve.x2, curve.y2,
+                backX - px * 3.5, backY - py * 3.5, thickness + 1, EDGE);
+    }
+
+    /**
+     * 只有“A→B 且 B→A”同时存在时才返回弧线；普通边返回 null。
+     * 弧线按节点 index 选定统一的基准方向，使两条反向边分别弯向两侧。
+     */
+    private EdgeCurve curveFor(GEdge edge) {
+        if (edge.from == edge.to || !hasReverse(edge)) {
+            return null;
+        }
         double sx = edge.from.x;
         double sy = edge.from.y;
         double ex = edge.to.x;
@@ -1365,11 +1455,62 @@ public final class SolveGraphView {
         double x2 = ex - ux * toRadius;
         double y2 = ey - uy * toRadius;
 
+        GNode canonicalFrom = edge.from.index <= edge.to.index ? edge.from : edge.to;
+        GNode canonicalTo = canonicalFrom == edge.from ? edge.to : edge.from;
+        double cdx = canonicalTo.x - canonicalFrom.x;
+        double cdy = canonicalTo.y - canonicalFrom.y;
+        double cdist = Math.max(1.0, Math.hypot(cdx, cdy));
+        double perpX = -cdy / cdist;
+        double perpY = cdx / cdist;
+        double side = edge.from == canonicalFrom ? 1.0 : -1.0;
+        double offset = Math.min(38.0, Math.max(16.0, dist * 0.18));
+        double cx = (x1 + x2) / 2 + perpX * offset * side;
+        double cy = (y1 + y2) / 2 + perpY * offset * side;
+        return new EdgeCurve(x1, y1, x2, y2, cx, cy);
+    }
+
+    private boolean hasReverse(GEdge edge) {
+        for (GEdge other : edges) {
+            if (other.from == edge.to && other.to == edge.from) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void drawEdgeLabel(GuiGraphics graphics, Font font, GEdge edge) {
+        EdgeCurve curve = curveFor(edge);
+        double labelCenterX;
+        double labelCenterY;
+        if (curve != null) {
+            labelCenterX = curve.pointX(0.5);
+            labelCenterY = curve.pointY(0.5);
+        } else {
+            double sx = edge.from.x;
+            double sy = edge.from.y;
+            double ex = edge.to.x;
+            double ey = edge.to.y;
+            double dx = ex - sx;
+            double dy = ey - sy;
+            double dist = Math.max(1.0, Math.hypot(dx, dy));
+            double ux = dx / dist;
+            double uy = dy / dist;
+            double fromRadius = (edge.from.recipe ? RECIPE : MATERIAL) * 0.55;
+            double toRadius = (edge.to.recipe ? RECIPE : MATERIAL) * 0.55;
+            double x1 = sx + ux * fromRadius;
+            double y1 = sy + uy * fromRadius;
+            double x2 = ex - ux * toRadius;
+            double y2 = ey - uy * toRadius;
+            labelCenterX = (x1 + x2) / 2 - uy * 4;
+            labelCenterY = (y1 + y2) / 2 + ux * 4;
+        }
+
         String label = TimeExpression.formatCompact(edge.flow) + "/t";
         int width = font.width(label);
-        float labelX = (float) ((x1 + x2) / 2 - width / 2.0 - uy * 4);
-        float labelY = (float) ((y1 + y2) / 2 - 4 + ux * 4);
-        graphics.drawString(font, label, (int) labelX, (int) labelY, 0xFF666666, false);
+        graphics.drawString(font, label,
+                (int) (labelCenterX - width / 2.0),
+                (int) (labelCenterY - 4),
+                0xFF666666, false);
     }
 
     private static void addLine(VertexConsumer consumer, Matrix4f matrix,
