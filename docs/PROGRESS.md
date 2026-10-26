@@ -5,6 +5,51 @@
 
 ---
 
+## R17 · 2026-10-26 · 单位记忆、目标每t、SI 紧凑数与数量表达式
+
+### 实测结果
+
+| 项 | 结果 |
+|---|---|
+| `gradlew test` | **80 tests, 0 failures** |
+| 产物 | `recipebalancer-0.1.0-1.21.1.jar` **2,306,502 B** |
+| 实机部署 | 已复制到 `1.21.1-NeoForge/mods/`（17:04:51） |
+| 未验证 | 实机 GUI 冒烟 |
+
+### 单位记忆
+
+- 新增 `UnitPreferences`（`config/recipebalancer/ui_units.properties`）：
+  - `time_unit=TICK/SECOND/MINUTE/HOUR`
+  - `rate_unit=TICK/SECOND/MINUTE/HOUR`
+- `TimeScreen` 打开时优先使用上次耗时单位；切换/确定时保存。
+- `AmountScreen` 目标速率打开时优先使用上次速率单位；切换/确定时保存。
+- 目标列表始终 `/t`，不随编辑单位改变。
+
+### 目标速率统一每 t
+
+- 一级目标格显示 `ScenarioDraft.targets` 的每 tick 原值，标签 `· /t`。
+- 新目标默认 **1/t**；状态栏 `/t`。
+- 速率编辑仍可选 `/t /s /m /h`，确认后换算成每 tick。
+- 场景 JSON 仍在边界 ×20 写每秒（Python schema 不变）。
+
+### SI 紧凑显示
+
+- 新增 `TimeExpression.formatCompact`：
+  - `30000 → 30k`、`100000 → 100k`、`1000000 → 1M`
+  - `0.0005 → 500μ`，支持 `μ m k M G T`
+- 一级编码格/目标格使用紧凑值；过长时图标数量文字等比缩小（最大 14px），不再溢出格子。
+- 二级编辑框仍用 `formatEditableNumber`，显示完整精确 double。
+
+### 数量表达式
+
+- `AmountScreen` 的用量/速率输入框改用 `TimeExpression.evaluate`：
+  - 支持 `1+2`、`2*10`、`2^3` 等；
+  - `+1/+10/...` 基于表达式求值结果继续加减；
+  - 非法表达式提示具体原因，不再只报“必须是数字”。
+- 原料/产物/设备数量仍无量纲；目标速率在表达式求值后再做单位换算。
+
+---
+
 ## R16 · 2026-10-26 · 二级菜单按钮/排版 + 目标速率单位
 
 ### 实测结果

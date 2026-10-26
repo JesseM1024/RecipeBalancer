@@ -28,6 +28,7 @@
 │   ui/AeStyle                 原版物品栏配色：C6C6C6 面板 / 8B8B8B 18px 槽 │
 │   ui/graph/GraphView         流程图绘制（GuiGraphics：节点/边/图标，M5）│
 │   itemmap/ItemKeyMapper      注册名 ↔ 图标 / 未注册物品占位渲染         │
+│   screen/UnitPreferences    记住上次耗时/速率单位（ui_units.properties）│
 │   screen/JeiPanelScreen      各面板屏幕向 JEI 暴露 guiLeft/Top/尺寸     │
 │   jei/JeiScreenSupport       resize/二级界面补发 Init.Post，刷新 JEI    │
 │   jei/RecipeBalancerJeiPlugin 所有面板 Screen 的 JEI 渲染注册（可选中） │
@@ -433,7 +434,8 @@ package com.jessetech.recipebalancer.mc.screen;
  *  编码区（原料 3 列 / 产物 2 列 × 最多 4 行），底部 9×4 背包；
  *  面板宽度按内容计算；槽位 18px 原版配色。 */
 public final class BalancerScreen extends Screen { /* M3 */ }
-/** 通用用量编辑：图标在注册名框左侧、真名在下方；目标产物带 /t /s /m /h 速率单位。 */
+/** 通用用量编辑：图标在注册名框左侧、真名在下方；目标产物带 /t /s /m /h 速率单位。
+ *  数量框支持 + - * / ^ 表达式；一级紧凑值 μ/m/k/M/G/T，二级显示精确 double。 */
 public final class AmountScreen extends Screen { /* M3 */ }
 /** 耗时编辑：表达式 + t/秒/分/时；确定后统一转 tick。 */
 public final class TimeScreen extends Screen { /* M3 */ }
