@@ -44,7 +44,7 @@
 │   detect/   RawDetector, SeedDetector, CyclicDeficitDetector(+Tarjan)  │
 │   solve/    LpSolver(接口) → CommonsMath3LpSolver；Balancer(编排)       │
 │   bootstrap/PerfectCycleBootstrapper（最小反馈顶点集→启动投料）        │
-│   time/     TimeExpression / TimeUnit（表达式解析；UI 内部统一 t）      │
+│   time/     TimeExpression / TimeUnit / RateUnit（表达式、耗时单位、速率单位）│
 │   model/    RecipePattern（编码草稿：256 原料/16 产物 + 设备 + tick）   │
 │   layout/   LayeredLayout（SCC 凝聚 → 分层 → 交叉最少化，M5）          │
 │   io/       ScenarioJson（Gson；schema 与 Python io.py 同构）          │
@@ -374,6 +374,7 @@ public final class ScenarioDraft {
     public void addRecipe(Recipe recipe);
     public void removeRecipe(int index);
     public void toggleRecipeEnabled(int index);
+    /** amount = 每 tick 数量；toScenario() 时 ×20 恢复 Python schema 的每秒。 */
     public void putTarget(String item, double amount);
     public Scenario toScenario();
 }
@@ -432,7 +433,7 @@ package com.jessetech.recipebalancer.mc.screen;
  *  编码区（原料 3 列 / 产物 2 列 × 最多 4 行），底部 9×4 背包；
  *  面板宽度按内容计算；槽位 18px 原版配色。 */
 public final class BalancerScreen extends Screen { /* M3 */ }
-/** 通用用量编辑：物品图标 + 注册名 + 数字框 + ±快捷按钮。 */
+/** 通用用量编辑：图标在注册名框左侧、真名在下方；目标产物带 /t /s /m /h 速率单位。 */
 public final class AmountScreen extends Screen { /* M3 */ }
 /** 耗时编辑：表达式 + t/秒/分/时；确定后统一转 tick。 */
 public final class TimeScreen extends Screen { /* M3 */ }
