@@ -62,13 +62,8 @@ public final class JeiRecipeButtonFactory implements IRecipeButtonControllerFact
             return 13;
         }
 
-        private int lastX = -1;
-        private int lastY = -1;
-
         @Override
         public void draw(GuiGraphics graphics, int x, int y) {
-            lastX = x;
-            lastY = y;
             for (int row = 0; row < PIXELS.length; row++) {
                 for (int col = 0; col < PIXELS[row].length; col++) {
                     graphics.fill(x + col, y + row, x + col + 1, y + row + 1, PIXELS[row][col]);
@@ -76,16 +71,17 @@ public final class JeiRecipeButtonFactory implements IRecipeButtonControllerFact
             }
         }
 
-        /** 鼠标悬浮时把最外圈黑框覆盖成白框，与 JEI 原生按钮一致。 */
-        void drawHoverBorder(GuiGraphics graphics) {
-            if (lastX < 0 || lastY < 0) {
-                return;
-            }
+        /** 用 JEI 传入的按钮矩形定位 hover 白框，避免使用图标绘制坐标导致偏移。 */
+        void drawHoverBorder(GuiGraphics graphics, Rect2i rect) {
+            int x = rect.getX();
+            int y = rect.getY();
+            int w = rect.getWidth();
+            int h = rect.getHeight();
             int white = 0xFFFFFFFF;
-            graphics.fill(lastX, lastY, lastX + 13, lastY + 1, white);
-            graphics.fill(lastX, lastY + 12, lastX + 13, lastY + 13, white);
-            graphics.fill(lastX, lastY, lastX + 1, lastY + 13, white);
-            graphics.fill(lastX + 12, lastY, lastX + 13, lastY + 13, white);
+            graphics.fill(x, y, x + w, y + 1, white);
+            graphics.fill(x, y + h - 1, x + w, y + h, white);
+            graphics.fill(x, y, x + 1, y + h, white);
+            graphics.fill(x + w - 1, y, x + w, y + h, white);
         }
     }
 
@@ -120,7 +116,7 @@ public final class JeiRecipeButtonFactory implements IRecipeButtonControllerFact
         public void drawExtras(GuiGraphics graphics, Rect2i rect, int mouseX, int mouseY,
                                float partialTick) {
             if (rect.contains(mouseX, mouseY)) {
-                icon.drawHoverBorder(graphics);
+                icon.drawHoverBorder(graphics, rect);
             }
         }
 
