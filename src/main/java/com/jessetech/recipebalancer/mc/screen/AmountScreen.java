@@ -15,7 +15,7 @@ import net.minecraft.network.chat.Component;
  * <p>用于：配方原料/产物用量、目标产物、设备标记。
  * 物品栏可以输入任意 registry id（整合包没有也能标记，界面用彩色占位格）。
  */
-public final class AmountScreen extends Screen {
+public final class AmountScreen extends Screen implements JeiPanelScreen {
 
     public interface Callback {
         void accept(String itemKey, double amount);
@@ -42,8 +42,8 @@ public final class AmountScreen extends Screen {
         this.callback = callback;
     }
 
-    private int panelX;
-    private int panelY;
+    private int panelX = 40;
+    private int panelY = 40;
     private int panelW = 220;
     private int panelH = 168;
 
@@ -194,6 +194,26 @@ public final class AmountScreen extends Screen {
         if (minecraft != null) {
             minecraft.setScreen(parent);
         }
+    }
+
+    @Override
+    public int jeiGuiLeft() {
+        return panelX;
+    }
+
+    @Override
+    public int jeiGuiTop() {
+        return panelY;
+    }
+
+    @Override
+    public int jeiGuiWidth() {
+        return panelW;
+    }
+
+    @Override
+    public int jeiGuiHeight() {
+        return panelH;
     }
 
     @Override

@@ -133,7 +133,8 @@ public final class ItemKeyMapper {
     }
 
     /**
-     * 画一个 16×16 图标格。已注册物品用真实图标；未注册画彩色方块 + 短标签。
+     * 画一个 18px 物品槽的内区图标（物品 16×16 居中，1px 边距）。
+     * 已注册物品用真实图标；未注册画彩色方块 + 短标签。
      *
      * @param amount 右下角数量文本；null/空 = 不画
      */
@@ -144,21 +145,22 @@ public final class ItemKeyMapper {
         }
         ItemStack stack = stack(id);
         if (!stack.isEmpty()) {
-            graphics.renderItem(stack, x, y);
-            graphics.renderItemDecorations(font, stack, x, y, amount == null ? "" : amount);
+            graphics.renderItem(stack, x + 1, y + 1);
+            graphics.renderItemDecorations(font, stack, x + 1, y + 1,
+                    amount == null ? "" : amount);
             return;
         }
         int color = placeholderColor(id);
-        graphics.fill(x, y, x + 16, y + 16, color);
-        graphics.fill(x, y, x + 16, y + 1, 0x40FFFFFF);
-        graphics.fill(x, y + 15, x + 16, y + 16, 0x60000000);
+        graphics.fill(x + 1, y + 1, x + 17, y + 17, color);
+        graphics.fill(x + 1, y + 1, x + 17, y + 2, 0x40FFFFFF);
+        graphics.fill(x + 1, y + 16, x + 17, y + 17, 0x60000000);
         String label = shortLabel(id);
-        int textX = x + 8 - font.width(label) / 2;
-        int textY = y + 4;
+        int textX = x + 9 - font.width(label) / 2;
+        int textY = y + 5;
         graphics.drawString(font, label, textX, textY, 0xFF101010, false);
         if (amount != null && !amount.isBlank()) {
             int width = font.width(amount);
-            graphics.drawString(font, amount, x + 16 - width, y + 8, 0xFFFFFFFF, true);
+            graphics.drawString(font, amount, x + 17 - width, y + 9, 0xFFFFFFFF, true);
         }
     }
 

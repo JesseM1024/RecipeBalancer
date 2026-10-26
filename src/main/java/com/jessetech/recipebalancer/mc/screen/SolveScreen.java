@@ -11,17 +11,17 @@ import java.util.ArrayList;
 import java.util.List;
 
 /** 求解结果二级页：只看报告，避免一级编码界面被文字挤占。 */
-public final class SolveScreen extends Screen {
+public final class SolveScreen extends Screen implements JeiPanelScreen {
 
     private final Screen parent;
     private final String report;
     private final boolean success;
     private List<FormattedCharSequence> lines = List.of();
     private double scroll;
-    private int panelX;
-    private int panelY;
-    private int panelW;
-    private int panelH;
+    private int panelX = 40;
+    private int panelY = 40;
+    private int panelW = 560;
+    private int panelH = 360;
     private int textY;
     private int textH;
 
@@ -101,6 +101,26 @@ public final class SolveScreen extends Screen {
         if (minecraft != null) {
             minecraft.setScreen(parent);
         }
+    }
+
+    @Override
+    public int jeiGuiLeft() {
+        return panelX;
+    }
+
+    @Override
+    public int jeiGuiTop() {
+        return panelY;
+    }
+
+    @Override
+    public int jeiGuiWidth() {
+        return panelW;
+    }
+
+    @Override
+    public int jeiGuiHeight() {
+        return panelH;
     }
 
     @Override

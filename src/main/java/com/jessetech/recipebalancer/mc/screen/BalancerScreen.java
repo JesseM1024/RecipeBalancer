@@ -32,16 +32,16 @@ import java.util.Map;
  * 左键从背包拿起物品、点格子放置/删除；中键改用量或自定义物品；右键配方库两次删除。
  * 求解进入二级结果页，避免挤占一级界面。
  */
-public final class BalancerScreen extends Screen {
+public final class BalancerScreen extends Screen implements JeiPanelScreen {
 
-    private static final int SLOT = 16;
+    private static final int SLOT = 18;
     private static final int GRID_COLS = 3;
-    private static final int VISIBLE_ROWS = 3;
     private static final int LIB_COLS = 4;
-    private static final int LIB_ROWS = 2;
     private static final int TARGET_SLOTS = 6;
     private static final int INV_COLS = 9;
     private static final int INV_ROWS = 4;
+    private int libRows = 2;
+    private int visibleRows = 2;
     private static final long DELETE_WINDOW_MS = 500L;
 
     private static final ScenarioStore STORE = new ScenarioStore(
@@ -59,10 +59,11 @@ public final class BalancerScreen extends Screen {
     private int lastRightClickIndex = -1;
     private long lastRightClickTime;
 
-    private int panelX;
-    private int panelY;
-    private int panelW;
-    private int panelH;
+    // 默认值让 JEI 在首次 Screen init 之前查询属性也能得到合法尺寸
+    private int panelX = 40;
+    private int panelY = 4;
+    private int panelW = 360;
+    private int panelH = 300;
     private int topY;
     private int targetY;
     private int libraryLabelY;
@@ -89,19 +90,49 @@ public final class BalancerScreen extends Screen {
     @Override
     protected void init() {
         panelW = Math.min(330, width - 8);
-        panelH = Math.min(238, height - 8);
+        panelH = height - 8;
         panelX = (width - panelW) / 2;
-        panelY = (height - panelH) / 2;
+        panelY = 4;
 
-        topY = panelY + 4;
-        targetY = topY + 17;
-        libraryLabelY = targetY + 17;
-        libraryY = libraryLabelY + 10;
-        encodingLabelY = libraryY + LIB_ROWS * SLOT + 4;
-        encodingY = encodingLabelY + 10;
-        inventoryLabelY = encodingY + VISIBLE_ROWS * SLOT + 4;
-        inventoryY = inventoryLabelY + 10;
-        statusY = panelY + panelH - 10;
+        // 高度优先给配方库，再给编码可视行；至少 2+2 行
+        int fixed = 153;
+        int free = Math.max(2 * SLOT, panelH - fixed);
+        libRows = 2;
+        visibleRows = 2;
+        int remaining = free - (libRows + visibleRows) * SLOT;
+        // 先把两边都抬到 4 行，再交替加到 8 行，最后把剩余高度给配方库
+        while (remaining >= SLOT && libRows < 4) {
+            libRows++;
+            remaining -= SLOT;
+        }
+        while (remaining >= SLOT && visibleRows < 4) {
+            visibleRows++;
+            remaining -= SLOT;
+        }
+        while (remaining >= SLOT && (libRows < 8 || visibleRows < 8)) {
+            if (libRows <= visibleRows && libRows < 8) {
+                libRows++;
+            } else if (visibleRows < 8) {
+                visibleRows++;
+            } else {
+                libRows++;
+            }
+            remaining -= SLOT;
+        }
+        while (remaining >= SLOT && libRows < 12) {
+            libRows++;
+            remaining -= SLOT;
+        }
+
+        topY = panelY + 3;
+        targetY = topY + 19;
+        libraryLabelY = targetY + 19;
+        libraryY = libraryLabelY + 9;
+        encodingLabelY = libraryY + libRows * SLOT + 2;
+        encodingY = encodingLabelY + 9;
+        inventoryLabelY = encodingY + visibleRows * SLOT + 2;
+        inventoryY = inventoryLabelY + 9;
+        statusY = panelY + panelH - 9;
 
         inputX = panelX + 4;
         outputX = inputX + GRID_COLS * SLOT + 18;
@@ -109,38 +140,38 @@ public final class BalancerScreen extends Screen {
         inventoryX = panelX + 4;
 
         libraryScroll = Math.max(0, Math.min(libraryScroll,
-                Math.max(0, recipeRows() - LIB_ROWS)));
+                Math.max(0, recipeRows() - libRows)));
         encodingScrollRow = Math.max(0, Math.min(encodingScrollRow, maxEncodingScroll()));
 
-        int topButtonW = 38;
+        int topButtonW = 40;
         int topButtonX = panelX + panelW - 4 - 3 * (topButtonW + 2);
         addRenderableWidget(Button.builder(Component.literal("目标"), b -> openTargets())
-                .bounds(topButtonX, topY, topButtonW, 16).build());
+                .bounds(topButtonX, topY, topButtonW, 18).build());
         addRenderableWidget(Button.builder(Component.literal("载入"), b -> openScenarios())
-                .bounds(topButtonX + topButtonW + 2, topY, topButtonW, 16).build());
+                .bounds(topButtonX + topButtonW + 2, topY, topButtonW, 18).build());
         addRenderableWidget(Button.builder(Component.literal("求解"), b -> solveNow())
-                .bounds(topButtonX + 2 * (topButtonW + 2), topY, topButtonW, 16).build());
+                .bounds(topButtonX + 2 * (topButtonW + 2), topY, topButtonW, 18).build());
 
         addRenderableWidget(Button.builder(Component.literal("写入"),
                         b -> commitPattern(true))
-                .bounds(equipmentX + 48, encodingY, 38, 16).build());
+                .bounds(equipmentX + 48, encodingY, 40, 18).build());
         addRenderableWidget(Button.builder(Component.literal("新建"),
                         b -> newPattern())
-                .bounds(equipmentX + 48, encodingY + 20, 38, 16).build());
+                .bounds(equipmentX + 48, encodingY + 20, 40, 18).build());
 
-        int optionW = 58;
+        int optionW = 46;
         objectiveButton = addRenderableWidget(Button.builder(Component.literal("目标:设备"),
                         b -> draft.toggleObjective())
-                .bounds(panelX + 156, inventoryY, optionW, 16).build());
+                .bounds(panelX + 170, inventoryY, optionW, 18).build());
         rawButton = addRenderableWidget(Button.builder(Component.literal("原料:开"),
                         b -> draft.toggleAutoDetectRaw())
-                .bounds(panelX + 156 + optionW + 3, inventoryY, optionW, 16).build());
+                .bounds(panelX + 170 + optionW + 3, inventoryY, optionW, 18).build());
         seedButton = addRenderableWidget(Button.builder(Component.literal("种子:开"),
                         b -> draft.toggleAutoDetectSeed())
-                .bounds(panelX + 156, inventoryY + 18, optionW, 16).build());
+                .bounds(panelX + 170, inventoryY + 20, optionW, 18).build());
         bootstrapButton = addRenderableWidget(Button.builder(Component.literal("投料:开"),
                         b -> draft.toggleAutoBootstrap())
-                .bounds(panelX + 156 + optionW + 3, inventoryY + 18, optionW, 16).build());
+                .bounds(panelX + 170 + optionW + 3, inventoryY + 20, optionW, 18).build());
     }
 
     private static ScenarioDraft loadAutosave() {
@@ -213,15 +244,15 @@ public final class BalancerScreen extends Screen {
     private void drawLibrary(GuiGraphics graphics, int mouseX, int mouseY) {
         int total = draft.recipeCount();
         libraryScroll = Math.max(0, Math.min(libraryScroll,
-                Math.max(0, recipeRows() - LIB_ROWS)));
+                Math.max(0, recipeRows() - libRows)));
         graphics.fill(panelX + 2, libraryY - 2, panelX + 8 + LIB_COLS * (SLOT + 1),
-                libraryY + LIB_ROWS * SLOT, 0x30000000);
+                libraryY + libRows * SLOT, 0x30000000);
         if (total == 0) {
             graphics.drawString(font, "（空）在下方编码后点「写入」", panelX + 6, libraryY + 4,
                     AeStyle.MUTED, false);
             return;
         }
-        for (int row = 0; row < LIB_ROWS; row++) {
+        for (int row = 0; row < libRows; row++) {
             for (int col = 0; col < LIB_COLS; col++) {
                 int index = (libraryScroll + row) * LIB_COLS + col;
                 if (index >= total) {
@@ -263,7 +294,7 @@ public final class BalancerScreen extends Screen {
                 AeStyle.MUTED, false);
 
         encodingScrollRow = Math.max(0, Math.min(encodingScrollRow, maxEncodingScroll()));
-        for (int row = 0; row < VISIBLE_ROWS; row++) {
+        for (int row = 0; row < visibleRows; row++) {
             int gridRow = encodingScrollRow + row;
             for (int col = 0; col < GRID_COLS; col++) {
                 int index = gridRow * GRID_COLS + col;
@@ -293,9 +324,9 @@ public final class BalancerScreen extends Screen {
         if (maxScroll > 0) {
             int barX = panelX + panelW - 7;
             int barY = encodingY;
-            int barH = VISIBLE_ROWS * SLOT;
+            int barH = visibleRows * SLOT;
             graphics.fill(barX, barY, barX + 3, barY + barH, 0xFF6E6E6E);
-            int thumbH = Math.max(8, barH * VISIBLE_ROWS / (VISIBLE_ROWS + maxScroll));
+            int thumbH = Math.max(8, barH * visibleRows / (visibleRows + maxScroll));
             int thumbY = barY + (barH - thumbH) * encodingScrollRow / maxScroll;
             graphics.fill(barX, thumbY, barX + 3, thumbY + thumbH, AeStyle.ACCENT_LIGHT);
         }
@@ -315,7 +346,7 @@ public final class BalancerScreen extends Screen {
             time = TimeExpression.formatNumber(pattern.timeTicks() / 20.0) + "s";
         }
         graphics.drawString(font, font.plainSubstrByWidth(time, SLOT), equipmentX + 1,
-                timeY + 4, 0xFFFFD080, false);
+                timeY + 5, AeStyle.TEXT, false);
     }
 
     private void drawInventory(GuiGraphics graphics, int mouseX, int mouseY) {
@@ -332,8 +363,8 @@ public final class BalancerScreen extends Screen {
                 int index = row < 3 ? 9 + row * 9 + col : col;
                 ItemStack stack = inventory.getItem(index);
                 if (!stack.isEmpty()) {
-                    graphics.renderItem(stack, x, y);
-                    graphics.renderItemDecorations(font, stack, x, y);
+                    graphics.renderItem(stack, x + 1, y + 1);
+                    graphics.renderItemDecorations(font, stack, x + 1, y + 1);
                 }
             }
         }
@@ -471,7 +502,7 @@ public final class BalancerScreen extends Screen {
     }
 
     private int libraryIndexAt(double mouseX, double mouseY) {
-        for (int row = 0; row < LIB_ROWS; row++) {
+        for (int row = 0; row < libRows; row++) {
             for (int col = 0; col < LIB_COLS; col++) {
                 int x = panelX + 4 + col * (SLOT + 1);
                 int y = libraryY + row * SLOT;
@@ -499,12 +530,12 @@ public final class BalancerScreen extends Screen {
         int maxRows = (RecipePattern.MAX_INPUTS + GRID_COLS - 1) / GRID_COLS;
         // 多留一行空格：最后一格填满后仍能滚到下一行继续添加
         int rows = last < 0 ? 1 : Math.min(maxRows, last / GRID_COLS + 2);
-        return Math.max(0, rows - VISIBLE_ROWS);
+        return Math.max(0, rows - visibleRows);
     }
 
     /** [0=输入,1=输出, index]；不在可见格子上返回 null。 */
     private int[] encodingSlotAt(double mouseX, double mouseY) {
-        for (int row = 0; row < VISIBLE_ROWS; row++) {
+        for (int row = 0; row < visibleRows; row++) {
             for (int col = 0; col < GRID_COLS; col++) {
                 int index = (encodingScrollRow + row) * GRID_COLS + col;
                 int y = encodingY + row * SLOT;
@@ -731,13 +762,13 @@ public final class BalancerScreen extends Screen {
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
         if (mouseX >= panelX && mouseY >= libraryY - 2
-                && mouseY < libraryY + LIB_ROWS * SLOT) {
+                && mouseY < libraryY + libRows * SLOT) {
             libraryScroll = Math.max(0, Math.min(libraryScroll + (scrollY < 0 ? 1 : -1),
-                    Math.max(0, recipeRows() - LIB_ROWS)));
+                    Math.max(0, recipeRows() - libRows)));
             return true;
         }
         if (mouseX >= inputX && mouseX < panelX + panelW - 4
-                && mouseY >= encodingY && mouseY < encodingY + VISIBLE_ROWS * SLOT) {
+                && mouseY >= encodingY && mouseY < encodingY + visibleRows * SLOT) {
             encodingScrollRow = Math.max(0, Math.min(
                     encodingScrollRow + (scrollY < 0 ? 1 : -1), maxEncodingScroll()));
             return true;
@@ -882,18 +913,22 @@ public final class BalancerScreen extends Screen {
     }
 
     // JEI 非 ContainerScreen 渲染（RecipeBalancerJeiPlugin 使用）
+    @Override
     public int jeiGuiLeft() {
         return panelX;
     }
 
+    @Override
     public int jeiGuiTop() {
         return panelY;
     }
 
+    @Override
     public int jeiGuiWidth() {
         return panelW;
     }
 
+    @Override
     public int jeiGuiHeight() {
         return panelH;
     }

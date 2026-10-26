@@ -14,15 +14,15 @@ import java.util.List;
 import java.util.Map;
 
 /** 目标产物列表：左侧点击编辑用量，右键删除，空白处「添加目标」。 */
-public final class TargetListScreen extends Screen {
+public final class TargetListScreen extends Screen implements JeiPanelScreen {
 
     private final BalancerScreen parent;
     private final ScenarioDraft draft;
     private double scroll;
     private String status = "";
 
-    private int panelX;
-    private int panelY;
+    private int panelX = 40;
+    private int panelY = 40;
     private static final int PANEL_W = 248;
     private static final int PANEL_H = 186;
     private int listY;
@@ -159,6 +159,26 @@ public final class TargetListScreen extends Screen {
         if (minecraft != null) {
             minecraft.setScreen(parent);
         }
+    }
+
+    @Override
+    public int jeiGuiLeft() {
+        return panelX;
+    }
+
+    @Override
+    public int jeiGuiTop() {
+        return panelY;
+    }
+
+    @Override
+    public int jeiGuiWidth() {
+        return PANEL_W;
+    }
+
+    @Override
+    public int jeiGuiHeight() {
+        return PANEL_H;
     }
 
     @Override

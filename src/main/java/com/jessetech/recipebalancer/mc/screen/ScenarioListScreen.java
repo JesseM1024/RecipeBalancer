@@ -14,7 +14,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /** 已保存配方集（场景）列表：载入 / 另存 / 删除。 */
-public final class ScenarioListScreen extends Screen {
+public final class ScenarioListScreen extends Screen implements JeiPanelScreen {
 
     private final BalancerScreen parent;
     private final ScenarioStore store;
@@ -25,8 +25,8 @@ public final class ScenarioListScreen extends Screen {
     private String status = "";
     private EditBox nameBox;
 
-    private int panelX;
-    private int panelY;
+    private int panelX = 40;
+    private int panelY = 40;
     private static final int PANEL_W = 264;
     private static final int PANEL_H = 204;
     private int listY;
@@ -181,6 +181,26 @@ public final class ScenarioListScreen extends Screen {
         if (minecraft != null) {
             minecraft.setScreen(parent);
         }
+    }
+
+    @Override
+    public int jeiGuiLeft() {
+        return panelX;
+    }
+
+    @Override
+    public int jeiGuiTop() {
+        return panelY;
+    }
+
+    @Override
+    public int jeiGuiWidth() {
+        return PANEL_W;
+    }
+
+    @Override
+    public int jeiGuiHeight() {
+        return PANEL_H;
     }
 
     @Override
