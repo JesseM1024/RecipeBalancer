@@ -75,6 +75,7 @@ public final class SolveGraphView {
         final int recipeId;
         final Category category;
         final int machines;
+        int index;
         double x;
         double y;
 
@@ -180,16 +181,23 @@ public final class SolveGraphView {
         if (nodes.isEmpty()) {
             return;
         }
-        Random random = new Random(0x5EEDL);
-        double radius = 60 + Math.min(170, nodes.size() * 2.4);
         for (int i = 0; i < nodes.size(); i++) {
-            double angle = 2 * Math.PI * i / nodes.size() + random.nextDouble() * 0.3;
-            double r = radius * (0.45 + random.nextDouble() * 0.55);
+            nodes.get(i).index = i;
+        }
+        Random random = new Random(0x5EEDL);
+        double targetRadius = Math.max(80, nodes.size() * 8.5);
+        for (int i = 0; i < nodes.size(); i++) {
+            double angle = 2 * Math.PI * i / nodes.size() + random.nextDouble() * 0.35;
+            double r = targetRadius * (0.65 + random.nextDouble() * 0.35);
             nodes.get(i).x = Math.cos(angle) * r;
             nodes.get(i).y = Math.sin(angle) * r;
         }
 
-        double k = 54.0;
+        // 势能最小化：
+        // 1) 节点斥力 + 最短距离约束；2) 边弹簧（固定自然长度）；
+        // 3) 向心/圆环势能；4) 碰撞松弛；5) 交叉/穿节点的局部能量搜索。
+        double k = 52.0;
+        double restLength = 72.0;
         int iterations = nodes.size() > 180 ? 140 : 260;
         for (int iteration = 0; iteration < iterations; iteration++) {
             double temperature = Math.max(1.0, k * (1.0 - iteration / (double) iterations));
@@ -203,11 +211,10 @@ public final class SolveGraphView {
                     double vx = a.x - b.x;
                     double vy = a.y - b.y;
                     double dist = Math.max(1.0, Math.hypot(vx, vy));
-                    double minDist = (a.recipe ? RECIPE : MATERIAL) / 2.0
-                            + (b.recipe ? RECIPE : MATERIAL) / 2.0 + 12;
+                    double minDist = minDistance(a, b);
                     double force = k * k / dist;
                     if (dist < minDist) {
-                        force += (minDist - dist) * 3.0;
+                        force += (minDist - dist) * 5.0;
                     }
                     double ux = vx / dist;
                     double uy = vy / dist;
@@ -219,31 +226,25 @@ public final class SolveGraphView {
             }
 
             for (GEdge edge : edges) {
-                int i = nodes.indexOf(edge.from);
-                int j = nodes.indexOf(edge.to);
-                if (i < 0 || j < 0) {
-                    continue;
-                }
                 double vx = edge.from.x - edge.to.x;
                 double vy = edge.from.y - edge.to.y;
                 double dist = Math.max(1.0, Math.hypot(vx, vy));
-                double force = dist * dist / k;
+                double force = (dist - restLength) * 0.065;
                 double ux = vx / dist;
                 double uy = vy / dist;
-                dx[i] -= ux * force;
-                dy[i] -= uy * force;
-                dx[j] += ux * force;
-                dy[j] += uy * force;
+                dx[edge.from.index] -= ux * force;
+                dy[edge.from.index] -= uy * force;
+                dx[edge.to.index] += ux * force;
+                dy[edge.to.index] += uy * force;
             }
 
-            double targetRadius = 58 + Math.sqrt(nodes.size()) * 21.0;
             for (int i = 0; i < nodes.size(); i++) {
                 GNode node = nodes.get(i);
                 double dist = Math.max(1.0, Math.hypot(node.x, node.y));
-                // 向心 + 圆环约束：整体团成一个圆形簇
-                dx[i] -= node.x / dist * dist * 0.06;
-                dy[i] -= node.y / dist * dist * 0.06;
-                double radial = (dist - targetRadius) * 0.075;
+                // 向心重力 + 圆环径向势能，保持整体圆形且不散开
+                dx[i] -= node.x / dist * dist * 0.055;
+                dy[i] -= node.y / dist * dist * 0.055;
+                double radial = (dist - targetRadius) * 0.09;
                 dx[i] -= node.x / dist * radial;
                 dy[i] -= node.y / dist * radial;
                 double length = Math.max(1.0, Math.hypot(dx[i], dy[i]));
@@ -252,6 +253,10 @@ public final class SolveGraphView {
                 node.y += dy[i] / length * step;
             }
         }
+
+        collisionRelax();
+        minimizeCrossings(targetRadius);
+        collisionRelax();
 
         minX = Double.MAX_VALUE;
         minY = Double.MAX_VALUE;
@@ -267,6 +272,156 @@ public final class SolveGraphView {
         contentW = Math.max(1.0, maxX - minX);
         contentH = Math.max(1.0, maxY - minY);
         cameraReady = false;
+    }
+
+    private static double minDistance(GNode a, GNode b) {
+        return (a.recipe ? RECIPE : MATERIAL) / 2.0
+                + (b.recipe ? RECIPE : MATERIAL) / 2.0 + 24.0;
+    }
+
+    /** 碰撞松弛：保证节点/标签区域至少保有固定间距。 */
+    private void collisionRelax() {
+        for (int pass = 0; pass < 12; pass++) {
+            for (int i = 0; i < nodes.size(); i++) {
+                GNode a = nodes.get(i);
+                for (int j = i + 1; j < nodes.size(); j++) {
+                    GNode b = nodes.get(j);
+                    double dx = a.x - b.x;
+                    double dy = a.y - b.y;
+                    double dist = Math.hypot(dx, dy);
+                    double min = minDistance(a, b);
+                    if (dist >= min || dist < 1e-6) {
+                        continue;
+                    }
+                    double push = (min - dist) * 0.51;
+                    double ux = dx / dist;
+                    double uy = dy / dist;
+                    a.x += ux * push;
+                    a.y += uy * push;
+                    b.x -= ux * push;
+                    b.y -= uy * push;
+                }
+            }
+        }
+    }
+
+    /**
+     * 局部能量搜索：用较小的候选位移降低
+     * 边交叉数、边穿节点数、边长和节点重叠；比全局模拟退火快得多。
+     */
+    private void minimizeCrossings(double targetRadius) {
+        if (edges.size() < 2 || nodes.size() > 260) {
+            return;
+        }
+        int passes = edges.size() <= 180 ? 4 : 2;
+        for (int pass = 0; pass < passes; pass++) {
+            boolean changed = false;
+            for (GNode node : nodes) {
+                List<GEdge> incident = new ArrayList<>();
+                for (GEdge edge : edges) {
+                    if (edge.from == node || edge.to == node) {
+                        incident.add(edge);
+                    }
+                }
+                if (incident.isEmpty()) {
+                    continue;
+                }
+                double bestX = node.x;
+                double bestY = node.y;
+                double bestCost = localCost(node, node.x, node.y, incident, targetRadius);
+                for (int direction = 0; direction < 16; direction++) {
+                    double angle = Math.PI * 2 * direction / 16.0;
+                    for (double radius : new double[]{12.0, 24.0, 38.0}) {
+                        double candidateX = node.x + Math.cos(angle) * radius;
+                        double candidateY = node.y + Math.sin(angle) * radius;
+                        double cost = localCost(node, candidateX, candidateY,
+                                incident, targetRadius);
+                        if (cost + 1e-6 < bestCost) {
+                            bestCost = cost;
+                            bestX = candidateX;
+                            bestY = candidateY;
+                        }
+                    }
+                }
+                if (bestX != node.x || bestY != node.y) {
+                    node.x = bestX;
+                    node.y = bestY;
+                    changed = true;
+                }
+            }
+            if (!changed) {
+                break;
+            }
+            collisionRelax();
+        }
+    }
+
+    private double localCost(GNode node, double x, double y,
+                             List<GEdge> incident, double targetRadius) {
+        double cost = 0.0;
+        double dist = Math.max(1.0, Math.hypot(x, y));
+        cost += Math.pow(dist - targetRadius, 2) * 0.002;
+
+        for (GEdge edge : incident) {
+            GNode other = edge.from == node ? edge.to : edge.from;
+            double dx = x - other.x;
+            double dy = y - other.y;
+            cost += (dx * dx + dy * dy) * 0.005;
+        }
+
+        for (GNode other : nodes) {
+            if (other == node) {
+                continue;
+            }
+            double dx = x - other.x;
+            double dy = y - other.y;
+            double d = Math.hypot(dx, dy);
+            double min = minDistance(node, other);
+            if (d < min) {
+                cost += (min - d) * (min - d) * 8.0;
+            }
+        }
+
+        for (GEdge edge : incident) {
+            double ax = edge.from == node ? x : edge.from.x;
+            double ay = edge.from == node ? y : edge.from.y;
+            double bx = edge.to == node ? x : edge.to.x;
+            double by = edge.to == node ? y : edge.to.y;
+
+            for (GEdge other : edges) {
+                if (other == edge || other.from == node || other.to == node) {
+                    continue;
+                }
+                if (segmentsIntersect(ax, ay, bx, by,
+                        other.from.x, other.from.y, other.to.x, other.to.y)) {
+                    cost += 800.0;
+                }
+            }
+            for (GNode check : nodes) {
+                if (check == node || check == edge.from || check == edge.to) {
+                    continue;
+                }
+                if (pointSegmentDistance(check.x, check.y, ax, ay, bx, by) < 14.0) {
+                    cost += 350.0;
+                }
+            }
+        }
+        return cost;
+    }
+
+    private static boolean segmentsIntersect(double ax, double ay, double bx, double by,
+                                             double cx, double cy, double dx, double dy) {
+        double o1 = cross(ax, ay, bx, by, cx, cy);
+        double o2 = cross(ax, ay, bx, by, dx, dy);
+        double o3 = cross(cx, cy, dx, dy, ax, ay);
+        double o4 = cross(cx, cy, dx, dy, bx, by);
+        return ((o1 > 1e-6 && o2 < -1e-6) || (o1 < -1e-6 && o2 > 1e-6))
+                && ((o3 > 1e-6 && o4 < -1e-6) || (o3 < -1e-6 && o4 > 1e-6));
+    }
+
+    private static double cross(double ax, double ay, double bx, double by,
+                                double cx, double cy) {
+        return (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
     }
 
     public void resetCamera(int areaW, int areaH) {
