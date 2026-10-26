@@ -49,6 +49,7 @@ public final class SolveGraphView {
     private static final double EDGE_REST = 84.0;
     private static final long AUTO_SETTLE_NANOS = 2_000_000_000L;
     private static final double AUTO_STEP_SECONDS = 1.0 / 100.0;
+    private static final double AUTO_MAX_MOVE = 6.0;
 
     private enum Category {
         INPUT, INTERMEDIATE, STARTUP, BYPRODUCT, TARGET
@@ -547,6 +548,10 @@ public final class SolveGraphView {
     }
 
     private void settleStep(boolean collide) {
+        settleStep(collide, 2.0);
+    }
+
+    private void settleStep(boolean collide, double maxMove) {
         rebuildGrid();
         double influence = 170.0;
         for (GNode node : nodes) {
@@ -578,8 +583,8 @@ public final class SolveGraphView {
                 moveX -= dx / dist * spring;
                 moveY -= dy / dist * spring;
             }
-            node.x += Math.max(-2.0, Math.min(2.0, moveX));
-            node.y += Math.max(-2.0, Math.min(2.0, moveY));
+            node.x += Math.max(-maxMove, Math.min(maxMove, moveX));
+            node.y += Math.max(-maxMove, Math.min(maxMove, moveY));
         }
         if (collide) {
             collisionRelax();
@@ -638,7 +643,7 @@ public final class SolveGraphView {
         elasticStep(autoAnchor);
         autoAnchor.x = anchorX;
         autoAnchor.y = anchorY;
-        settleStep(false);
+        settleStep(false, AUTO_MAX_MOVE);
         autoAnchor.x = anchorX;
         autoAnchor.y = anchorY;
         if (autoSettleStepCounter % 8 == 0) {
