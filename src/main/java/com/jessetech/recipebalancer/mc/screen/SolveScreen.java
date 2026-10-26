@@ -12,6 +12,7 @@ import net.minecraft.util.FormattedCharSequence;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 /** 求解结果二级页：只看报告，避免一级编码界面被文字挤占。 */
 public final class SolveScreen extends Screen implements JeiPanelScreen {
@@ -21,12 +22,15 @@ public final class SolveScreen extends Screen implements JeiPanelScreen {
     private final boolean success;
     private final SolveResult result;
     private final List<Recipe> recipes;
+    private final Set<String> targets;
+    private final boolean inventoryEnabled;
     private List<FormattedCharSequence> lines = List.of();
     private SolveGraphView graph;
     private boolean graphMode;
+    private boolean graphDragging;
+    private double lastGraphMouseX;
+    private double lastGraphMouseY;
     private double scroll;
-    private double graphScrollX;
-    private double graphScrollY;
     private int panelX = 40;
     private int panelY = 40;
     private int panelW = 560;
@@ -36,16 +40,19 @@ public final class SolveScreen extends Screen implements JeiPanelScreen {
     private Button toggleButton;
 
     public SolveScreen(Screen parent, String report, boolean success) {
-        this(parent, report, null, List.of(), success);
+        this(parent, report, null, List.of(), Set.of(), false, success);
     }
 
     public SolveScreen(Screen parent, String report, SolveResult result,
-                       List<Recipe> recipes, boolean success) {
+                       List<Recipe> recipes, Set<String> targets,
+                       boolean inventoryEnabled, boolean success) {
         super(Component.literal("求解结果"));
         this.parent = parent;
         this.report = report;
         this.result = result;
         this.recipes = recipes == null ? List.of() : recipes;
+        this.targets = targets == null ? Set.of() : Set.copyOf(targets);
+        this.inventoryEnabled = inventoryEnabled;
         this.success = success;
     }
 
@@ -68,7 +75,8 @@ public final class SolveScreen extends Screen implements JeiPanelScreen {
             }
         }
         lines = built;
-        graph = success && result != null ? new SolveGraphView(result, recipes) : null;
+        graph = success && result != null
+                ? new SolveGraphView(result, recipes, targets, inventoryEnabled) : null;
 
         addRenderableWidget(Button.builder(Component.literal("返回编码"), b -> minecraft.setScreen(parent))
                 .bounds(panelX + 8, panelY + panelH - 26, 100, 20).build());
@@ -89,9 +97,8 @@ public final class SolveScreen extends Screen implements JeiPanelScreen {
         }
         if (!graphMode) {
             scroll = 0;
-        } else {
-            graphScrollX = 0;
-            graphScrollY = 0;
+        } else if (graph != null) {
+            graph.resetCamera(panelW - 8, textH);
         }
     }
 
@@ -135,27 +142,52 @@ public final class SolveScreen extends Screen implements JeiPanelScreen {
     }
 
     private void renderGraph(GuiGraphics graphics) {
-        int areaX = panelX + 4;
-        int areaY = textY;
-        int areaW = panelW - 8;
-        int areaH = textH;
-        graphScrollX = Math.max(0, Math.min(graphScrollX,
-                Math.max(0, graph.contentWidth() - areaW)));
-        graphScrollY = Math.max(0, Math.min(graphScrollY,
-                Math.max(0, graph.contentHeight() - areaH)));
-        graph.render(graphics, font, areaX, areaY, areaW, areaH,
-                (int) graphScrollX, (int) graphScrollY);
-        graphics.drawString(font, "配方流程图 · 滚轮滚动 / Shift+滚轮横移",
-                areaX + 4, areaY + 4, AeStyle.MUTED, false);
+        graph.render(graphics, font, panelX + 4, textY, panelW - 8, textH);
+    }
+
+    private boolean inGraphArea(double mouseX, double mouseY) {
+        return mouseX >= panelX + 4 && mouseX < panelX + panelW - 4
+                && mouseY >= textY && mouseY < textY + textH;
+    }
+
+    @Override
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (graphMode && graph != null && button == 0 && inGraphArea(mouseX, mouseY)) {
+            graphDragging = true;
+            lastGraphMouseX = mouseX;
+            lastGraphMouseY = mouseY;
+            return true;
+        }
+        return super.mouseClicked(mouseX, mouseY, button);
+    }
+
+    @Override
+    public boolean mouseDragged(double mouseX, double mouseY, int button,
+                                double dragX, double dragY) {
+        if (graphDragging && graph != null) {
+            graph.panBy(mouseX - lastGraphMouseX, mouseY - lastGraphMouseY);
+            lastGraphMouseX = mouseX;
+            lastGraphMouseY = mouseY;
+            return true;
+        }
+        return super.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+    }
+
+    @Override
+    public boolean mouseReleased(double mouseX, double mouseY, int button) {
+        if (graphDragging) {
+            graphDragging = false;
+            return true;
+        }
+        return super.mouseReleased(mouseX, mouseY, button);
     }
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
         if (graphMode && graph != null) {
-            if (hasShiftDown()) {
-                graphScrollX -= scrollY * 24;
-            } else {
-                graphScrollY -= scrollY * 24;
+            if (inGraphArea(mouseX, mouseY)) {
+                graph.zoomAt(mouseX - (panelX + 4), mouseY - textY,
+                        Math.pow(1.18, scrollY));
             }
             return true;
         }

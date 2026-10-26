@@ -950,7 +950,8 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
             String report = ItemKeyMapper.prettyText(
                     TextReporter.format(result, draft.recipes()));
             minecraft.setScreen(new SolveScreen(this, report, result,
-                    draft.recipes(), result.success()));
+                    draft.recipes(), new java.util.LinkedHashSet<>(draft.targets().keySet()),
+                    draft.options().autoBootstrap(), result.success()));
         } catch (RuntimeException | LinkageError e) {
             RecipeBalancerMod.LOGGER.error("[RecipeBalancer] 求解失败", e);
             status = "求解失败: " + e;
