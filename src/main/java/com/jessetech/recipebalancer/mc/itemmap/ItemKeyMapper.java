@@ -168,16 +168,18 @@ public final class ItemKeyMapper {
         }
         int width = font.width(amount);
         int maxWidth = 14;
-        if (width <= maxWidth) {
-            graphics.drawString(font, amount, x + 17 - width, y + 9, 0xFFFFFFFF, true);
-            return;
-        }
-        float scale = (float) maxWidth / width;
+        // 抬高 z，避免数量文字被物品图标/槽位盖住
         PoseStack pose = graphics.pose();
         pose.pushPose();
-        pose.translate(x + 17 - width * scale, y + 9, 0);
-        pose.scale(scale, scale, 1.0f);
-        graphics.drawString(font, amount, 0, 0, 0xFFFFFFFF, true);
+        pose.translate(0, 0, 200);
+        if (width <= maxWidth) {
+            graphics.drawString(font, amount, x + 17 - width, y + 9, 0xFFFFFFFF, true);
+        } else {
+            float scale = (float) maxWidth / width;
+            pose.translate(x + 17 - width * scale, y + 9, 0);
+            pose.scale(scale, scale, 1.0f);
+            graphics.drawString(font, amount, 0, 0, 0xFFFFFFFF, true);
+        }
         pose.popPose();
     }
 

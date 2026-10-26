@@ -68,5 +68,10 @@ class TimeExpressionTest {
         assertEquals("100k", TimeExpression.formatCompact(100000));
         assertEquals("1M", TimeExpression.formatCompact(1000000));
         assertEquals("500μ", TimeExpression.formatCompact(0.0005));
+        assertEquals("1n", TimeExpression.formatCompact(1e-9));
+        assertEquals("1p", TimeExpression.formatCompact(1e-12));
+        assertEquals("1f", TimeExpression.formatCompact(1e-15));
+        assertEquals("1P", TimeExpression.formatCompact(1e15));
+        assertEquals("1E", TimeExpression.formatCompact(1e18));
     }
 }

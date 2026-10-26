@@ -374,21 +374,23 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
         graphics.drawString(font, "耗时", equipmentX + SLOT + 2, timeY + 5,
                 AeStyle.MUTED, false);
 
-        String time = TimeExpression.formatNumber(pattern.timeTicks()) + "t";
+        // 一级耗时也用紧凑后缀（μ/m/k/M/G/T/P/E），并抬高 z 防止被槽位盖住
+        String time = TimeExpression.formatCompact(pattern.timeTicks()) + "t";
         int textWidth = font.width(time);
+        PoseStack pose = graphics.pose();
+        pose.pushPose();
+        pose.translate(0, 0, 200);
         if (textWidth <= SLOT) {
             graphics.drawString(font, time, equipmentX + (SLOT - textWidth) / 2,
                     timeY + 5, AeStyle.TEXT, false);
         } else {
             // 0.001t 这类较长值缩小到槽内，不溢出、不丢失
             float scale = Math.min(0.75f, (SLOT - 1.0f) / textWidth);
-            PoseStack pose = graphics.pose();
-            pose.pushPose();
             pose.translate(equipmentX + 0.5, timeY + 4.5, 0);
             pose.scale(scale, scale, 1.0f);
             graphics.drawString(font, time, 0, 0, AeStyle.TEXT, false);
-            pose.popPose();
         }
+        pose.popPose();
     }
 
     private void drawInventory(GuiGraphics graphics, int mouseX, int mouseY) {

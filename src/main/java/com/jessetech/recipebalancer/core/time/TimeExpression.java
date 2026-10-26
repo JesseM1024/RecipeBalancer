@@ -91,6 +91,12 @@ public final class TimeExpression {
             return "0";
         }
         double abs = Math.abs(value);
+        if (abs >= 1e18) {
+            return compact(value / 1e18) + "E";
+        }
+        if (abs >= 1e15) {
+            return compact(value / 1e15) + "P";
+        }
         if (abs >= 1e12) {
             return compact(value / 1e12) + "T";
         }
@@ -111,6 +117,15 @@ public final class TimeExpression {
         }
         if (abs >= 1e-6) {
             return compact(value * 1e6) + "μ";
+        }
+        if (abs >= 1e-9) {
+            return compact(value * 1e9) + "n";
+        }
+        if (abs >= 1e-12) {
+            return compact(value * 1e12) + "p";
+        }
+        if (abs >= 1e-15) {
+            return compact(value * 1e15) + "f";
         }
         return formatNumber(value);
     }
