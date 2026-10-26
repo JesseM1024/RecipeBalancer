@@ -28,6 +28,7 @@ public final class SolveScreen extends Screen implements JeiPanelScreen {
     private SolveGraphView graph;
     private boolean graphMode;
     private boolean graphDragging;
+    private boolean graphNodeDragging;
     private double lastGraphMouseX;
     private double lastGraphMouseY;
     private double scroll;
@@ -120,6 +121,7 @@ public final class SolveScreen extends Screen implements JeiPanelScreen {
             renderGraph(graphics, mouseX, mouseY);
             return;
         }
+        graphNodeDragging = false;
 
         int lineHeight = font.lineHeight + 1;
         double maxScroll = Math.max(0, lines.size() * lineHeight - textH);
@@ -143,7 +145,9 @@ public final class SolveScreen extends Screen implements JeiPanelScreen {
 
     private void renderGraph(GuiGraphics graphics, int mouseX, int mouseY) {
         graph.render(graphics, font, panelX + 4, textY, panelW - 8, textH);
-        graph.renderTooltip(graphics, font, mouseX, mouseY);
+        if (!graphNodeDragging) {
+            graph.renderTooltip(graphics, font, mouseX, mouseY);
+        }
     }
 
     private boolean inGraphArea(double mouseX, double mouseY) {
@@ -154,9 +158,15 @@ public final class SolveScreen extends Screen implements JeiPanelScreen {
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         if (graphMode && graph != null && button == 0 && inGraphArea(mouseX, mouseY)) {
-            graphDragging = true;
-            lastGraphMouseX = mouseX;
-            lastGraphMouseY = mouseY;
+            if (graph.beginNodeDrag(mouseX, mouseY)) {
+                graphNodeDragging = true;
+                graphDragging = false;
+            } else {
+                graphDragging = true;
+                graphNodeDragging = false;
+                lastGraphMouseX = mouseX;
+                lastGraphMouseY = mouseY;
+            }
             return true;
         }
         return super.mouseClicked(mouseX, mouseY, button);
@@ -165,6 +175,10 @@ public final class SolveScreen extends Screen implements JeiPanelScreen {
     @Override
     public boolean mouseDragged(double mouseX, double mouseY, int button,
                                 double dragX, double dragY) {
+        if (graphNodeDragging && graph != null) {
+            graph.dragNodeTo(mouseX, mouseY);
+            return true;
+        }
         if (graphDragging && graph != null) {
             graph.panBy(mouseX - lastGraphMouseX, mouseY - lastGraphMouseY);
             lastGraphMouseX = mouseX;
@@ -176,6 +190,11 @@ public final class SolveScreen extends Screen implements JeiPanelScreen {
 
     @Override
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
+        if (graphNodeDragging && graph != null) {
+            graph.endNodeDrag();
+            graphNodeDragging = false;
+            return true;
+        }
         if (graphDragging) {
             graphDragging = false;
             return true;

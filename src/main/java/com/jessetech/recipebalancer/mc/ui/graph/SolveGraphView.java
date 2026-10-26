@@ -13,6 +13,8 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -68,6 +70,12 @@ public final class SolveGraphView {
     private int lastAreaY;
     private int lastAreaW;
     private int lastAreaH;
+
+    private final Map<Long, List<GNode>> spatialGrid = new HashMap<>();
+    private GNode draggingNode;
+    private double dragOffsetX;
+    private double dragOffsetY;
+    private int settleSteps;
 
     private static final class GNode {
         final boolean recipe;
@@ -424,6 +432,180 @@ public final class SolveGraphView {
         return (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
     }
 
+    /** 鼠标命中节点；没有则返回 null。 */
+    public boolean beginNodeDrag(double screenX, double screenY) {
+        if (lastAreaW <= 0) {
+            return false;
+        }
+        double worldX = (screenX - lastAreaX - panX) / zoom;
+        double worldY = (screenY - lastAreaY - panY) / zoom;
+        GNode hit = null;
+        for (int i = nodes.size() - 1; i >= 0; i--) {
+            GNode node = nodes.get(i);
+            double half = (node.recipe ? RECIPE : MATERIAL) / 2.0 + 3;
+            if (Math.abs(worldX - node.x) <= half && Math.abs(worldY - node.y) <= half) {
+                hit = node;
+                break;
+            }
+        }
+        if (hit == null) {
+            return false;
+        }
+        draggingNode = hit;
+        settleSteps = 0;
+        dragOffsetX = worldX - hit.x;
+        dragOffsetY = worldY - hit.y;
+        return true;
+    }
+
+    public boolean isNodeDragging() {
+        return draggingNode != null;
+    }
+
+    public void dragNodeTo(double screenX, double screenY) {
+        if (draggingNode == null) {
+            return;
+        }
+        draggingNode.x = (screenX - lastAreaX - panX) / zoom - dragOffsetX;
+        draggingNode.y = (screenY - lastAreaY - panY) / zoom - dragOffsetY;
+    }
+
+    public void endNodeDrag() {
+        if (draggingNode != null) {
+            draggingNode = null;
+            settleSteps = 10;
+        }
+    }
+
+    /**
+     * 拖动时的局部弹性：
+     * 仅查询鼠标节点周围网格内的邻居，施加斥力/相连边弹簧，
+     * 不跑全图 O(n²)；每帧成本与邻居数相关。
+     */
+    private void elasticStep(GNode dragged) {
+        rebuildGrid();
+        double influence = 190.0;
+        for (GNode other : nearby(dragged, influence)) {
+            if (other == dragged) {
+                continue;
+            }
+            double dx = other.x - dragged.x;
+            double dy = other.y - dragged.y;
+            double dist = Math.max(0.001, Math.hypot(dx, dy));
+            double ux = dx / dist;
+            double uy = dy / dist;
+            double min = minDistance(dragged, other);
+            double move = 0.0;
+            if (dist < min * 1.3) {
+                move += (min * 1.3 - dist) * 0.14;
+            }
+            if (connected(dragged, other)) {
+                double rest = 72.0;
+                move += (rest - dist) * 0.075;
+            }
+            move = Math.max(-6.0, Math.min(6.0, move));
+            other.x += ux * move;
+            other.y += uy * move;
+        }
+        // 被拖节点不允许压到邻居
+        for (GNode other : nearby(dragged, influence)) {
+            if (other == dragged) {
+                continue;
+            }
+            double dx = other.x - dragged.x;
+            double dy = other.y - dragged.y;
+            double dist = Math.hypot(dx, dy);
+            double min = minDistance(dragged, other);
+            if (dist < min && dist > 0.001) {
+                double push = min - dist;
+                other.x += dx / dist * push;
+                other.y += dy / dist * push;
+            }
+        }
+    }
+
+    /** 松手后的局部回弹，几帧内收敛，不做全图重新布局。 */
+    private void settleStep() {
+        rebuildGrid();
+        double influence = 170.0;
+        for (GNode node : nodes) {
+            double moveX = 0.0;
+            double moveY = 0.0;
+            for (GNode other : nearby(node, influence)) {
+                if (other == node) {
+                    continue;
+                }
+                double dx = node.x - other.x;
+                double dy = node.y - other.y;
+                double dist = Math.max(0.001, Math.hypot(dx, dy));
+                double min = minDistance(node, other);
+                if (dist < min * 1.2) {
+                    double push = (min * 1.2 - dist) * 0.06;
+                    moveX += dx / dist * push;
+                    moveY += dy / dist * push;
+                }
+            }
+            for (GEdge edge : edges) {
+                if (edge.from != node && edge.to != node) {
+                    continue;
+                }
+                GNode other = edge.from == node ? edge.to : edge.from;
+                double dx = node.x - other.x;
+                double dy = node.y - other.y;
+                double dist = Math.max(0.001, Math.hypot(dx, dy));
+                double spring = (dist - 72.0) * 0.025;
+                moveX -= dx / dist * spring;
+                moveY -= dy / dist * spring;
+            }
+            node.x += Math.max(-2.0, Math.min(2.0, moveX));
+            node.y += Math.max(-2.0, Math.min(2.0, moveY));
+        }
+        collisionRelax();
+    }
+
+    private boolean connected(GNode a, GNode b) {
+        for (GEdge edge : edges) {
+            if ((edge.from == a && edge.to == b) || (edge.from == b && edge.to == a)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void rebuildGrid() {
+        spatialGrid.clear();
+        double cell = 96.0;
+        for (GNode node : nodes) {
+            long key = cellKey((int) Math.floor(node.x / cell),
+                    (int) Math.floor(node.y / cell));
+            spatialGrid.computeIfAbsent(key, ignored -> new ArrayList<>()).add(node);
+        }
+    }
+
+    private List<GNode> nearby(GNode node, double radius) {
+        if (spatialGrid.isEmpty()) {
+            return nodes;
+        }
+        double cell = 96.0;
+        int range = (int) Math.ceil(radius / cell);
+        int cx = (int) Math.floor(node.x / cell);
+        int cy = (int) Math.floor(node.y / cell);
+        Set<GNode> result = new HashSet<>();
+        for (int x = cx - range; x <= cx + range; x++) {
+            for (int y = cy - range; y <= cy + range; y++) {
+                List<GNode> cellNodes = spatialGrid.get(cellKey(x, y));
+                if (cellNodes != null) {
+                    result.addAll(cellNodes);
+                }
+            }
+        }
+        return new ArrayList<>(result);
+    }
+
+    private static long cellKey(int x, int y) {
+        return ((long) x << 32) ^ (y & 0xFFFFFFFFL);
+    }
+
     public void resetCamera(int areaW, int areaH) {
         if (nodes.isEmpty()) {
             return;
@@ -463,6 +645,12 @@ public final class SolveGraphView {
         lastAreaH = areaH;
         if (!cameraReady || cameraAreaW != areaW || cameraAreaH != areaH) {
             resetCamera(areaW, areaH);
+        }
+        if (draggingNode != null) {
+            elasticStep(draggingNode);
+        } else if (settleSteps > 0) {
+            settleStep();
+            settleSteps--;
         }
         graphics.fill(areaX, areaY, areaX + areaW, areaY + areaH, 0x10FFFFFF);
         graphics.enableScissor(areaX, areaY, areaX + areaW, areaY + areaH);
@@ -717,6 +905,16 @@ public final class SolveGraphView {
             drawRecipeNode(graphics, font, node);
         } else {
             drawMaterialNode(graphics, font, node);
+        }
+        if (node == draggingNode) {
+            int half = (node.recipe ? RECIPE : MATERIAL) / 2;
+            int x = (int) Math.round(node.x) - half;
+            int y = (int) Math.round(node.y) - half;
+            int size = half * 2;
+            graphics.fill(x - 2, y - 2, x + size + 2, y - 1, 0xFF4A90D9);
+            graphics.fill(x - 2, y + size + 1, x + size + 2, y + size + 2, 0xFF4A90D9);
+            graphics.fill(x - 2, y - 2, x - 1, y + size + 2, 0xFF4A90D9);
+            graphics.fill(x + size + 1, y - 2, x + size + 2, y + size + 2, 0xFF4A90D9);
         }
     }
 
