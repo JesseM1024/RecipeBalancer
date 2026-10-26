@@ -39,6 +39,19 @@ public final class ItemKeyMapper {
     private static final Pattern INGREDIENT_KEY_PATTERN =
             Pattern.compile("ingredient\\|[A-Za-z0-9_-]+(?:\\|[A-Za-z0-9_-]+){2}");
 
+    /** JEI 渲染钩子；由 RecipeBalancerJeiPlugin 在 JEI 可用时安装，避免无 JEI 环境加载 JEI 类。 */
+    public interface IngredientRenderHook {
+        boolean render(GuiGraphics graphics, Font font, String key, int x, int y, String amount);
+
+        boolean renderTooltip(GuiGraphics graphics, Font font, String key, int mouseX, int mouseY);
+    }
+
+    private static volatile IngredientRenderHook ingredientRenderHook;
+
+    public static void setIngredientRenderHook(IngredientRenderHook hook) {
+        ingredientRenderHook = hook;
+    }
+
     private ItemKeyMapper() {
     }
 
@@ -281,6 +294,10 @@ public final class ItemKeyMapper {
             return;
         }
         if (IngredientKey.isIngredientKey(id)) {
+            IngredientRenderHook hook = ingredientRenderHook;
+            if (hook != null && hook.render(graphics, font, id, x, y, amount)) {
+                return;
+            }
             int color = placeholderColor(id);
             graphics.fill(x + 1, y + 1, x + 17, y + 17, color);
             graphics.fill(x + 1, y + 1, x + 17, y + 2, 0x40FFFFFF);
@@ -305,6 +322,12 @@ public final class ItemKeyMapper {
         int textX = x + 9 - font.width(label) / 2;
         int textY = y + 5;
         graphics.drawString(font, label, textX, textY, 0xFF101010, false);
+        renderAmount(graphics, font, amount, x, y);
+    }
+
+    /** JEI 渲染钩子复用：在 18px 槽内画数量文本。 */
+    public static void renderAmountOverlay(GuiGraphics graphics, Font font, String amount,
+                                           int x, int y) {
         renderAmount(graphics, font, amount, x, y);
     }
 
@@ -343,6 +366,10 @@ public final class ItemKeyMapper {
         }
         List<Component> lines = new ArrayList<>();
         if (IngredientKey.isIngredientKey(id)) {
+            IngredientRenderHook hook = ingredientRenderHook;
+            if (hook != null && hook.renderTooltip(graphics, font, id, mouseX, mouseY)) {
+                return;
+            }
             lines.add(Component.literal(IngredientKey.displayName(id)));
             lines.add(Component.literal(IngredientKey.describe(id))
                     .withStyle(ChatFormatting.GRAY));

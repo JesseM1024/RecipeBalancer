@@ -1063,12 +1063,11 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
         return result;
     }
 
-    public record HoveredItem(net.minecraft.world.item.ItemStack stack,
-                              int x, int y, int width, int height) {
+    public record HoveredKey(String key, int x, int y, int width, int height) {
     }
 
-    /** JEI R/U：鼠标下的物品与屏幕矩形。 */
-    public HoveredItem jeiHoveredItem(double mouseX, double mouseY) {
+    /** JEI R/U：鼠标下的 ingredient key 与屏幕矩形（物品/流体/化学品通用）。 */
+    public HoveredKey jeiHoveredKey(double mouseX, double mouseY) {
         int[] slot = encodingSlotAt(mouseX, mouseY);
         if (slot != null) {
             String key = slot[0] == 0 ? pattern.inputKey(slot[1]) : pattern.outputKey(slot[1]);
@@ -1111,16 +1110,15 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
             if (!stack.isEmpty()) {
                 int row = inventory < 9 ? 3 : (inventory - 9) / 9;
                 int col = inventory < 9 ? inventory : (inventory - 9) % 9;
-                return new HoveredItem(stack, inventoryX + col * SLOT,
+                return new HoveredKey(ItemKeyMapper.of(stack), inventoryX + col * SLOT,
                         inventoryY + row * SLOT, SLOT, SLOT);
             }
         }
         return null;
     }
 
-    private static HoveredItem hovered(String key, int x, int y) {
-        net.minecraft.world.item.ItemStack stack = ItemKeyMapper.stack(key);
-        return stack.isEmpty() ? null : new HoveredItem(stack, x, y, SLOT, SLOT);
+    private static HoveredKey hovered(String key, int x, int y) {
+        return key == null || key.isBlank() ? null : new HoveredKey(key, x, y, SLOT, SLOT);
     }
 
     public void applyGhost(GhostKind kind, int index, String key) {

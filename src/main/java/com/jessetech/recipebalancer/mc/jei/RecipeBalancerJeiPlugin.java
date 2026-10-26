@@ -1,5 +1,6 @@
 package com.jessetech.recipebalancer.mc.jei;
 
+import com.jessetech.recipebalancer.mc.itemmap.ItemKeyMapper;
 import com.jessetech.recipebalancer.mc.screen.AmountScreen;
 import com.jessetech.recipebalancer.mc.screen.BalancerScreen;
 import com.jessetech.recipebalancer.mc.screen.JeiPanelScreen;
@@ -41,10 +42,12 @@ public final class RecipeBalancerJeiPlugin implements IModPlugin {
     @Override
     public void onRuntimeAvailable(IJeiRuntime jeiRuntime) {
         JeiRuntimeHolder.set(jeiRuntime);
+        ItemKeyMapper.setIngredientRenderHook(new JeiIngredientRenderer());
     }
 
     @Override
     public void onRuntimeUnavailable() {
+        ItemKeyMapper.setIngredientRenderHook(null);
         JeiRuntimeHolder.set(null);
     }
 
@@ -60,13 +63,26 @@ public final class RecipeBalancerJeiPlugin implements IModPlugin {
             public Optional<? extends IClickableIngredient<?>> getClickableIngredientUnderMouse(
                     IClickableIngredientFactory factory, BalancerScreen screen,
                     double mouseX, double mouseY) {
-                BalancerScreen.HoveredItem hovered = screen.jeiHoveredItem(mouseX, mouseY);
+                BalancerScreen.HoveredKey hovered = screen.jeiHoveredKey(mouseX, mouseY);
                 if (hovered == null) {
                     return Optional.empty();
                 }
-                return factory.createBuilder(hovered.stack())
-                        .buildWithArea(new Rect2i(hovered.x(), hovered.y(),
-                                hovered.width(), hovered.height()));
+                Rect2i area = new Rect2i(hovered.x(), hovered.y(),
+                        hovered.width(), hovered.height());
+                if (com.jessetech.recipebalancer.mc.itemmap.IngredientKey
+                        .isIngredientKey(hovered.key())) {
+                    Optional<? extends mezz.jei.api.ingredients.ITypedIngredient<?>> typed =
+                            JeiIngredientRenderer.resolveTyped(hovered.key());
+                    if (typed.isEmpty()) {
+                        return Optional.empty();
+                    }
+                    return factory.createBuilder(typed.get()).buildWithArea(area);
+                }
+                net.minecraft.world.item.ItemStack stack = ItemKeyMapper.stack(hovered.key());
+                if (stack.isEmpty()) {
+                    return Optional.empty();
+                }
+                return factory.createBuilder(stack).buildWithArea(area);
             }
         });
         registration.addGuiScreenHandler(AmountScreen.class,
