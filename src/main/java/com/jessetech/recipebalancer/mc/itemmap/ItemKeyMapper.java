@@ -1,5 +1,6 @@
 package com.jessetech.recipebalancer.mc.itemmap;
 
+import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -146,8 +147,7 @@ public final class ItemKeyMapper {
         ItemStack stack = stack(id);
         if (!stack.isEmpty()) {
             graphics.renderItem(stack, x + 1, y + 1);
-            graphics.renderItemDecorations(font, stack, x + 1, y + 1,
-                    amount == null ? "" : amount);
+            renderAmount(graphics, font, amount, x, y);
             return;
         }
         int color = placeholderColor(id);
@@ -158,10 +158,27 @@ public final class ItemKeyMapper {
         int textX = x + 9 - font.width(label) / 2;
         int textY = y + 5;
         graphics.drawString(font, label, textX, textY, 0xFF101010, false);
-        if (amount != null && !amount.isBlank()) {
-            int width = font.width(amount);
-            graphics.drawString(font, amount, x + 17 - width, y + 9, 0xFFFFFFFF, true);
+        renderAmount(graphics, font, amount, x, y);
+    }
+
+    /** 紧凑数量文本：过长时等比缩小，避免像 100000 一样溢出格子。 */
+    private static void renderAmount(GuiGraphics graphics, Font font, String amount, int x, int y) {
+        if (amount == null || amount.isBlank()) {
+            return;
         }
+        int width = font.width(amount);
+        int maxWidth = 14;
+        if (width <= maxWidth) {
+            graphics.drawString(font, amount, x + 17 - width, y + 9, 0xFFFFFFFF, true);
+            return;
+        }
+        float scale = (float) maxWidth / width;
+        PoseStack pose = graphics.pose();
+        pose.pushPose();
+        pose.translate(x + 17 - width * scale, y + 9, 0);
+        pose.scale(scale, scale, 1.0f);
+        graphics.drawString(font, amount, 0, 0, 0xFFFFFFFF, true);
+        pose.popPose();
     }
 
     public static void renderTooltip(GuiGraphics graphics, Font font, String key, int mouseX, int mouseY) {

@@ -229,7 +229,7 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
         graphics.drawString(font, "工作区", panelX + 4, topY + 4, AeStyle.MUTED, false);
 
         graphics.drawString(font, "目标 (" + draft.targets().size() + "/" + MAX_TARGETS
-                        + " · /s)", panelX + 4, targetLabelY, AeStyle.MUTED, false);
+                        + " · /t)", panelX + 4, targetLabelY, AeStyle.MUTED, false);
         drawTargets(graphics, mouseX, mouseY);
 
         graphics.drawString(font, "配方库 (" + draft.recipeCount() + ")", panelX + 4,
@@ -261,9 +261,9 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
                 AeStyle.slot(graphics, x, y);
                 if (index < entries.size()) {
                     Map.Entry<String, Double> entry = entries.get(index);
-                    // 草稿内部是每 tick，一级按 /s 显示
+                    // 草稿内部是每 tick，一级目标统一显示每 t
                     ItemKeyMapper.renderIcon(graphics, font, entry.getKey(), x, y,
-                            amountText(entry.getValue() * 20.0));
+                            amountText(entry.getValue()));
                 }
             }
         }
@@ -418,7 +418,8 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
         if (Math.abs(amount - 1.0) < 1e-9) {
             return "";
         }
-        return TimeExpression.formatNumber(amount);
+        // 一级只显示紧凑值（μ/m/k/M/G/T）；精确值在二级编辑框
+        return TimeExpression.formatCompact(amount);
     }
 
     @Override
@@ -690,10 +691,10 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
                         status = "目标最多 " + MAX_TARGETS + " 个";
                         return;
                     }
-                    // 默认 1/s；ScenarioDraft 内部存每 tick
-                    draft.putTarget(carriedKey, 1.0 / 20.0);
+                    // 默认 1/t；ScenarioDraft 内部即每 tick
+                    draft.putTarget(carriedKey, 1.0);
                     onDraftChanged();
-                    status = "已添加目标: " + carriedKey + " 1/s";
+                    status = "已添加目标: " + carriedKey + " 1/t";
                 } else {
                     openTargetAmount("", 1.0);
                 }
@@ -710,8 +711,8 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
             status = "目标最多 " + MAX_TARGETS + " 个";
             return;
         }
-        // amount 是每 tick；新目标默认 1/s = 0.05/t
-        double initialPerTick = adding ? 1.0 / 20.0 : amount;
+        // amount 是每 tick；新目标默认 1/t
+        double initialPerTick = adding ? 1.0 : amount;
         minecraft.setScreen(new AmountScreen(this, "目标产物", key, initialPerTick, true, true,
                 (newKey, perTick) -> {
                     if (!newKey.equals(key)) {
@@ -725,7 +726,7 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
                     draft.putTarget(newKey, perTick);
                     onDraftChanged();
                     status = "目标: " + newKey + " × "
-                            + TimeExpression.formatNumber(perTick * 20.0) + "/s";
+                            + TimeExpression.formatNumber(perTick) + "/t";
                 }));
     }
 

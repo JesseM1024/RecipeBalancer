@@ -79,6 +79,48 @@ public final class TimeExpression {
         return BigDecimal.valueOf(value).stripTrailingZeros().toPlainString();
     }
 
+    /**
+     * 一级菜单紧凑显示：μ / m / k / M / G / T，避免大数字溢出格子。
+     * 点进编辑框仍用 {@link #formatEditableNumber(double)} 看精确值。
+     */
+    public static String formatCompact(double value) {
+        if (!Double.isFinite(value)) {
+            return Double.toString(value);
+        }
+        if (value == 0) {
+            return "0";
+        }
+        double abs = Math.abs(value);
+        if (abs >= 1e12) {
+            return compact(value / 1e12) + "T";
+        }
+        if (abs >= 1e9) {
+            return compact(value / 1e9) + "G";
+        }
+        if (abs >= 1e6) {
+            return compact(value / 1e6) + "M";
+        }
+        if (abs >= 1e3) {
+            return compact(value / 1e3) + "k";
+        }
+        if (abs >= 1) {
+            return formatNumber(value);
+        }
+        if (abs >= 1e-3) {
+            return compact(value * 1e3) + "m";
+        }
+        if (abs >= 1e-6) {
+            return compact(value * 1e6) + "μ";
+        }
+        return formatNumber(value);
+    }
+
+    private static String compact(double value) {
+        String text = String.format(Locale.ROOT, "%.2f", value);
+        text = text.replaceAll("0+$", "").replaceAll("\\.$", "");
+        return text.isEmpty() || "-0".equals(text) ? "0" : text;
+    }
+
     private static final class Parser {
         private final String input;
         private int pos;

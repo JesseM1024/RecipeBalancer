@@ -30,7 +30,7 @@ public final class AmountScreen extends Screen implements JeiPanelScreen {
     private final Callback callback;
     private final String itemKey;
     private String status = "";
-    private RateUnit rateUnit = RateUnit.SECOND;
+    private RateUnit rateUnit;
     private EditBox keyBox;
     private EditBox amountBox;
     private Button unitButton;
@@ -50,8 +50,9 @@ public final class AmountScreen extends Screen implements JeiPanelScreen {
         this.amountEditable = amountEditable;
         this.rateMode = rateMode;
         this.callback = callback;
-        // 目标速率默认用 /s 展示，内部仍存每 tick
-        this.amount = rateMode ? RateUnit.SECOND.fromPerTick(amount) : amount;
+        // 记住上次速率单位；没有记录时目标默认 /t
+        this.rateUnit = UnitPreferences.rateUnit(RateUnit.TICK);
+        this.amount = rateMode ? rateUnit.fromPerTick(amount) : amount;
     }
 
     private double amount;
@@ -130,11 +131,12 @@ public final class AmountScreen extends Screen implements JeiPanelScreen {
         }
         double perTick = amount;
         try {
-            perTick = rateUnit.toPerTick(Double.parseDouble(amountBox.getValue().trim()));
-        } catch (NumberFormatException ignored) {
+            perTick = rateUnit.toPerTick(TimeExpression.evaluate(amountBox.getValue().trim()));
+        } catch (RuntimeException ignored) {
             // 当前输入不合法时只切换单位显示
         }
         rateUnit = rateUnit.next();
+        UnitPreferences.setRateUnit(rateUnit);
         amount = rateUnit.fromPerTick(perTick);
         amountBox.setValue(TimeExpression.formatEditableNumber(amount));
         unitButton.setMessage(Component.literal(rateUnit.label()));
@@ -146,8 +148,9 @@ public final class AmountScreen extends Screen implements JeiPanelScreen {
         }
         double current;
         try {
-            current = Double.parseDouble(amountBox.getValue().trim());
-        } catch (NumberFormatException e) {
+            // 用量框也支持 + - * / ^ 表达式；± 按钮基于求值结果继续调整
+            current = TimeExpression.evaluate(amountBox.getValue().trim());
+        } catch (RuntimeException e) {
             current = amount;
         }
         current = Math.max(0.0, current + delta);
@@ -163,9 +166,9 @@ public final class AmountScreen extends Screen implements JeiPanelScreen {
         double value = 1.0;
         if (amountEditable) {
             try {
-                value = Double.parseDouble(amountBox.getValue().trim());
-            } catch (NumberFormatException e) {
-                status = "用量必须是数字";
+                value = TimeExpression.evaluate(amountBox.getValue().trim());
+            } catch (RuntimeException e) {
+                status = "表达式无效: " + e.getMessage();
                 return;
             }
             if (!(value > 0) || !Double.isFinite(value)) {
@@ -173,6 +176,7 @@ public final class AmountScreen extends Screen implements JeiPanelScreen {
                 return;
             }
             if (rateMode) {
+                UnitPreferences.setRateUnit(rateUnit);
                 value = rateUnit.toPerTick(value);
             }
         }

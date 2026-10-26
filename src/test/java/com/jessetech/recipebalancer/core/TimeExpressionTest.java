@@ -62,5 +62,11 @@ class TimeExpressionTest {
         assertEquals("0", TimeExpression.formatNumber(0.00000000001));
         assertEquals("0.00000000001", TimeExpression.formatEditableNumber(0.00000000001));
         assertEquals("0.00000000001 t", TimeExpression.formatExactTicks(0.00000000001));
+
+        // 一级紧凑显示：μ/m/k/M/G/T
+        assertEquals("30k", TimeExpression.formatCompact(30000));
+        assertEquals("100k", TimeExpression.formatCompact(100000));
+        assertEquals("1M", TimeExpression.formatCompact(1000000));
+        assertEquals("500μ", TimeExpression.formatCompact(0.0005));
     }
 }

@@ -31,9 +31,10 @@ public final class TimeScreen extends Screen implements JeiPanelScreen {
     public TimeScreen(Screen parent, double ticks, DoubleConsumer callback) {
         super(Component.literal("配方耗时"));
         this.parent = parent;
-        this.ticks = ticks > 0 ? ticks : 20.0;
+        this.ticks = ticks > 0 ? ticks : 1.0;
         this.callback = callback;
-        this.unit = TimeUnit.bestFor(this.ticks);
+        // 优先使用上次选择；没有记录才自动选单位
+        this.unit = UnitPreferences.timeUnit(TimeUnit.bestFor(this.ticks));
     }
 
     @Override
@@ -68,6 +69,7 @@ public final class TimeScreen extends Screen implements JeiPanelScreen {
             // 当前表达式不合法时只切单位，不清空输入
         }
         unit = unit.next();
+        UnitPreferences.setTimeUnit(unit);
         if (preserved > 0) {
             ticks = preserved;
             expressionBox.setValue(TimeExpression.formatEditableNumber(unit.fromTicks(ticks)));
@@ -78,6 +80,7 @@ public final class TimeScreen extends Screen implements JeiPanelScreen {
     private void confirm() {
         try {
             double result = TimeExpression.toTicks(expressionBox.getValue(), unit);
+            UnitPreferences.setTimeUnit(unit);
             callback.accept(result);
             minecraft.setScreen(parent);
         } catch (RuntimeException e) {
