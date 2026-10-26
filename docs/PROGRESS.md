@@ -12,8 +12,8 @@
 | 项 | 结果 |
 |---|---|
 | `gradlew test` | **80 tests, 0 failures** |
-| 产物 | `recipebalancer-0.1.0-1.21.1.jar` **2,324,778 B** |
-| 实机部署 | 已复制到 `1.21.1-NeoForge/mods/`（18:20:03） |
+| 产物 | `recipebalancer-0.1.0-1.21.1.jar` **2,324,811 B** |
+| 实机部署 | 已复制到 `1.21.1-NeoForge/mods/`（18:22:32） |
 | 未验证 | 实机药水/图标/加号冒烟 |
 
 ### 药水时长
@@ -32,6 +32,8 @@
 - 尺寸 13×13，白线全部 1px。
 - `IIconButtonController.drawExtras` 检测鼠标在按钮矩形内时，把最外圈 1px
   黑框覆盖为白框，行为与 JEI 原生书签按钮一致。
+- hover 白框改为使用 **`drawExtras` 的 Rect2i** 定位；早期用图标 draw 坐标记录，
+  会被 JEI 离屏/预绘制覆盖成 (0,0)，导致白框跑到屏幕左上角。
 
 ### 加号设备自动填充
 
