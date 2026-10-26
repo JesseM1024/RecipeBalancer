@@ -269,6 +269,12 @@ public final class SolveGraphView {
         collisionRelax();
         minimizeCrossings(targetRadius);
         collisionRelax();
+        // 打开流程图时先做一次“原地收缩”：等价于手动拖动后再松手，
+        // 但不依赖用户操作，直接得到更紧凑的初始布局。
+        for (int i = 0; i < 8; i++) {
+            settleStep();
+        }
+        collisionRelax();
 
         minX = Double.MAX_VALUE;
         minY = Double.MAX_VALUE;
@@ -666,12 +672,23 @@ public final class SolveGraphView {
             return;
         }
 
+        double viewMinX = (-panX) / zoom - 120;
+        double viewMaxX = (areaW - panX) / zoom + 120;
+        double viewMinY = (-panY) / zoom - 120;
+        double viewMaxY = (areaH - panY) / zoom + 120;
+        boolean showLabels = zoom >= 0.42;
+        boolean showIcons = zoom >= 0.30;
+
         graphics.pose().pushPose();
         graphics.pose().translate(areaX + panX, areaY + panY, 0);
         graphics.pose().scale((float) zoom, (float) zoom, 1.0f);
-        drawEdges(graphics, font);
+        drawEdges(graphics, font, viewMinX, viewMaxX, viewMinY, viewMaxY, showLabels);
         for (GNode node : nodes) {
-            drawNode(graphics, font, node);
+            if (node.x < viewMinX || node.x > viewMaxX
+                    || node.y < viewMinY || node.y > viewMaxY) {
+                continue;
+            }
+            drawNode(graphics, font, node, showLabels, showIcons);
         }
         graphics.pose().popPose();
         graphics.disableScissor();
@@ -852,20 +869,40 @@ public final class SolveGraphView {
      * 所有边/箭头合批到一个 GUI VertexConsumer，避免每条边每像素一次 fill。
      * 边标签在合批刷新后单独绘制。
      */
-    private void drawEdges(GuiGraphics graphics, Font font) {
+    private void drawEdges(GuiGraphics graphics, Font font,
+                           double minX, double maxX, double minY, double maxY,
+                           boolean showLabels) {
         if (edges.isEmpty()) {
             return;
         }
         VertexConsumer consumer = graphics.bufferSource().getBuffer(RenderType.gui());
         Matrix4f matrix = graphics.pose().last().pose();
         for (GEdge edge : edges) {
+            if (!edgeVisible(edge, minX, maxX, minY, maxY)) {
+                continue;
+            }
             drawEdgeGeometry(consumer, matrix, edge);
         }
         graphics.flush();
 
+        if (!showLabels) {
+            return;
+        }
         for (GEdge edge : edges) {
+            if (!edgeVisible(edge, minX, maxX, minY, maxY)) {
+                continue;
+            }
             drawEdgeLabel(graphics, font, edge);
         }
+    }
+
+    private static boolean edgeVisible(GEdge edge, double minX, double maxX,
+                                       double minY, double maxY) {
+        double left = Math.min(edge.from.x, edge.to.x);
+        double right = Math.max(edge.from.x, edge.to.x);
+        double top = Math.min(edge.from.y, edge.to.y);
+        double bottom = Math.max(edge.from.y, edge.to.y);
+        return right >= minX && left <= maxX && bottom >= minY && top <= maxY;
     }
 
     private void drawEdgeGeometry(VertexConsumer consumer, Matrix4f matrix, GEdge edge) {
@@ -932,10 +969,11 @@ public final class SolveGraphView {
         }
         double nx = -dy / dist * thickness * 0.5;
         double ny = dx / dist * thickness * 0.5;
-        vertex(consumer, matrix, x1 + nx, y1 + ny, color);
+        // 与 GuiGraphics.fill 相同的四边形绕序，避免被背面剔除。
         vertex(consumer, matrix, x1 - nx, y1 - ny, color);
-        vertex(consumer, matrix, x2 - nx, y2 - ny, color);
+        vertex(consumer, matrix, x1 + nx, y1 + ny, color);
         vertex(consumer, matrix, x2 + nx, y2 + ny, color);
+        vertex(consumer, matrix, x2 - nx, y2 - ny, color);
     }
 
     private static void vertex(VertexConsumer consumer, Matrix4f matrix,
@@ -943,11 +981,12 @@ public final class SolveGraphView {
         consumer.addVertex(matrix, (float) x, (float) y, 0.0f).setColor(color);
     }
 
-    private void drawNode(GuiGraphics graphics, Font font, GNode node) {
+    private void drawNode(GuiGraphics graphics, Font font, GNode node,
+                          boolean showLabels, boolean showIcons) {
         if (node.recipe) {
-            drawRecipeNode(graphics, font, node);
+            drawRecipeNode(graphics, font, node, showLabels, showIcons);
         } else {
-            drawMaterialNode(graphics, font, node);
+            drawMaterialNode(graphics, font, node, showLabels, showIcons);
         }
         if (node == draggingNode) {
             int half = (node.recipe ? RECIPE : MATERIAL) / 2;
@@ -961,7 +1000,8 @@ public final class SolveGraphView {
         }
     }
 
-    private void drawRecipeNode(GuiGraphics graphics, Font font, GNode node) {
+    private void drawRecipeNode(GuiGraphics graphics, Font font, GNode node,
+                                boolean showLabels, boolean showIcons) {
         int x = (int) Math.round(node.x) - RECIPE / 2;
         int y = (int) Math.round(node.y) - RECIPE / 2;
         graphics.fill(x - 1, y - 1, x + RECIPE + 1, y + RECIPE + 1, BORDER);
@@ -973,7 +1013,7 @@ public final class SolveGraphView {
         graphics.drawString(font, count, x + RECIPE - 3 - font.width(count),
                 y + 3, 0xFF3A2A10, false);
 
-        if (!node.key.isBlank() && !ItemKeyMapper.stack(node.key).isEmpty()) {
+        if (showIcons && !node.key.isBlank() && !ItemKeyMapper.stack(node.key).isEmpty()) {
             ItemKeyMapper.renderIcon(graphics, font, node.key, x + 11, y + 15, null);
         } else {
             String initial = node.key.isBlank() ? "?" : shortInitial(
@@ -981,11 +1021,14 @@ public final class SolveGraphView {
             graphics.drawString(font, initial, x + RECIPE / 2 - font.width(initial) / 2,
                     y + 19, 0xFF3A2A10, false);
         }
-        String name = node.key.isBlank() ? "配方" : ItemKeyMapper.displayName(node.key);
-        drawCenteredLabel(graphics, font, name, node.x, node.y + RECIPE / 2.0 + 3);
+        if (showLabels) {
+            String name = node.key.isBlank() ? "配方" : ItemKeyMapper.displayName(node.key);
+            drawCenteredLabel(graphics, font, name, node.x, node.y + RECIPE / 2.0 + 3);
+        }
     }
 
-    private void drawMaterialNode(GuiGraphics graphics, Font font, GNode node) {
+    private void drawMaterialNode(GuiGraphics graphics, Font font, GNode node,
+                                  boolean showLabels, boolean showIcons) {
         int color = switch (node.category) {
             case INPUT -> INPUT;
             case STARTUP -> STARTUP;
@@ -998,8 +1041,8 @@ public final class SolveGraphView {
         roundedFill(graphics, x - 1, y - 1, MATERIAL + 2, MATERIAL + 2, 5, BORDER);
         roundedFill(graphics, x, y, MATERIAL, MATERIAL, 4, color);
 
-        boolean hasIcon = !ItemKeyMapper.stack(node.key).isEmpty()
-                || IngredientKey.isIngredientKey(node.key);
+        boolean hasIcon = showIcons && (!ItemKeyMapper.stack(node.key).isEmpty()
+                || IngredientKey.isIngredientKey(node.key));
         if (hasIcon) {
             ItemKeyMapper.renderIcon(graphics, font, node.key, x + 2, y + 2, null);
         } else {
@@ -1008,8 +1051,10 @@ public final class SolveGraphView {
                     x + MATERIAL / 2 - font.width(initial) / 2, y + 7,
                     0xFF202020, false);
         }
-        drawCenteredLabel(graphics, font, ItemKeyMapper.displayName(node.key),
-                node.x, node.y + MATERIAL / 2.0 + 3);
+        if (showLabels) {
+            drawCenteredLabel(graphics, font, ItemKeyMapper.displayName(node.key),
+                    node.x, node.y + MATERIAL / 2.0 + 3);
+        }
     }
 
     private void drawCenteredLabel(GuiGraphics graphics, Font font, String text,
