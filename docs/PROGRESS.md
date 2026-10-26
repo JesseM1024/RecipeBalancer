@@ -12,30 +12,32 @@
 | 项 | 结果 |
 |---|---|
 | `gradlew test` | **79 tests, 0 failures**（新增亚 tick 存储回归） |
-| 产物 | `recipebalancer-0.1.0-1.21.1.jar` **2,301,119 B** |
-| 实机部署 | 已复制到 `1.21.1-NeoForge/mods/`（15:59:10） |
+| 产物 | `recipebalancer-0.1.0-1.21.1.jar` **2,301,308 B** |
+| 实机部署 | 已复制到 `1.21.1-NeoForge/mods/`（16:07:58） |
 | 未验证 | 实机 GUI 冒烟 |
 
 ### 按钮
 
-- `载入` / `存储`：从并排改为**上下排列**，尺寸 **36×14**（比参数按钮的 18 高度压缩）。
+- `载入` / `存储`：保持**一行**，仅把高度压缩到 **14**（34×14）；顶部工作区行仍为 20 高。
 - `写入` / `新建`：恢复**上下排列**，尺寸 **40×14**，位于耗时格下方。
-- 顶部工作区行高度相应从 20 增至 32；布局分配固定高度 178。
-- 时间值改画在耗时槽右侧空白（最多约 34px），不再被 18px 槽宽截成 `0`。
+- 时间值改画在耗时槽右侧空白，不再被 18px 槽宽截成 `0`。
 
 ### 时间精度与默认值
 
-- `TimeExpression.formatNumber` 从 2 位小数改为 **最多 6 位**：
-  - `0.001` → `"0.001"`（不再是 `"0"`）
-  - `formatTicks(0.001)` → `"0.001 t"`
-- `TimeScreen` 的表达式初值也使用该格式，重新打开不会把 `0.001` 变成 `0`。
-- 新配方默认耗时从 20t 改为 **1t**（`RecipePattern` 初始/clear）。
-- 存储链路验证：`RecipePattern` 的 0.001t → `Recipe.time=0.00005s` → JSON 往返后仍为 0.00005s，
-  再乘 20 = 0.001t，不丢失。
+- 一级界面 `formatNumber` 使用 **3 位小数**（用户可接受）；
+  编辑数据使用新增 `formatEditableNumber`：
+  - `0.001` → `"0.001"`
+  - `0.00000000001` → `"0.00000000001"`（完整 double 十进制，不量化）
+- `TimeExpression.formatExactTicks` 也用完整值：
+  - 二级预览显示 `= 0.00000000001 t`。
+- `TimeScreen` 表达式初值、`AmountScreen` 用量初值/±按钮均改用 `formatEditableNumber`，
+  不再因为展示格式把编辑数据截断。
+- 新配方默认耗时 **1t**（`RecipePattern` 初始/clear）。
+- 存储链路验证：0.00005s 亚 tick 时间经 JSON 保存/宽松读取后不变（×20 = 0.001t）。
 
 ### 新增测试
 
-- `TimeExpressionTest`：`0.001` 的 `formatNumber` / `formatTicks`。
+- `TimeExpressionTest`：0.001 / 0.00000000001 的 3 位展示、完整编辑值、精确 tick。
 - `RecipePatternTest`：空配方默认耗时 1t（toRecipe=0.05s）。
 - `ScenarioStoreTest`：0.00005s 亚 tick 时间经 JSON 保存/宽松读取后不变。
 
