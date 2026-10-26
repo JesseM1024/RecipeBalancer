@@ -34,8 +34,24 @@ public final class JeiRecipeButtonFactory implements IRecipeButtonControllerFact
         return new Controller<>(layout, icon);
     }
 
-    /** 13×13 的深色底 + 白色四角/十字，对应参考图标。 */
+    /** 从参考图逐像素采样出的 13×13 图案（每格 1px 完全一致复制）。 */
     private static final class PatternIcon implements IDrawable {
+        private static final int[][] PIXELS = {
+                {0xFF000000, 0xFF000000, 0xFF000000, 0xFF000000, 0xFF000000, 0xFF000000, 0xFF000000, 0xFF000000, 0xFF000000, 0xFF000000, 0xFF000000, 0xFF000000, 0xFF000000},
+                {0xFF000000, 0xFFC2C2C2, 0xFFC2C2C2, 0xFFC2C2C2, 0xFFC3C3C3, 0xFFC2C2C2, 0xFFC2C2C2, 0xFFC2C2C2, 0xFFC2C2C2, 0xFFC2C2C2, 0xFFC2C2C2, 0xFF929292, 0xFF000000},
+                {0xFF000000, 0xFFC2C2C2, 0xFF929292, 0xFF929292, 0xFF979797, 0xFF9C9C9C, 0xFFFFFFFF, 0xFF9C9C9C, 0xFF979797, 0xFF909090, 0xFF8E8E8E, 0xFF797979, 0xFF000000},
+                {0xFF000000, 0xFFC2C2C2, 0xFF8D8D8D, 0xFFFFFFFF, 0xFFFFFFFF, 0xFF9C9C9C, 0xFFFFFFFF, 0xFF9B9B9B, 0xFFFFFFFF, 0xFFFFFFFF, 0xFF919191, 0xFF7C7C7C, 0xFF000000},
+                {0xFF000000, 0xFFC2C2C2, 0xFF929292, 0xFFFFFFFF, 0xFF909090, 0xFF9C9C9C, 0xFFFFFFFF, 0xFF9C9C9C, 0xFF979797, 0xFFFFFFFF, 0xFF8E8E8E, 0xFF7C7C7C, 0xFF000000},
+                {0xFF000000, 0xFFC2C2C2, 0xFF9C9C9C, 0xFF9C9C9C, 0xFF9C9C9C, 0xFF9C9C9C, 0xFFFFFFFF, 0xFF9C9C9C, 0xFF9C9C9C, 0xFF9C9C9C, 0xFF9C9C9C, 0xFF7C7C7C, 0xFF000000},
+                {0xFF000000, 0xFFC2C2C2, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFF7C7C7C, 0xFF000000},
+                {0xFF000000, 0xFFC2C2C2, 0xFF9C9C9C, 0xFF9C9C9C, 0xFF9C9C9C, 0xFF9C9C9C, 0xFFFFFFFF, 0xFF9B9B9B, 0xFF9C9C9C, 0xFF9C9C9C, 0xFF9C9C9C, 0xFF7C7C7C, 0xFF000000},
+                {0xFF000000, 0xFFC2C2C2, 0xFF929292, 0xFFFFFFFF, 0xFF979797, 0xFF9C9C9C, 0xFFFFFFFF, 0xFF9C9C9C, 0xFF929292, 0xFFFFFFFF, 0xFF979797, 0xFF7C7C7C, 0xFF000000},
+                {0xFF000000, 0xFFBFBFBF, 0xFF949494, 0xFFFFFFFF, 0xFFFFFFFF, 0xFF9C9C9C, 0xFFFFFFFF, 0xFF9C9C9C, 0xFFFFFFFF, 0xFFFFFFFF, 0xFF949494, 0xFF7E7E7E, 0xFF000000},
+                {0xFF000000, 0xFFBFBFBF, 0xFF949494, 0xFF979797, 0xFF949494, 0xFF9B9B9B, 0xFFFFFFFF, 0xFF9C9C9C, 0xFF949494, 0xFF979797, 0xFF949494, 0xFF7D7D7D, 0xFF000000},
+                {0xFF000000, 0xFF909090, 0xFF7B7B7B, 0xFF797979, 0xFF7C7C7C, 0xFF7C7C7C, 0xFF7C7C7C, 0xFF7C7C7C, 0xFF7C7C7C, 0xFF7E7E7E, 0xFF7B7B7B, 0xFF797979, 0xFF000000},
+                {0xFF000000, 0xFF000000, 0xFF000000, 0xFF000000, 0xFF000000, 0xFF000000, 0xFF000000, 0xFF000000, 0xFF000000, 0xFF000000, 0xFF000000, 0xFF000000, 0xFF000000}
+        };
+
         @Override
         public int getWidth() {
             return 13;
@@ -48,21 +64,11 @@ public final class JeiRecipeButtonFactory implements IRecipeButtonControllerFact
 
         @Override
         public void draw(GuiGraphics graphics, int x, int y) {
-            graphics.fill(x, y, x + 13, y + 13, 0xFF101010);
-            graphics.fill(x + 1, y + 1, x + 12, y + 12, 0xFF8B8B8B);
-            int white = 0xFFFFFFFF;
-            // 1px 中央十字
-            graphics.fill(x + 6, y + 1, x + 7, y + 12, white);
-            graphics.fill(x + 1, y + 6, x + 12, y + 7, white);
-            // 四个 1px L 角
-            graphics.fill(x + 2, y + 2, x + 5, y + 3, white);
-            graphics.fill(x + 2, y + 2, x + 3, y + 5, white);
-            graphics.fill(x + 8, y + 2, x + 11, y + 3, white);
-            graphics.fill(x + 10, y + 2, x + 11, y + 5, white);
-            graphics.fill(x + 2, y + 10, x + 5, y + 11, white);
-            graphics.fill(x + 2, y + 8, x + 3, y + 11, white);
-            graphics.fill(x + 8, y + 10, x + 11, y + 11, white);
-            graphics.fill(x + 10, y + 8, x + 11, y + 11, white);
+            for (int row = 0; row < PIXELS.length; row++) {
+                for (int col = 0; col < PIXELS[row].length; col++) {
+                    graphics.fill(x + col, y + row, x + col + 1, y + row + 1, PIXELS[row][col]);
+                }
+            }
         }
     }
 
