@@ -2,6 +2,7 @@ package com.jessetech.recipebalancer.mc.screen;
 
 import com.jessetech.recipebalancer.core.time.TimeExpression;
 import com.jessetech.recipebalancer.core.time.TimeUnit;
+import com.jessetech.recipebalancer.mc.ui.AeStyle;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
@@ -88,10 +89,10 @@ public final class TimeScreen extends Screen {
     @Override
     public void renderBackground(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         graphics.fill(0, 0, width, height, 0xB0101010);
-        graphics.fill(panelX, panelY, panelX + PANEL_W, panelY + PANEL_H, 0xFF202020);
-        graphics.fill(panelX, panelY, panelX + PANEL_W, panelY + 20, 0xFF303030);
+        AeStyle.panel(graphics, panelX, panelY, PANEL_W, PANEL_H);
+        AeStyle.header(graphics, panelX, panelY, PANEL_W, 20);
         graphics.drawString(font, "配方耗时（支持 + - * / ^ 和括号）", panelX + 8, panelY + 6,
-                0xFFE0E0E0, false);
+                AeStyle.TEXT, false);
     }
 
     @Override
@@ -106,12 +107,12 @@ public final class TimeScreen extends Screen {
         } catch (RuntimeException e) {
             preview = "表达式无效: " + e.getMessage();
         }
-        graphics.drawString(font, preview, panelX + 8, panelY + 52, 0xFFA0A0A0, false);
+        graphics.drawString(font, preview, panelX + 8, panelY + 52, AeStyle.MUTED, false);
         graphics.drawString(font, "各配方可独立选单位；内部统一按 t 保存", panelX + 8,
-                panelY + 68, 0xFF808080, false);
+                panelY + 68, AeStyle.MUTED, false);
 
         if (!status.isEmpty()) {
-            graphics.drawString(font, status, panelX + 8, panelY + 84, 0xFFFF8080, false);
+            graphics.drawString(font, status, panelX + 8, panelY + 84, AeStyle.WARN, false);
         }
     }
 

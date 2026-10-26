@@ -3,6 +3,7 @@ package com.jessetech.recipebalancer.mc.screen;
 import com.jessetech.recipebalancer.core.io.ScenarioStore;
 import com.jessetech.recipebalancer.core.model.Scenario;
 import com.jessetech.recipebalancer.core.model.ScenarioDraft;
+import com.jessetech.recipebalancer.mc.ui.AeStyle;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
@@ -107,22 +108,23 @@ public final class ScenarioListScreen extends Screen {
     @Override
     public void renderBackground(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         graphics.fill(0, 0, width, height, 0xB0101010);
-        graphics.fill(panelX, panelY, panelX + PANEL_W, panelY + PANEL_H, 0xFF202020);
-        graphics.fill(panelX, panelY, panelX + PANEL_W, panelY + 20, 0xFF303030);
-        graphics.drawString(font, "配方集（点击载入）", panelX + 8, panelY + 6, 0xFFE0E0E0, false);
+        AeStyle.panel(graphics, panelX, panelY, PANEL_W, PANEL_H);
+        AeStyle.header(graphics, panelX, panelY, PANEL_W, 20);
+        graphics.drawString(font, "配方集（点击载入）", panelX + 8, panelY + 6, AeStyle.TEXT, false);
     }
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         super.render(graphics, mouseX, mouseY, partialTick);
 
-        graphics.fill(panelX + 4, listY, panelX + PANEL_W - 4, listY + listH, 0x40000000);
+        AeStyle.subPanel(graphics, panelX + 4, listY, PANEL_W - 8, listH);
         graphics.enableScissor(panelX + 4, listY, panelX + PANEL_W - 4, listY + listH);
         int rowH = 18;
         double maxScroll = Math.max(0, names.size() * rowH - listH);
         scroll = Math.max(0, Math.min(scroll, maxScroll));
         if (names.isEmpty()) {
-            graphics.drawString(font, "（没有已保存的配方集）", panelX + 8, listY + 4, 0xFF808080, false);
+            graphics.drawString(font, "（没有已保存的配方集）", panelX + 8, listY + 4,
+                    AeStyle.MUTED, false);
         }
         for (int i = 0; i < names.size(); i++) {
             int y = listY - (int) scroll + i * rowH;
@@ -134,15 +136,15 @@ public final class ScenarioListScreen extends Screen {
             if (i == selected) {
                 graphics.fill(panelX + 4, y, panelX + PANEL_W - 4, y + rowH - 1, 0x804A90D9);
             } else if (hover) {
-                graphics.fill(panelX + 4, y, panelX + PANEL_W - 4, y + rowH - 1, 0x30FFFFFF);
+                graphics.fill(panelX + 4, y, panelX + PANEL_W - 4, y + rowH - 1, 0x303A6EA5);
             }
-            graphics.drawString(font, names.get(i), panelX + 8, y + 5, 0xFFE0E0E0, false);
+            graphics.drawString(font, names.get(i), panelX + 8, y + 5, AeStyle.TEXT, false);
         }
         graphics.disableScissor();
 
         if (!status.isEmpty()) {
             graphics.drawString(font, font.plainSubstrByWidth(status, PANEL_W - 16),
-                    panelX + 8, panelY + PANEL_H - 68, 0xFFFFD080, false);
+                    panelX + 8, panelY + PANEL_H - 68, AeStyle.ACCENT, false);
         }
     }
 

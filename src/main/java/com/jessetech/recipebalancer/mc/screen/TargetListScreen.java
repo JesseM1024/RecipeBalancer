@@ -3,6 +3,7 @@ package com.jessetech.recipebalancer.mc.screen;
 import com.jessetech.recipebalancer.core.model.ScenarioDraft;
 import com.jessetech.recipebalancer.core.time.TimeExpression;
 import com.jessetech.recipebalancer.mc.itemmap.ItemKeyMapper;
+import com.jessetech.recipebalancer.mc.ui.AeStyle;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
@@ -70,10 +71,10 @@ public final class TargetListScreen extends Screen {
     @Override
     public void renderBackground(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         graphics.fill(0, 0, width, height, 0xB0101010);
-        graphics.fill(panelX, panelY, panelX + PANEL_W, panelY + PANEL_H, 0xFF202020);
-        graphics.fill(panelX, panelY, panelX + PANEL_W, panelY + 20, 0xFF303030);
+        AeStyle.panel(graphics, panelX, panelY, PANEL_W, PANEL_H);
+        AeStyle.header(graphics, panelX, panelY, PANEL_W, 20);
         graphics.drawString(font, "目标产物（左键编辑 / 右键删除）", panelX + 8, panelY + 6,
-                0xFFE0E0E0, false);
+                AeStyle.TEXT, false);
     }
 
     @Override
@@ -85,11 +86,11 @@ public final class TargetListScreen extends Screen {
         double maxScroll = Math.max(0, entries.size() * rowH - listH);
         scroll = Math.max(0, Math.min(scroll, maxScroll));
 
-        graphics.fill(panelX + 4, listY, panelX + PANEL_W - 4, listY + listH, 0x40000000);
+        AeStyle.subPanel(graphics, panelX + 4, listY, PANEL_W - 8, listH);
         graphics.enableScissor(panelX + 4, listY, panelX + PANEL_W - 4, listY + listH);
         if (entries.isEmpty()) {
             graphics.drawString(font, "（空）点「添加目标」", panelX + 8, listY + 4,
-                    0xFF808080, false);
+                    AeStyle.MUTED, false);
         }
         for (int i = 0; i < entries.size(); i++) {
             int y = listY - (int) scroll + i * rowH;
@@ -100,23 +101,24 @@ public final class TargetListScreen extends Screen {
             boolean hover = mouseX >= panelX + 4 && mouseX < panelX + PANEL_W - 4
                     && mouseY >= y && mouseY < y + rowH;
             if (hover) {
-                graphics.fill(panelX + 4, y, panelX + PANEL_W - 4, y + rowH - 1, 0x30FFFFFF);
+                graphics.fill(panelX + 4, y, panelX + PANEL_W - 4, y + rowH - 1, 0x303A6EA5);
             }
+            AeStyle.slot(graphics, panelX + 6, y + 2);
             ItemKeyMapper.renderIcon(graphics, font, entry.getKey(), panelX + 6, y + 2, null);
             String name = ItemKeyMapper.displayName(entry.getKey());
             graphics.drawString(font, font.plainSubstrByWidth(name, 110), panelX + 26, y + 2,
-                    0xFFE0E0E0, false);
+                    AeStyle.TEXT, false);
             graphics.drawString(font, font.plainSubstrByWidth(entry.getKey(), 110),
-                    panelX + 26, y + 11, 0xFF808080, false);
+                    panelX + 26, y + 11, AeStyle.MUTED, false);
             String amount = TimeExpression.formatNumber(entry.getValue()) + "/s";
             graphics.drawString(font, amount, panelX + PANEL_W - 8 - font.width(amount), y + 5,
-                    0xFFFFD080, false);
+                    AeStyle.ACCENT, false);
         }
         graphics.disableScissor();
 
         if (!status.isEmpty()) {
             graphics.drawString(font, font.plainSubstrByWidth(status, PANEL_W - 16),
-                    panelX + 8, panelY + PANEL_H - 40, 0xFFFFD080, false);
+                    panelX + 8, panelY + PANEL_H - 40, AeStyle.ACCENT, false);
         }
     }
 

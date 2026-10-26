@@ -50,14 +50,15 @@ class RecipePatternTest {
     }
 
     @Test
-    void outputOverNineMarksTruncated() {
+    void outputOverSixteenMarksTruncated() {
         Map<String, Double> products = new LinkedHashMap<>();
-        for (int i = 0; i < 10; i++) {
+        for (int i = 0; i < 17; i++) {
             products.put("item" + i, 1.0);
         }
         RecipePattern pattern = new RecipePattern();
         pattern.load(new Recipe(Map.of(), products, 1.0, "x"));
         assertTrue(pattern.truncated());
+        assertEquals(RecipePattern.MAX_OUTPUTS, pattern.outputCount());
         assertTrue(pattern.hasContent());
     }
 

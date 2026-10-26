@@ -2,6 +2,7 @@ package com.jessetech.recipebalancer.mc.screen;
 
 import com.jessetech.recipebalancer.core.time.TimeExpression;
 import com.jessetech.recipebalancer.mc.itemmap.ItemKeyMapper;
+import com.jessetech.recipebalancer.mc.ui.AeStyle;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
@@ -144,33 +145,34 @@ public final class AmountScreen extends Screen {
     @Override
     public void renderBackground(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         graphics.fill(0, 0, width, height, 0xB0101010);
-        graphics.fill(panelX, panelY, panelX + panelW, panelY + panelH, 0xFF202020);
-        graphics.fill(panelX, panelY, panelX + panelW, panelY + 20, 0xFF303030);
-        graphics.drawString(font, title, panelX + 8, panelY + 6, 0xFFE0E0E0, false);
+        AeStyle.panel(graphics, panelX, panelY, panelW, panelH);
+        AeStyle.header(graphics, panelX, panelY, panelW, 20);
+        graphics.drawString(font, title, panelX + 8, panelY + 6, AeStyle.TEXT, false);
     }
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         super.render(graphics, mouseX, mouseY, partialTick);
 
-        graphics.drawString(font, "物品 / 注册名", panelX + 8, panelY + 16, 0xFFA0A0A0, false);
+        graphics.drawString(font, "物品 / 注册名", panelX + 8, panelY + 16, AeStyle.MUTED, false);
         if (amountEditable) {
-            graphics.drawString(font, "用量", panelX + 126, panelY + 40, 0xFFA0A0A0, false);
+            graphics.drawString(font, "用量", panelX + 126, panelY + 40, AeStyle.MUTED, false);
         }
 
         String previewKey = ItemKeyMapper.normalize(keyBox.getValue());
         if (!previewKey.isEmpty()) {
+            AeStyle.slot(graphics, panelX + 126, panelY + 52);
             ItemKeyMapper.renderIcon(graphics, font, previewKey, panelX + 126, panelY + 52, null);
             String name = ItemKeyMapper.displayName(previewKey);
             graphics.drawString(font, font.plainSubstrByWidth(name, panelW - 154),
-                    panelX + 146, panelY + 52, 0xFFE0E0E0, false);
+                    panelX + 146, panelY + 52, AeStyle.TEXT, false);
             graphics.drawString(font, font.plainSubstrByWidth(previewKey, panelW - 154),
-                    panelX + 146, panelY + 64, 0xFF808080, false);
+                    panelX + 146, panelY + 64, AeStyle.MUTED, false);
         }
 
         if (!status.isEmpty()) {
             graphics.drawString(font, status, panelX + 8, panelY + panelH - 38,
-                    0xFFFF8080, false);
+                    AeStyle.WARN, false);
         }
     }
 

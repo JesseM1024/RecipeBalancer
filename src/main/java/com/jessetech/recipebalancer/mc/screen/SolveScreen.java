@@ -5,6 +5,7 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.FormattedCharSequence;
+import com.jessetech.recipebalancer.mc.ui.AeStyle;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -58,10 +59,10 @@ public final class SolveScreen extends Screen {
     @Override
     public void renderBackground(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         graphics.fill(0, 0, width, height, 0xD0101010);
-        graphics.fill(panelX, panelY, panelX + panelW, panelY + panelH, 0xFF202020);
-        graphics.fill(panelX, panelY, panelX + panelW, panelY + 20, 0xFF303030);
+        AeStyle.panel(graphics, panelX, panelY, panelW, panelH);
+        AeStyle.header(graphics, panelX, panelY, panelW, 20);
         graphics.drawString(font, success ? "求解成功" : "求解失败", panelX + 8, panelY + 6,
-                success ? 0xFF80FF80 : 0xFFFF8080, false);
+                success ? 0xFF1E6B2E : AeStyle.WARN, false);
     }
 
     @Override
@@ -72,11 +73,12 @@ public final class SolveScreen extends Screen {
         double maxScroll = Math.max(0, lines.size() * lineHeight - textH);
         scroll = Math.max(0, Math.min(scroll, maxScroll));
 
+        AeStyle.subPanel(graphics, panelX + 4, textY, panelW - 8, textH);
         graphics.enableScissor(panelX + 4, textY, panelX + panelW - 4, textY + textH);
         int y = textY + 2 - (int) scroll;
         for (FormattedCharSequence line : lines) {
             if (y + font.lineHeight >= textY && y <= textY + textH) {
-                graphics.drawString(font, line, panelX + 8, y, 0xE0E0E0, false);
+                graphics.drawString(font, line, panelX + 8, y, AeStyle.TEXT, false);
             }
             y += lineHeight;
         }
@@ -84,7 +86,7 @@ public final class SolveScreen extends Screen {
 
         if (maxScroll > 0) {
             graphics.drawString(font, "滚轮滚动", panelX + panelW - 64, panelY + panelH - 21,
-                    0xFF808080, false);
+                    AeStyle.MUTED, false);
         }
     }
 

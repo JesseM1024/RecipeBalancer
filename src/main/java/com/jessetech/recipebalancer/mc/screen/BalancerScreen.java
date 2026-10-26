@@ -11,6 +11,7 @@ import com.jessetech.recipebalancer.core.report.TextReporter;
 import com.jessetech.recipebalancer.core.solve.Balancer;
 import com.jessetech.recipebalancer.core.time.TimeExpression;
 import com.jessetech.recipebalancer.mc.itemmap.ItemKeyMapper;
+import com.jessetech.recipebalancer.mc.ui.AeStyle;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
@@ -34,7 +35,8 @@ import java.util.Map;
 public final class BalancerScreen extends Screen {
 
     private static final int SLOT = 16;
-    private static final int GRID = 3;
+    private static final int GRID_COLS = 3;
+    private static final int VISIBLE_ROWS = 3;
     private static final int LIB_COLS = 4;
     private static final int LIB_ROWS = 2;
     private static final int TARGET_SLOTS = 6;
@@ -53,6 +55,7 @@ public final class BalancerScreen extends Screen {
     private String scenarioName = "default";
 
     private int libraryScroll;
+    private int encodingScrollRow;
     private int lastRightClickIndex = -1;
     private long lastRightClickTime;
 
@@ -96,17 +99,18 @@ public final class BalancerScreen extends Screen {
         libraryY = libraryLabelY + 10;
         encodingLabelY = libraryY + LIB_ROWS * SLOT + 4;
         encodingY = encodingLabelY + 10;
-        inventoryLabelY = encodingY + GRID * SLOT + 4;
+        inventoryLabelY = encodingY + VISIBLE_ROWS * SLOT + 4;
         inventoryY = inventoryLabelY + 10;
         statusY = panelY + panelH - 10;
 
         inputX = panelX + 4;
-        outputX = inputX + GRID * SLOT + 18;
-        equipmentX = outputX + GRID * SLOT + 6;
+        outputX = inputX + GRID_COLS * SLOT + 18;
+        equipmentX = outputX + GRID_COLS * SLOT + 6;
         inventoryX = panelX + 4;
 
         libraryScroll = Math.max(0, Math.min(libraryScroll,
                 Math.max(0, recipeRows() - LIB_ROWS)));
+        encodingScrollRow = Math.max(0, Math.min(encodingScrollRow, maxEncodingScroll()));
 
         int topButtonW = 38;
         int topButtonX = panelX + panelW - 4 - 3 * (topButtonW + 2);
@@ -162,31 +166,30 @@ public final class BalancerScreen extends Screen {
     @Override
     public void renderBackground(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         graphics.fill(0, 0, width, height, 0xE0101010);
-        graphics.fill(panelX, panelY, panelX + panelW, panelY + panelH, 0xF0202020);
-        graphics.fill(panelX, panelY, panelX + panelW, topY + 15, 0xF0303030);
-        graphics.fill(panelX, panelY + 15, panelX + panelW, panelY + 16, 0xFF505050);
+        AeStyle.panel(graphics, panelX, panelY, panelW, panelH);
+        AeStyle.header(graphics, panelX, panelY, panelW, 16);
 
-        graphics.drawString(font, "配方编码终端", panelX + 4, topY + 4, 0xFFE0E0E0, false);
+        graphics.drawString(font, "配方编码终端", panelX + 4, topY + 4, AeStyle.TEXT, false);
 
-        graphics.drawString(font, "目标", panelX + 4, targetY + 4, 0xFFB0B0B0, false);
+        graphics.drawString(font, "目标", panelX + 4, targetY + 4, AeStyle.MUTED, false);
         drawTargets(graphics, mouseX, mouseY);
 
         graphics.drawString(font, "配方库 (" + draft.recipeCount() + ")", panelX + 4,
-                libraryLabelY, 0xFFB0B0B0, false);
+                libraryLabelY, AeStyle.MUTED, false);
         drawLibrary(graphics, mouseX, mouseY);
 
-        graphics.drawString(font, "编码", panelX + 4, encodingLabelY, 0xFFB0B0B0, false);
         if (editingIndex >= 0) {
-            graphics.drawString(font, "R" + editingIndex, panelX + 30, encodingLabelY,
-                    0xFFFFD080, false);
+            String tag = "R" + editingIndex;
+            graphics.drawString(font, tag, panelX + panelW - 4 - font.width(tag),
+                    encodingLabelY, AeStyle.ACCENT, false);
         }
         drawEncoding(graphics, mouseX, mouseY);
 
-        graphics.drawString(font, "背包", panelX + 4, inventoryLabelY, 0xFFB0B0B0, false);
+        graphics.drawString(font, "背包", panelX + 4, inventoryLabelY, AeStyle.MUTED, false);
         drawInventory(graphics, mouseX, mouseY);
 
         graphics.drawString(font, font.plainSubstrByWidth(status, panelW - 8), panelX + 4,
-                statusY, 0xFFFFD080, false);
+                statusY, AeStyle.ACCENT, false);
     }
 
     private void drawTargets(GuiGraphics graphics, int mouseX, int mouseY) {
@@ -194,7 +197,7 @@ public final class BalancerScreen extends Screen {
         for (int i = 0; i < TARGET_SLOTS; i++) {
             int x = panelX + 30 + i * (SLOT + 1);
             int y = targetY;
-            drawSlot(graphics, x, y);
+            AeStyle.slot(graphics, x, y);
             if (i < entries.size()) {
                 Map.Entry<String, Double> entry = entries.get(i);
                 ItemKeyMapper.renderIcon(graphics, font, entry.getKey(), x, y,
@@ -203,7 +206,7 @@ public final class BalancerScreen extends Screen {
         }
         if (entries.size() > TARGET_SLOTS) {
             graphics.drawString(font, "+" + (entries.size() - TARGET_SLOTS),
-                    panelX + 30 + TARGET_SLOTS * (SLOT + 1), targetY + 4, 0xFFB0B0B0, false);
+                    panelX + 30 + TARGET_SLOTS * (SLOT + 1), targetY + 4, AeStyle.MUTED, false);
         }
     }
 
@@ -215,7 +218,7 @@ public final class BalancerScreen extends Screen {
                 libraryY + LIB_ROWS * SLOT, 0x30000000);
         if (total == 0) {
             graphics.drawString(font, "（空）在下方编码后点「写入」", panelX + 6, libraryY + 4,
-                    0xFF808080, false);
+                    AeStyle.MUTED, false);
             return;
         }
         for (int row = 0; row < LIB_ROWS; row++) {
@@ -226,10 +229,11 @@ public final class BalancerScreen extends Screen {
                 }
                 int x = panelX + 4 + col * (SLOT + 1);
                 int y = libraryY + row * SLOT;
-                drawSlot(graphics, x, y);
+                AeStyle.slot(graphics, x, y);
                 if (index == editingIndex) {
-                    graphics.fill(x - 1, y - 1, x + SLOT + 1, y - 1 + 1, 0xFFFFD080);
-                    graphics.fill(x - 1, y + SLOT, x + SLOT + 1, y + SLOT + 1, 0xFFFFD080);
+                    graphics.fill(x - 1, y - 1, x + SLOT + 1, y, AeStyle.ACCENT_LIGHT);
+                    graphics.fill(x - 1, y + SLOT, x + SLOT + 1, y + SLOT + 1,
+                            AeStyle.ACCENT_LIGHT);
                 }
                 Recipe recipe = draft.recipes().get(index);
                 String productKey = recipe.productList().keySet().stream().findFirst().orElse("");
@@ -251,39 +255,61 @@ public final class BalancerScreen extends Screen {
     }
 
     private void drawEncoding(GuiGraphics graphics, int mouseX, int mouseY) {
-        graphics.drawString(font, "原料", inputX, encodingLabelY, 0xFF90C0FF, false);
-        graphics.drawString(font, "产物", outputX, encodingLabelY, 0xFF90FF90, false);
-        graphics.drawString(font, "→", inputX + GRID * SLOT + 4, encodingY + 18,
-                0xFFB0B0B0, false);
+        graphics.drawString(font, "原料 " + pattern.inputCount(), inputX, encodingLabelY,
+                AeStyle.ACCENT, false);
+        graphics.drawString(font, "产物 " + pattern.outputCount(), outputX, encodingLabelY,
+                AeStyle.ACCENT, false);
+        graphics.drawString(font, "→", inputX + GRID_COLS * SLOT + 4, encodingY + 18,
+                AeStyle.MUTED, false);
 
-        for (int i = 0; i < RecipePattern.SLOTS; i++) {
-            int inX = inputX + (i % GRID) * SLOT;
-            int inY = encodingY + (i / GRID) * SLOT;
-            drawSlot(graphics, inX, inY);
-            if (pattern.inputKey(i) != null) {
-                ItemKeyMapper.renderIcon(graphics, font, pattern.inputKey(i), inX, inY,
-                        amountText(pattern.inputAmount(i)));
-            }
+        encodingScrollRow = Math.max(0, Math.min(encodingScrollRow, maxEncodingScroll()));
+        for (int row = 0; row < VISIBLE_ROWS; row++) {
+            int gridRow = encodingScrollRow + row;
+            for (int col = 0; col < GRID_COLS; col++) {
+                int index = gridRow * GRID_COLS + col;
+                int y = encodingY + row * SLOT;
 
-            int outX = outputX + (i % GRID) * SLOT;
-            int outY = encodingY + (i / GRID) * SLOT;
-            drawSlot(graphics, outX, outY);
-            if (pattern.outputKey(i) != null) {
-                ItemKeyMapper.renderIcon(graphics, font, pattern.outputKey(i), outX, outY,
-                        amountText(pattern.outputAmount(i)));
+                int inX = inputX + col * SLOT;
+                if (index < RecipePattern.MAX_INPUTS) {
+                    AeStyle.slot(graphics, inX, y);
+                    if (pattern.inputKey(index) != null) {
+                        ItemKeyMapper.renderIcon(graphics, font, pattern.inputKey(index), inX, y,
+                                amountText(pattern.inputAmount(index)));
+                    }
+                }
+
+                int outX = outputX + col * SLOT;
+                if (index < RecipePattern.MAX_OUTPUTS) {
+                    AeStyle.slot(graphics, outX, y);
+                    if (pattern.outputKey(index) != null) {
+                        ItemKeyMapper.renderIcon(graphics, font, pattern.outputKey(index), outX, y,
+                                amountText(pattern.outputAmount(index)));
+                    }
+                }
             }
         }
 
-        graphics.drawString(font, "设备", equipmentX + 18, encodingY + 4, 0xFFC0C0C0, false);
-        drawSlot(graphics, equipmentX, encodingY);
+        int maxScroll = maxEncodingScroll();
+        if (maxScroll > 0) {
+            int barX = panelX + panelW - 7;
+            int barY = encodingY;
+            int barH = VISIBLE_ROWS * SLOT;
+            graphics.fill(barX, barY, barX + 3, barY + barH, 0xFF6E6E6E);
+            int thumbH = Math.max(8, barH * VISIBLE_ROWS / (VISIBLE_ROWS + maxScroll));
+            int thumbY = barY + (barH - thumbH) * encodingScrollRow / maxScroll;
+            graphics.fill(barX, thumbY, barX + 3, thumbY + thumbH, AeStyle.ACCENT_LIGHT);
+        }
+
+        graphics.drawString(font, "设备", equipmentX + 18, encodingY + 4, AeStyle.MUTED, false);
+        AeStyle.slot(graphics, equipmentX, encodingY);
         if (!pattern.equipmentKey().isBlank()) {
             ItemKeyMapper.renderIcon(graphics, font, pattern.equipmentKey(), equipmentX,
                     encodingY, null);
         }
 
-        graphics.drawString(font, "耗时", equipmentX + 18, encodingY + 24, 0xFFC0C0C0, false);
+        graphics.drawString(font, "耗时", equipmentX + 18, encodingY + 24, AeStyle.MUTED, false);
         int timeY = encodingY + 20;
-        drawSlot(graphics, equipmentX, timeY);
+        AeStyle.slot(graphics, equipmentX, timeY);
         String time = TimeExpression.formatNumber(pattern.timeTicks()) + "t";
         if (font.width(time) > SLOT) {
             time = TimeExpression.formatNumber(pattern.timeTicks() / 20.0) + "s";
@@ -299,7 +325,7 @@ public final class BalancerScreen extends Screen {
             for (int col = 0; col < INV_COLS; col++) {
                 int x = inventoryX + col * SLOT;
                 int y = inventoryY + row * SLOT;
-                drawSlot(graphics, x, y);
+                AeStyle.slot(graphics, x, y);
                 if (inventory == null) {
                     continue;
                 }
@@ -313,12 +339,6 @@ public final class BalancerScreen extends Screen {
         }
         graphics.fill(inventoryX, inventoryY + 3 * SLOT - 1,
                 inventoryX + INV_COLS * SLOT, inventoryY + 3 * SLOT, 0x40FFFFFF);
-    }
-
-    private static void drawSlot(GuiGraphics graphics, int x, int y) {
-        graphics.fill(x, y, x + SLOT, y + SLOT, 0x60000000);
-        graphics.fill(x, y, x + SLOT, y + 1, 0x30FFFFFF);
-        graphics.fill(x, y + SLOT - 1, x + SLOT, y + SLOT, 0x50000000);
     }
 
     private static String amountText(double amount) {
@@ -474,18 +494,28 @@ public final class BalancerScreen extends Screen {
         return -1;
     }
 
-    /** [0=输入,1=输出, index]；不在格子上返回 null。 */
+    private int maxEncodingScroll() {
+        int last = Math.max(pattern.maxInputIndex(), pattern.maxOutputIndex());
+        int maxRows = (RecipePattern.MAX_INPUTS + GRID_COLS - 1) / GRID_COLS;
+        // 多留一行空格：最后一格填满后仍能滚到下一行继续添加
+        int rows = last < 0 ? 1 : Math.min(maxRows, last / GRID_COLS + 2);
+        return Math.max(0, rows - VISIBLE_ROWS);
+    }
+
+    /** [0=输入,1=输出, index]；不在可见格子上返回 null。 */
     private int[] encodingSlotAt(double mouseX, double mouseY) {
-        for (int i = 0; i < RecipePattern.SLOTS; i++) {
-            int inX = inputX + (i % GRID) * SLOT;
-            int inY = encodingY + (i / GRID) * SLOT;
-            if (inside(mouseX, mouseY, inX, inY, SLOT, SLOT)) {
-                return new int[]{0, i};
-            }
-            int outX = outputX + (i % GRID) * SLOT;
-            int outY = encodingY + (i / GRID) * SLOT;
-            if (inside(mouseX, mouseY, outX, outY, SLOT, SLOT)) {
-                return new int[]{1, i};
+        for (int row = 0; row < VISIBLE_ROWS; row++) {
+            for (int col = 0; col < GRID_COLS; col++) {
+                int index = (encodingScrollRow + row) * GRID_COLS + col;
+                int y = encodingY + row * SLOT;
+                if (index < RecipePattern.MAX_INPUTS
+                        && inside(mouseX, mouseY, inputX + col * SLOT, y, SLOT, SLOT)) {
+                    return new int[]{0, index};
+                }
+                if (index < RecipePattern.MAX_OUTPUTS
+                        && inside(mouseX, mouseY, outputX + col * SLOT, y, SLOT, SLOT)) {
+                    return new int[]{1, index};
+                }
             }
         }
         return null;
@@ -631,6 +661,9 @@ public final class BalancerScreen extends Screen {
                     pattern.removeOutput(index);
                 }
                 status = "已移除格子";
+            } else {
+                // QoL：空手左键空格直接开始自定义（不再要求中键）
+                openPatternAmount(input, index, "", 1.0);
             }
             return;
         }
@@ -703,6 +736,12 @@ public final class BalancerScreen extends Screen {
                     Math.max(0, recipeRows() - LIB_ROWS)));
             return true;
         }
+        if (mouseX >= inputX && mouseX < panelX + panelW - 4
+                && mouseY >= encodingY && mouseY < encodingY + VISIBLE_ROWS * SLOT) {
+            encodingScrollRow = Math.max(0, Math.min(
+                    encodingScrollRow + (scrollY < 0 ? 1 : -1), maxEncodingScroll()));
+            return true;
+        }
         return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
     }
 
@@ -715,8 +754,9 @@ public final class BalancerScreen extends Screen {
         pattern.load(recipe);
         editingIndex = index;
         carriedKey = "";
+        encodingScrollRow = 0;
         status = pattern.truncated()
-                ? "R" + index + " 已载入；超过 9 格的物品未显示"
+                ? "R" + index + " 已载入；超过 256/16 的部分未显示"
                 : "R" + index + " 已载入编码区";
     }
 
@@ -745,6 +785,7 @@ public final class BalancerScreen extends Screen {
         pattern.clear();
         editingIndex = -1;
         carriedKey = "";
+        encodingScrollRow = 0;
         status = "新建配方编码";
     }
 
@@ -838,5 +879,22 @@ public final class BalancerScreen extends Screen {
 
     private static boolean inside(double x, double y, int rx, int ry, int rw, int rh) {
         return x >= rx && x < rx + rw && y >= ry && y < ry + rh;
+    }
+
+    // JEI 非 ContainerScreen 渲染（RecipeBalancerJeiPlugin 使用）
+    public int jeiGuiLeft() {
+        return panelX;
+    }
+
+    public int jeiGuiTop() {
+        return panelY;
+    }
+
+    public int jeiGuiWidth() {
+        return panelW;
+    }
+
+    public int jeiGuiHeight() {
+        return panelH;
     }
 }
