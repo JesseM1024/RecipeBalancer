@@ -1,23 +1,36 @@
 package com.jessetech.recipebalancer.mc.itemmap;
 
+import com.google.gson.JsonElement;
+import com.google.gson.JsonParser;
 import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.serialization.JsonOps;
 import net.minecraft.ChatFormatting;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.RegistryOps;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 物品身份与图标：core 里物品是字符串（registry id 或自定义名），
  * 这里负责与 {@link ItemStack} 互转，以及“未注册物品”的占位渲染。
  */
 public final class ItemKeyMapper {
+
+    private static final String STACK_PREFIX = "stack|";
+    private static final Map<String, ItemStack> STACK_CACHE = new ConcurrentHashMap<>();
 
     private ItemKeyMapper() {
     }
@@ -30,12 +43,32 @@ public final class ItemKeyMapper {
         return value.startsWith("item|") ? value.substring("item|".length()) : value;
     }
 
+    /**
+     * 普通物品只存 registry id；带组件（药水、附魔、自定义名等）时
+     * 用 `stack|<base64(ItemStack JSON)>` 保存完整 ItemStack。
+     */
     public static String of(ItemStack stack) {
         if (stack == null || stack.isEmpty()) {
             return "";
         }
         ResourceLocation id = BuiltInRegistries.ITEM.getKey(stack.getItem());
-        return id == null ? "" : id.toString();
+        if (id == null) {
+            return "";
+        }
+        ItemStack single = stack.copyWithCount(1);
+        if (single.isComponentsPatchEmpty()) {
+            return id.toString();
+        }
+        try {
+            RegistryOps<JsonElement> ops = RegistryOps.create(JsonOps.INSTANCE, registryAccess());
+            JsonElement json = ItemStack.CODEC.encodeStart(ops, single).getOrThrow();
+            String encoded = Base64.getUrlEncoder().withoutPadding()
+                    .encodeToString(json.toString().getBytes(StandardCharsets.UTF_8));
+            return STACK_PREFIX + encoded;
+        } catch (RuntimeException e) {
+            // 极端环境（无 registry access）退化到 registry id，至少不崩
+            return id.toString();
+        }
     }
 
     public static ItemStack stack(String key) {
@@ -43,11 +76,41 @@ public final class ItemKeyMapper {
         if (id.isEmpty()) {
             return ItemStack.EMPTY;
         }
-        ResourceLocation location = ResourceLocation.tryParse(id);
-        if (location == null) {
+        if (id.startsWith(STACK_PREFIX)) {
+            return STACK_CACHE.computeIfAbsent(id, ItemKeyMapper::decodeStack);
+        }
+        return BuiltInRegistries.ITEM.getOptional(ResourceLocation.tryParse(id))
+                .map(ItemStack::new).orElse(ItemStack.EMPTY);
+    }
+
+    private static ItemStack decodeStack(String key) {
+        try {
+            String jsonText = new String(Base64.getUrlDecoder()
+                    .decode(key.substring(STACK_PREFIX.length())), StandardCharsets.UTF_8);
+            JsonElement json = JsonParser.parseString(jsonText);
+            RegistryOps<JsonElement> ops = RegistryOps.create(JsonOps.INSTANCE, registryAccess());
+            return ItemStack.CODEC.parse(ops, json).result()
+                    .map(stack -> stack.copyWithCount(1)).orElse(ItemStack.EMPTY);
+        } catch (RuntimeException e) {
             return ItemStack.EMPTY;
         }
-        return BuiltInRegistries.ITEM.getOptional(location).map(ItemStack::new).orElse(ItemStack.EMPTY);
+    }
+
+    private static RegistryAccess registryAccess() {
+        Minecraft minecraft = Minecraft.getInstance();
+        return minecraft != null && minecraft.level != null
+                ? minecraft.level.registryAccess() : RegistryAccess.EMPTY;
+    }
+
+    private static String baseItemId(String key) {
+        ItemStack stack = stack(key);
+        if (!stack.isEmpty()) {
+            ResourceLocation id = BuiltInRegistries.ITEM.getKey(stack.getItem());
+            if (id != null) {
+                return id.toString();
+            }
+        }
+        return normalize(key);
     }
 
     public static boolean exists(String key) {
@@ -62,14 +125,15 @@ public final class ItemKeyMapper {
         return normalize(key);
     }
 
-    /** 注册名（tooltip/用量界面展示）。 */
+    /** 注册名（tooltip/用量界面展示）；组件物品只显示底层 registry id。 */
     public static String registryName(String key) {
-        return normalize(key);
+        String id = baseItemId(key);
+        return id.isEmpty() ? normalize(key) : id;
     }
 
     /** 未注册物品的短标签：ASCII 取前 3 个字母，中文取第一个字。 */
     public static String shortLabel(String key) {
-        String id = normalize(key);
+        String id = baseItemId(key);
         int colon = id.indexOf(':');
         String path = colon >= 0 ? id.substring(colon + 1) : id;
         if (path.isEmpty()) {
@@ -85,7 +149,7 @@ public final class ItemKeyMapper {
 
     /** 未注册物品的确定性占位色。 */
     public static int placeholderColor(String key) {
-        int hash = normalize(key).hashCode();
+        int hash = baseItemId(key).hashCode();
         float hue = Math.floorMod(hash, 3600) / 3600.0f;
         float saturation = 0.48f;
         float brightness = 0.78f;
@@ -192,7 +256,7 @@ public final class ItemKeyMapper {
         ItemStack stack = stack(id);
         if (!stack.isEmpty()) {
             lines.add(stack.getHoverName());
-            lines.add(Component.literal(id).withStyle(ChatFormatting.GRAY));
+            lines.add(Component.literal(registryName(id)).withStyle(ChatFormatting.GRAY));
         } else {
             lines.add(Component.literal(shortLabel(id)).withStyle(ChatFormatting.GOLD));
             lines.add(Component.literal(id).withStyle(ChatFormatting.GRAY));

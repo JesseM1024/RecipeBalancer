@@ -70,7 +70,8 @@ public final class AmountScreen extends Screen implements JeiPanelScreen {
         // 图标槽在注册名输入框左侧；真名/注册名放在它们下方
         keyBox = new EditBox(font, panelX + 30, panelY + 32, panelW - 38, 18,
                 Component.literal("物品注册名"));
-        keyBox.setMaxLength(128);
+        // 组件物品（药水等）的 key 是 base64，可能远超 128
+        keyBox.setMaxLength(4096);
         keyBox.setValue(itemKey);
         addRenderableWidget(keyBox);
 
