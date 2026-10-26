@@ -11,6 +11,29 @@ MC 1.21.1 + NeoForge 21.1.209 **纯客户端**模组：产线配平自动计算�
 > 核心求解 + AE 样板编码终端 + JEI ghost/配方加号已完成，81 项测试全绿。
 > 上游参考：本机 Python 项目《配方树自动配平》（算法语义以此为准）。
 
+## 流程图启动动画配置
+
+编辑：
+
+`config/recipebalancer/graph-animation.properties`
+
+```properties
+stepsPerSecond=100
+durationSeconds=2.0
+stepDistance=6.0
+```
+
+- 约 1 秒热读取，无需重启；
+- `stepsPerSecond`、`stepDistance` 可在动画中生效；
+- `durationSeconds` 在下一次打开流程图时生效。
+
+## 语言
+
+- 英文：`assets/recipebalancer/lang/en_us.json`
+- 中文：`assets/recipebalancer/lang/zh_cn.json`
+
+主界面、用量/耗时/配方集/结果页、流程图、报告静态字段和 JEI tooltip 均已接入。
+
 ## 文档
 
 | 文档 | 内容 |
