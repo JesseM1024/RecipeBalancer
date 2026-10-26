@@ -15,6 +15,7 @@ import com.jessetech.recipebalancer.mc.ui.AeStyle;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Inventory;
@@ -36,12 +37,15 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
 
     private static final int SLOT = 18;
     private static final int GRID_COLS = 3;
-    private static final int LIB_COLS = 4;
-    private static final int TARGET_SLOTS = 6;
+    private static final int LIB_COLS = 8;
+    private static final int TARGET_COLS = 12;
+    private static final int MAX_TARGETS = 32;
     private static final int INV_COLS = 9;
     private static final int INV_ROWS = 4;
-    private int libRows = 2;
-    private int visibleRows = 2;
+    private int targetRows = 1;
+    private int libRows = 1;
+    private int visibleRows = 1;
+    private int targetScrollRow;
     private static final long DELETE_WINDOW_MS = 500L;
 
     private static final ScenarioStore STORE = new ScenarioStore(
@@ -60,11 +64,13 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
     private long lastRightClickTime;
 
     // 默认值让 JEI 在首次 Screen init 之前查询属性也能得到合法尺寸
-    private int panelX = 40;
+    private int panelX = 4;
     private int panelY = 4;
-    private int panelW = 360;
-    private int panelH = 300;
+    private int panelW = 300;
+    private int panelH = 200;
     private int topY;
+    private int paramsY;
+    private int targetLabelY;
     private int targetY;
     private int libraryLabelY;
     private int libraryY;
@@ -82,6 +88,7 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
     private Button rawButton;
     private Button seedButton;
     private Button bootstrapButton;
+    private EditBox nameBox;
 
     public BalancerScreen() {
         super(Component.literal("RecipeBalancer · 配方编码终端"));
@@ -94,39 +101,35 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
         panelX = (width - panelW) / 2;
         panelY = 4;
 
-        // 高度优先给配方库，再给编码可视行；至少 2+2 行
-        int fixed = 153;
-        int free = Math.max(2 * SLOT, panelH - fixed);
-        libRows = 2;
-        visibleRows = 2;
-        int remaining = free - (libRows + visibleRows) * SLOT;
-        // 先把两边都抬到 4 行，再交替加到 8 行，最后把剩余高度给配方库
-        while (remaining >= SLOT && libRows < 4) {
-            libRows++;
-            remaining -= SLOT;
-        }
-        while (remaining >= SLOT && visibleRows < 4) {
-            visibleRows++;
-            remaining -= SLOT;
-        }
-        while (remaining >= SLOT && (libRows < 8 || visibleRows < 8)) {
-            if (libRows <= visibleRows && libRows < 8) {
-                libRows++;
-            } else if (visibleRows < 8) {
-                visibleRows++;
+        // 固定区域：工作区名/参数/目标/配方库/编码/背包/状态
+        // 编码最多 4 行；剩余高度全部给配方库
+        int fixed = 168;
+        int available = Math.max(3 * SLOT, panelH - fixed);
+        targetRows = 2;
+        visibleRows = 4;
+        libRows = 1;
+        while ((targetRows + visibleRows + libRows) * SLOT > available) {
+            if (libRows > 1) {
+                libRows--;
+            } else if (visibleRows > 1) {
+                visibleRows--;
+            } else if (targetRows > 1) {
+                targetRows--;
             } else {
-                libRows++;
+                break;
             }
-            remaining -= SLOT;
         }
-        while (remaining >= SLOT && libRows < 12) {
+        int remaining = available - (targetRows + visibleRows + libRows) * SLOT;
+        while (remaining >= SLOT && libRows < 14) {
             libRows++;
             remaining -= SLOT;
         }
 
         topY = panelY + 3;
-        targetY = topY + 19;
-        libraryLabelY = targetY + 19;
+        paramsY = topY + 20;
+        targetLabelY = paramsY + 20;
+        targetY = targetLabelY + 9;
+        libraryLabelY = targetY + targetRows * SLOT + 2;
         libraryY = libraryLabelY + 9;
         encodingLabelY = libraryY + libRows * SLOT + 2;
         encodingY = encodingLabelY + 9;
@@ -142,15 +145,34 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
         libraryScroll = Math.max(0, Math.min(libraryScroll,
                 Math.max(0, recipeRows() - libRows)));
         encodingScrollRow = Math.max(0, Math.min(encodingScrollRow, maxEncodingScroll()));
+        targetScrollRow = Math.max(0, Math.min(targetScrollRow, maxTargetScroll()));
 
-        int topButtonW = 40;
-        int topButtonX = panelX + panelW - 4 - 3 * (topButtonW + 2);
-        addRenderableWidget(Button.builder(Component.literal("目标"), b -> openTargets())
-                .bounds(topButtonX, topY, topButtonW, 18).build());
-        addRenderableWidget(Button.builder(Component.literal("载入"), b -> openScenarios())
-                .bounds(topButtonX + topButtonW + 2, topY, topButtonW, 18).build());
+        nameBox = new EditBox(font, panelX + 30, topY, 150, 16,
+                Component.literal("工作区名"));
+        nameBox.setMaxLength(48);
+        nameBox.setValue(scenarioName);
+        addRenderableWidget(nameBox);
+        int workspaceButtonX = panelX + panelW - 4 - 2 * 42;
+        addRenderableWidget(Button.builder(Component.literal("载入"), b -> loadWorkspace())
+                .bounds(workspaceButtonX, topY, 40, 18).build());
+        addRenderableWidget(Button.builder(Component.literal("存储"), b -> storeWorkspace())
+                .bounds(workspaceButtonX + 42, topY, 40, 18).build());
+
+        int optionW = 48;
+        objectiveButton = addRenderableWidget(Button.builder(Component.literal("目标:设备"),
+                        b -> draft.toggleObjective())
+                .bounds(panelX + 4, paramsY, optionW, 18).build());
+        rawButton = addRenderableWidget(Button.builder(Component.literal("原料:开"),
+                        b -> draft.toggleAutoDetectRaw())
+                .bounds(panelX + 4 + optionW + 2, paramsY, optionW, 18).build());
+        seedButton = addRenderableWidget(Button.builder(Component.literal("种子:开"),
+                        b -> draft.toggleAutoDetectSeed())
+                .bounds(panelX + 4 + 2 * (optionW + 2), paramsY, optionW, 18).build());
+        bootstrapButton = addRenderableWidget(Button.builder(Component.literal("投料:开"),
+                        b -> draft.toggleAutoBootstrap())
+                .bounds(panelX + 4 + 3 * (optionW + 2), paramsY, optionW, 18).build());
         addRenderableWidget(Button.builder(Component.literal("求解"), b -> solveNow())
-                .bounds(topButtonX + 2 * (topButtonW + 2), topY, topButtonW, 18).build());
+                .bounds(panelX + 4 + 4 * (optionW + 2), paramsY, optionW, 18).build());
 
         addRenderableWidget(Button.builder(Component.literal("写入"),
                         b -> commitPattern(true))
@@ -158,20 +180,6 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
         addRenderableWidget(Button.builder(Component.literal("新建"),
                         b -> newPattern())
                 .bounds(equipmentX + 48, encodingY + 20, 40, 18).build());
-
-        int optionW = 46;
-        objectiveButton = addRenderableWidget(Button.builder(Component.literal("目标:设备"),
-                        b -> draft.toggleObjective())
-                .bounds(panelX + 170, inventoryY, optionW, 18).build());
-        rawButton = addRenderableWidget(Button.builder(Component.literal("原料:开"),
-                        b -> draft.toggleAutoDetectRaw())
-                .bounds(panelX + 170 + optionW + 3, inventoryY, optionW, 18).build());
-        seedButton = addRenderableWidget(Button.builder(Component.literal("种子:开"),
-                        b -> draft.toggleAutoDetectSeed())
-                .bounds(panelX + 170, inventoryY + 20, optionW, 18).build());
-        bootstrapButton = addRenderableWidget(Button.builder(Component.literal("投料:开"),
-                        b -> draft.toggleAutoBootstrap())
-                .bounds(panelX + 170 + optionW + 3, inventoryY + 20, optionW, 18).build());
     }
 
     private static ScenarioDraft loadAutosave() {
@@ -200,9 +208,10 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
         AeStyle.panel(graphics, panelX, panelY, panelW, panelH);
         AeStyle.header(graphics, panelX, panelY, panelW, 16);
 
-        graphics.drawString(font, "配方编码终端", panelX + 4, topY + 4, AeStyle.TEXT, false);
+        graphics.drawString(font, "工作区", panelX + 4, topY + 4, AeStyle.MUTED, false);
 
-        graphics.drawString(font, "目标", panelX + 4, targetY + 4, AeStyle.MUTED, false);
+        graphics.drawString(font, "目标 (" + draft.targets().size() + "/" + MAX_TARGETS + ")",
+                panelX + 4, targetLabelY, AeStyle.MUTED, false);
         drawTargets(graphics, mouseX, mouseY);
 
         graphics.drawString(font, "配方库 (" + draft.recipeCount() + ")", panelX + 4,
@@ -225,19 +234,19 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
 
     private void drawTargets(GuiGraphics graphics, int mouseX, int mouseY) {
         List<Map.Entry<String, Double>> entries = new ArrayList<>(draft.targets().entrySet());
-        for (int i = 0; i < TARGET_SLOTS; i++) {
-            int x = panelX + 30 + i * (SLOT + 1);
-            int y = targetY;
-            AeStyle.slot(graphics, x, y);
-            if (i < entries.size()) {
-                Map.Entry<String, Double> entry = entries.get(i);
-                ItemKeyMapper.renderIcon(graphics, font, entry.getKey(), x, y,
-                        amountText(entry.getValue()));
+        targetScrollRow = Math.max(0, Math.min(targetScrollRow, maxTargetScroll()));
+        for (int row = 0; row < targetRows; row++) {
+            for (int col = 0; col < TARGET_COLS; col++) {
+                int index = (targetScrollRow + row) * TARGET_COLS + col;
+                int x = panelX + 4 + col * (SLOT + 1);
+                int y = targetY + row * SLOT;
+                AeStyle.slot(graphics, x, y);
+                if (index < entries.size()) {
+                    Map.Entry<String, Double> entry = entries.get(index);
+                    ItemKeyMapper.renderIcon(graphics, font, entry.getKey(), x, y,
+                            amountText(entry.getValue()));
+                }
             }
-        }
-        if (entries.size() > TARGET_SLOTS) {
-            graphics.drawString(font, "+" + (entries.size() - TARGET_SLOTS),
-                    panelX + 30 + TARGET_SLOTS * (SLOT + 1), targetY + 4, AeStyle.MUTED, false);
         }
     }
 
@@ -516,13 +525,22 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
     }
 
     private int targetSlotAt(double mouseX, double mouseY) {
-        for (int i = 0; i < TARGET_SLOTS; i++) {
-            int x = panelX + 30 + i * (SLOT + 1);
-            if (inside(mouseX, mouseY, x, targetY, SLOT, SLOT)) {
-                return i;
+        for (int row = 0; row < targetRows; row++) {
+            for (int col = 0; col < TARGET_COLS; col++) {
+                int x = panelX + 4 + col * (SLOT + 1);
+                int y = targetY + row * SLOT;
+                if (inside(mouseX, mouseY, x, y, SLOT, SLOT)) {
+                    return (targetScrollRow + row) * TARGET_COLS + col;
+                }
             }
         }
         return -1;
+    }
+
+    private int maxTargetScroll() {
+        int usedRows = (Math.max(1, draft.targets().size()) + TARGET_COLS - 1) / TARGET_COLS;
+        int maxRows = Math.min(3, usedRows + (draft.targets().size() < MAX_TARGETS ? 1 : 0));
+        return Math.max(0, maxRows - targetRows);
     }
 
     private int maxEncodingScroll() {
@@ -630,6 +648,10 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
         if (button == 0) {
             if (slot >= entries.size()) {
                 if (!carriedKey.isEmpty()) {
+                    if (draft.targets().size() >= MAX_TARGETS) {
+                        status = "目标最多 " + MAX_TARGETS + " 个";
+                        return;
+                    }
                     draft.putTarget(carriedKey, 1.0);
                     onDraftChanged();
                     status = "已添加目标: " + carriedKey;
@@ -644,10 +666,20 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
     }
 
     private void openTargetAmount(String key, double amount) {
+        boolean adding = key == null || key.isBlank();
+        if (adding && draft.targets().size() >= MAX_TARGETS) {
+            status = "目标最多 " + MAX_TARGETS + " 个";
+            return;
+        }
         minecraft.setScreen(new AmountScreen(this, "目标产物", key, amount, true,
                 (newKey, newAmount) -> {
                     if (!newKey.equals(key)) {
                         draft.removeTarget(key);
+                    }
+                    if (draft.targets().size() >= MAX_TARGETS
+                            && !draft.targets().containsKey(newKey)) {
+                        status = "目标最多 " + MAX_TARGETS + " 个";
+                        return;
                     }
                     draft.putTarget(newKey, newAmount);
                     onDraftChanged();
@@ -761,6 +793,12 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+        if (mouseX >= panelX && mouseY >= targetY
+                && mouseY < targetY + targetRows * SLOT) {
+            targetScrollRow = Math.max(0, Math.min(
+                    targetScrollRow + (scrollY < 0 ? 1 : -1), maxTargetScroll()));
+            return true;
+        }
         if (mouseX >= panelX && mouseY >= libraryY - 2
                 && mouseY < libraryY + libRows * SLOT) {
             libraryScroll = Math.max(0, Math.min(libraryScroll + (scrollY < 0 ? 1 : -1),
@@ -856,12 +894,20 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
         }
     }
 
-    void openTargets() {
-        minecraft.setScreen(new TargetListScreen(this, draft));
+    private void loadWorkspace() {
+        minecraft.setScreen(new ScenarioListScreen(this, STORE, draft));
     }
 
-    private void openScenarios() {
-        minecraft.setScreen(new ScenarioListScreen(this, STORE, draft));
+    private void storeWorkspace() {
+        try {
+            scenarioName = ScenarioStore.sanitize(nameBox.getValue());
+            nameBox.setValue(scenarioName);
+            STORE.save(scenarioName, draft.toScenario());
+            persistDraft();
+            status = "已存储工作区: " + scenarioName;
+        } catch (RuntimeException e) {
+            status = "存储失败: " + e.getMessage();
+        }
     }
 
     @Override
@@ -904,7 +950,10 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
         pattern.clear();
         editingIndex = -1;
         carriedKey = "";
-        status = "已载入配方集: " + name;
+        libraryScroll = 0;
+        targetScrollRow = 0;
+        encodingScrollRow = 0;
+        status = "已载入工作区: " + name;
         persistDraft();
     }
 

@@ -25,8 +25,8 @@ public final class ScenarioListScreen extends Screen implements JeiPanelScreen {
     private String status = "";
     private EditBox nameBox;
 
-    private int panelX = 40;
-    private int panelY = 40;
+    private int panelX = 20;
+    private int panelY = 10;
     private static final int PANEL_W = 264;
     private static final int PANEL_H = 204;
     private int listY;
@@ -63,10 +63,6 @@ public final class ScenarioListScreen extends Screen implements JeiPanelScreen {
     }
 
     private void saveCurrent() {
-        if (draft.recipeCount() == 0 || draft.targets().isEmpty()) {
-            status = "配方集至少要有 1 条配方和 1 个目标产物";
-            return;
-        }
         try {
             String name = ScenarioStore.sanitize(nameBox.getValue());
             store.save(name, draft.toScenario());
@@ -96,7 +92,8 @@ public final class ScenarioListScreen extends Screen implements JeiPanelScreen {
 
     private void load(String name) {
         try {
-            Scenario scenario = store.load(name);
+            // 工作区允许未填完（目标/配方为空），用草稿宽松读取
+            Scenario scenario = store.loadDraft(name);
             draft.loadFrom(scenario);
             parent.onScenarioLoaded(name);
             minecraft.setScreen(parent);

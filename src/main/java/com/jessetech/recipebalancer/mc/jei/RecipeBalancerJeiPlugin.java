@@ -4,7 +4,6 @@ import com.jessetech.recipebalancer.mc.screen.AmountScreen;
 import com.jessetech.recipebalancer.mc.screen.BalancerScreen;
 import com.jessetech.recipebalancer.mc.screen.JeiPanelScreen;
 import com.jessetech.recipebalancer.mc.screen.ScenarioListScreen;
-import com.jessetech.recipebalancer.mc.screen.TargetListScreen;
 import com.jessetech.recipebalancer.mc.screen.TimeScreen;
 import mezz.jei.api.IModPlugin;
 import mezz.jei.api.JeiPlugin;
@@ -39,8 +38,6 @@ public final class RecipeBalancerJeiPlugin implements IModPlugin {
         registration.addGuiScreenHandler(AmountScreen.class,
                 screen -> properties(screen, screen));
         registration.addGuiScreenHandler(TimeScreen.class,
-                screen -> properties(screen, screen));
-        registration.addGuiScreenHandler(TargetListScreen.class,
                 screen -> properties(screen, screen));
         registration.addGuiScreenHandler(ScenarioListScreen.class,
                 screen -> properties(screen, screen));
