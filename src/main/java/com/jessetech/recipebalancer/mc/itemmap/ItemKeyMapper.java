@@ -9,11 +9,13 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.core.RegistryAccess;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.RegistryOps;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.alchemy.PotionContents;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -22,6 +24,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * 物品身份与图标：core 里物品是字符串（registry id 或自定义名），
@@ -31,6 +35,7 @@ public final class ItemKeyMapper {
 
     private static final String STACK_PREFIX = "stack|";
     private static final Map<String, ItemStack> STACK_CACHE = new ConcurrentHashMap<>();
+    private static final Pattern STACK_KEY_PATTERN = Pattern.compile("stack\\|[A-Za-z0-9_-]+");
 
     private ItemKeyMapper() {
     }
@@ -123,6 +128,47 @@ public final class ItemKeyMapper {
             return stack.getHoverName().getString();
         }
         return normalize(key);
+    }
+
+    /** 结果报告中的可读名称：物品名 + 药水效果（含时长）。 */
+    public static String reportName(String key) {
+        ItemStack stack = stack(key);
+        if (stack.isEmpty()) {
+            return registryName(key);
+        }
+        String name = stack.getHoverName().getString();
+        PotionContents contents = stack.get(DataComponents.POTION_CONTENTS);
+        if (contents == null || !contents.hasEffects()) {
+            return name;
+        }
+        List<Component> effects = new ArrayList<>();
+        contents.addPotionTooltip(effects::add, 1.0f, 1.0f);
+        if (effects.isEmpty()) {
+            return name;
+        }
+        StringBuilder builder = new StringBuilder(name).append(" [");
+        for (int i = 0; i < effects.size(); i++) {
+            if (i > 0) {
+                builder.append(" / ");
+            }
+            builder.append(effects.get(i).getString());
+        }
+        return builder.append(']').toString();
+    }
+
+    /** 把结果报告中的 stack|base64 替换成可读名称（不影响写入磁盘的数据）。 */
+    public static String prettyText(String text) {
+        if (text == null || text.isEmpty()) {
+            return text;
+        }
+        Matcher matcher = STACK_KEY_PATTERN.matcher(text);
+        StringBuffer output = new StringBuffer(text.length());
+        while (matcher.find()) {
+            matcher.appendReplacement(output,
+                    Matcher.quoteReplacement(reportName(matcher.group())));
+        }
+        matcher.appendTail(output);
+        return output.toString();
     }
 
     /** 注册名（tooltip/用量界面展示）；组件物品只显示底层 registry id。 */
@@ -252,17 +298,17 @@ public final class ItemKeyMapper {
         if (id.isEmpty()) {
             return;
         }
-        List<Component> lines = new ArrayList<>();
         ItemStack stack = stack(id);
         if (!stack.isEmpty()) {
-            lines.add(stack.getHoverName());
-            lines.add(Component.literal(registryName(id)).withStyle(ChatFormatting.GRAY));
-        } else {
-            lines.add(Component.literal(shortLabel(id)).withStyle(ChatFormatting.GOLD));
-            lines.add(Component.literal(id).withStyle(ChatFormatting.GRAY));
-            lines.add(Component.literal("当前整合包未找到此物品（占位显示）")
-                    .withStyle(ChatFormatting.DARK_GRAY));
+            // 原生完整 tooltip：药水效果/时长、附魔、组件信息都会显示
+            graphics.renderTooltip(font, stack, mouseX, mouseY);
+            return;
         }
+        List<Component> lines = new ArrayList<>();
+        lines.add(Component.literal(shortLabel(id)).withStyle(ChatFormatting.GOLD));
+        lines.add(Component.literal(id).withStyle(ChatFormatting.GRAY));
+        lines.add(Component.literal("当前整合包未找到此物品（占位显示）")
+                .withStyle(ChatFormatting.DARK_GRAY));
         graphics.renderComponentTooltip(font, lines, mouseX, mouseY);
     }
 }

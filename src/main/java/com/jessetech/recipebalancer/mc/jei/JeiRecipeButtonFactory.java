@@ -11,30 +11,58 @@ import mezz.jei.api.gui.builder.ITooltipBuilder;
 import mezz.jei.api.gui.drawable.IDrawable;
 import mezz.jei.api.gui.ingredient.IRecipeSlotView;
 import mezz.jei.api.gui.inputs.IJeiUserInput;
-import mezz.jei.api.helpers.IGuiHelper;
 import mezz.jei.api.recipe.RecipeIngredientRole;
 import mezz.jei.api.recipe.advanced.IRecipeButtonControllerFactory;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.ItemStack;
 
 import java.util.Optional;
 
 /**
- * 给 JEI 配方页追加一个“编码此配方”加号按钮。
- * 点击后把当前 JEI 配方转换为 RecipePattern 并打开编码终端。
+ * 给 JEI 配方页追加一个“编码此配方”按钮。
+ * 图标为自绘的“四角 + 十字”图案（比默认浅色加号更醒目）。
  */
 public final class JeiRecipeButtonFactory implements IRecipeButtonControllerFactory {
 
-    private final IDrawable icon;
-
-    public JeiRecipeButtonFactory(IGuiHelper helper) {
-        this.icon = helper.getRecipePlusSign();
-    }
+    private final IDrawable icon = new PatternIcon();
 
     @Override
     public <T> IIconButtonController createButtonController(IRecipeLayoutDrawable<T> layout) {
         return new Controller<>(layout, icon);
+    }
+
+    /** 16×16 的深色底 + 白色四角/十字，对应参考图标的简化版。 */
+    private static final class PatternIcon implements IDrawable {
+        @Override
+        public int getWidth() {
+            return 16;
+        }
+
+        @Override
+        public int getHeight() {
+            return 16;
+        }
+
+        @Override
+        public void draw(GuiGraphics graphics, int x, int y) {
+            graphics.fill(x, y, x + 16, y + 16, 0xFF101010);
+            graphics.fill(x + 1, y + 1, x + 15, y + 15, 0xFF8B8B8B);
+            int white = 0xFFFFFFFF;
+            // 中央十字
+            graphics.fill(x + 7, y + 2, x + 9, y + 14, white);
+            graphics.fill(x + 2, y + 7, x + 14, y + 9, white);
+            // 四个 L 角
+            graphics.fill(x + 3, y + 3, x + 6, y + 5, white);
+            graphics.fill(x + 3, y + 3, x + 5, y + 6, white);
+            graphics.fill(x + 10, y + 3, x + 13, y + 5, white);
+            graphics.fill(x + 11, y + 3, x + 13, y + 6, white);
+            graphics.fill(x + 3, y + 11, x + 6, y + 13, white);
+            graphics.fill(x + 3, y + 10, x + 5, y + 13, white);
+            graphics.fill(x + 10, y + 11, x + 13, y + 13, white);
+            graphics.fill(x + 11, y + 10, x + 13, y + 13, white);
+        }
     }
 
     private static final class Controller<T> implements IIconButtonController {

@@ -57,8 +57,7 @@ public final class RecipeBalancerJeiPlugin implements IModPlugin {
 
     @Override
     public void registerAdvanced(IAdvancedRegistration registration) {
-        registration.addRecipeButtonFactory(new JeiRecipeButtonFactory(
-                registration.getJeiHelpers().getGuiHelper()));
+        registration.addRecipeButtonFactory(new JeiRecipeButtonFactory());
     }
 
     private static <T extends Screen & JeiPanelScreen> IGuiProperties properties(
