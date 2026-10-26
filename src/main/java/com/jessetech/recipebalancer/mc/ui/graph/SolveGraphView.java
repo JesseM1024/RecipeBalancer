@@ -344,7 +344,7 @@ public final class SolveGraphView {
         if (edges.size() < 2 || nodes.size() > 260) {
             return;
         }
-        int passes = edges.size() <= 180 ? 4 : 2;
+        int passes = edges.size() <= 180 ? 6 : 3;
         for (int pass = 0; pass < passes; pass++) {
             boolean changed = false;
             for (GNode node : nodes) {
@@ -427,9 +427,17 @@ public final class SolveGraphView {
                 if (other == edge || other.from == node || other.to == node) {
                     continue;
                 }
-                if (segmentsIntersect(ax, ay, bx, by,
-                        other.from.x, other.from.y, other.to.x, other.to.y)) {
-                    cost += 800.0;
+                boolean crossing = segmentsIntersect(ax, ay, bx, by,
+                        other.from.x, other.from.y, other.to.x, other.to.y);
+                if (crossing) {
+                    cost += 6000.0;
+                } else {
+                    // 不交叉但几乎平行/重叠的箭头也要重罚，避免视觉上叠成一条。
+                    double gap = segmentDistance(ax, ay, bx, by,
+                            other.from.x, other.from.y, other.to.x, other.to.y);
+                    if (gap < 14.0) {
+                        cost += (14.0 - gap) * 180.0;
+                    }
                 }
             }
             for (GNode check : nodes) {
@@ -437,11 +445,20 @@ public final class SolveGraphView {
                     continue;
                 }
                 if (pointSegmentDistance(check.x, check.y, ax, ay, bx, by) < 14.0) {
-                    cost += 350.0;
+                    cost += 1500.0;
                 }
             }
         }
         return cost;
+    }
+
+    private static double segmentDistance(double ax, double ay, double bx, double by,
+                                          double cx, double cy, double dx, double dy) {
+        return Math.min(
+                Math.min(pointSegmentDistance(ax, ay, cx, cy, dx, dy),
+                        pointSegmentDistance(bx, by, cx, cy, dx, dy)),
+                Math.min(pointSegmentDistance(cx, cy, ax, ay, bx, by),
+                        pointSegmentDistance(dx, dy, ax, ay, bx, by)));
     }
 
     private static boolean segmentsIntersect(double ax, double ay, double bx, double by,
