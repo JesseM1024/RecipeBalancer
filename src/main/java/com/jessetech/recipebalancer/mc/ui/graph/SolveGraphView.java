@@ -7,10 +7,13 @@ import com.jessetech.recipebalancer.core.time.TimeExpression;
 import com.jessetech.recipebalancer.mc.itemmap.IngredientKey;
 import com.jessetech.recipebalancer.mc.itemmap.ItemKeyMapper;
 import com.jessetech.recipebalancer.mc.ui.AeStyle;
+import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.renderer.RenderType;
 import net.minecraft.network.chat.Component;
+import org.joml.Matrix4f;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -42,6 +45,7 @@ public final class SolveGraphView {
     private static final int RECIPE_FILL = 0xFFE8A33D;
     private static final int BORDER = 0xFF4A4A4A;
     private static final int EDGE = 0xFF9A9A9A;
+    private static final double NODE_GAP = 38.0;
 
     private enum Category {
         INPUT, INTERMEDIATE, STARTUP, BYPRODUCT, TARGET
@@ -193,7 +197,7 @@ public final class SolveGraphView {
             nodes.get(i).index = i;
         }
         Random random = new Random(0x5EEDL);
-        double targetRadius = Math.max(80, nodes.size() * 8.5);
+        double targetRadius = Math.max(90, nodes.size() * 10.0);
         for (int i = 0; i < nodes.size(); i++) {
             double angle = 2 * Math.PI * i / nodes.size() + random.nextDouble() * 0.35;
             double r = targetRadius * (0.65 + random.nextDouble() * 0.35);
@@ -205,7 +209,7 @@ public final class SolveGraphView {
         // 1) 节点斥力 + 最短距离约束；2) 边弹簧（固定自然长度）；
         // 3) 向心/圆环势能；4) 碰撞松弛；5) 交叉/穿节点的局部能量搜索。
         double k = 52.0;
-        double restLength = 72.0;
+        double restLength = 84.0;
         int iterations = nodes.size() > 180 ? 140 : 260;
         for (int iteration = 0; iteration < iterations; iteration++) {
             double temperature = Math.max(1.0, k * (1.0 - iteration / (double) iterations));
@@ -284,12 +288,12 @@ public final class SolveGraphView {
 
     private static double minDistance(GNode a, GNode b) {
         return (a.recipe ? RECIPE : MATERIAL) / 2.0
-                + (b.recipe ? RECIPE : MATERIAL) / 2.0 + 24.0;
+                + (b.recipe ? RECIPE : MATERIAL) / 2.0 + NODE_GAP;
     }
 
     /** 碰撞松弛：保证节点/标签区域至少保有固定间距。 */
     private void collisionRelax() {
-        for (int pass = 0; pass < 12; pass++) {
+        for (int pass = 0; pass < 28; pass++) {
             for (int i = 0; i < nodes.size(); i++) {
                 GNode a = nodes.get(i);
                 for (int j = i + 1; j < nodes.size(); j++) {
@@ -500,7 +504,7 @@ public final class SolveGraphView {
                 move += (min * 1.3 - dist) * 0.14;
             }
             if (connected(dragged, other)) {
-                double rest = 72.0;
+                double rest = 84.0;
                 move += (rest - dist) * 0.075;
             }
             move = Math.max(-6.0, Math.min(6.0, move));
@@ -553,7 +557,7 @@ public final class SolveGraphView {
                 double dx = node.x - other.x;
                 double dy = node.y - other.y;
                 double dist = Math.max(0.001, Math.hypot(dx, dy));
-                double spring = (dist - 72.0) * 0.025;
+                double spring = (dist - 84.0) * 0.025;
                 moveX -= dx / dist * spring;
                 moveY -= dy / dist * spring;
             }
@@ -665,9 +669,7 @@ public final class SolveGraphView {
         graphics.pose().pushPose();
         graphics.pose().translate(areaX + panX, areaY + panY, 0);
         graphics.pose().scale((float) zoom, (float) zoom, 1.0f);
-        for (GEdge edge : edges) {
-            drawEdge(graphics, font, edge);
-        }
+        drawEdges(graphics, font);
         for (GNode node : nodes) {
             drawNode(graphics, font, node);
         }
@@ -846,7 +848,27 @@ public final class SolveGraphView {
         graphics.drawString(font, legend, x + 4, y + 3, AeStyle.TEXT, false);
     }
 
-    private void drawEdge(GuiGraphics graphics, Font font, GEdge edge) {
+    /**
+     * 所有边/箭头合批到一个 GUI VertexConsumer，避免每条边每像素一次 fill。
+     * 边标签在合批刷新后单独绘制。
+     */
+    private void drawEdges(GuiGraphics graphics, Font font) {
+        if (edges.isEmpty()) {
+            return;
+        }
+        VertexConsumer consumer = graphics.bufferSource().getBuffer(RenderType.gui());
+        Matrix4f matrix = graphics.pose().last().pose();
+        for (GEdge edge : edges) {
+            drawEdgeGeometry(consumer, matrix, edge);
+        }
+        graphics.flush();
+
+        for (GEdge edge : edges) {
+            drawEdgeLabel(graphics, font, edge);
+        }
+    }
+
+    private void drawEdgeGeometry(VertexConsumer consumer, Matrix4f matrix, GEdge edge) {
         double sx = edge.from.x;
         double sy = edge.from.y;
         double ex = edge.to.x;
@@ -864,40 +886,61 @@ public final class SolveGraphView {
         double y2 = ey - uy * toRadius;
 
         int thickness = 1 + Math.min(4, (int) Math.sqrt(Math.max(0.0, edge.flow)) * 2);
-        drawLine(graphics, x1, y1, x2, y2, thickness, EDGE);
-        // 箭头：两条回折线
+        addLine(consumer, matrix, x1, y1, x2, y2, thickness, EDGE);
         double backX = x2 - ux * 7;
         double backY = y2 - uy * 7;
         double px = -uy;
         double py = ux;
-        drawLine(graphics, x2, y2, backX + px * 3.5, backY + py * 3.5,
+        addLine(consumer, matrix, x2, y2, backX + px * 3.5, backY + py * 3.5,
                 thickness + 1, EDGE);
-        drawLine(graphics, x2, y2, backX - px * 3.5, backY - py * 3.5,
+        addLine(consumer, matrix, x2, y2, backX - px * 3.5, backY - py * 3.5,
                 thickness + 1, EDGE);
+    }
+
+    private void drawEdgeLabel(GuiGraphics graphics, Font font, GEdge edge) {
+        double sx = edge.from.x;
+        double sy = edge.from.y;
+        double ex = edge.to.x;
+        double ey = edge.to.y;
+        double dx = ex - sx;
+        double dy = ey - sy;
+        double dist = Math.max(1.0, Math.hypot(dx, dy));
+        double ux = dx / dist;
+        double uy = dy / dist;
+        double fromRadius = (edge.from.recipe ? RECIPE : MATERIAL) * 0.55;
+        double toRadius = (edge.to.recipe ? RECIPE : MATERIAL) * 0.55;
+        double x1 = sx + ux * fromRadius;
+        double y1 = sy + uy * fromRadius;
+        double x2 = ex - ux * toRadius;
+        double y2 = ey - uy * toRadius;
 
         String label = TimeExpression.formatCompact(edge.flow) + "/t";
         int width = font.width(label);
-        float labelX = (float) ((x1 + x2) / 2 - width / 2.0 + px * 4);
-        float labelY = (float) ((y1 + y2) / 2 - 4 + py * 4);
+        float labelX = (float) ((x1 + x2) / 2 - width / 2.0 - uy * 4);
+        float labelY = (float) ((y1 + y2) / 2 - 4 + ux * 4);
         graphics.drawString(font, label, (int) labelX, (int) labelY, 0xFF666666, false);
     }
 
-    private static void drawLine(GuiGraphics graphics, double x1, double y1,
-                                 double x2, double y2, int thickness, int color) {
-        int steps = (int) Math.ceil(Math.max(Math.abs(x2 - x1), Math.abs(y2 - y1)));
-        if (steps <= 0) {
-            graphics.fill((int) x1, (int) y1, (int) x1 + thickness,
-                    (int) y1 + thickness, color);
+    private static void addLine(VertexConsumer consumer, Matrix4f matrix,
+                                double x1, double y1, double x2, double y2,
+                                double thickness, int color) {
+        double dx = x2 - x1;
+        double dy = y2 - y1;
+        double dist = Math.hypot(dx, dy);
+        if (dist < 1e-6) {
             return;
         }
-        int half = thickness / 2;
-        for (int i = 0; i <= steps; i++) {
-            double t = i / (double) steps;
-            int x = (int) Math.round(x1 + (x2 - x1) * t);
-            int y = (int) Math.round(y1 + (y2 - y1) * t);
-            graphics.fill(x - half, y - half, x - half + thickness,
-                    y - half + thickness, color);
-        }
+        double nx = -dy / dist * thickness * 0.5;
+        double ny = dx / dist * thickness * 0.5;
+        vertex(consumer, matrix, x1 + nx, y1 + ny, color);
+        vertex(consumer, matrix, x1 - nx, y1 - ny, color);
+        vertex(consumer, matrix, x2 - nx, y2 - ny, color);
+        vertex(consumer, matrix, x2 + nx, y2 + ny, color);
+    }
+
+    private static void vertex(VertexConsumer consumer, Matrix4f matrix,
+                               double x, double y, int color) {
+        consumer.addVertex(matrix, (float) x, (float) y, 0.0f).setColor(color);
     }
 
     private void drawNode(GuiGraphics graphics, Font font, GNode node) {
