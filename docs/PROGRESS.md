@@ -12,8 +12,8 @@
 | 项 | 结果 |
 |---|---|
 | `gradlew test` | **81 tests, 0 failures**（新增 IngredientKey 编码测试） |
-| 产物 | `recipebalancer-0.1.0-1.21.1.jar` **2,334,018 B** |
-| 实机部署 | 已复制到 `1.21.1-NeoForge/mods/`（18:39:26） |
+| 产物 | `recipebalancer-0.1.0-1.21.1.jar` **2,334,389 B** |
+| 实机部署 | 已复制到 `1.21.1-NeoForge/mods/`（18:45:17） |
 | 未验证 | 实机流体/化学品 ghost 与加号 |
 
 ### 身份
@@ -56,11 +56,20 @@
     `ITypedIngredient`，再交给 `IClickableIngredientFactory`，因此非物品也能 R/U。
 - 非物品数量仍按 `helper.getAmount()/1000`（B）。
 
+### 化学品 400mB → 1B 的根因
+
+- JEI `IIngredientHelper.getAmount(V)` 的默认实现返回 **-1**。
+- 流体 helper 覆写了它，所以流体正确；Mekanism 化学品 helper 未覆写，
+  原逻辑 `raw <= 0 → 1.0` 因而把 400mB 导成 1B。
+- 修复：`helper.getAmount()` 无效时，反射读取 ingredient 自身的
+  `getAmount()`（如 ChemicalStack.getAmount()），再 `/1000`。
+  - 400mB → 0.4 B。
+
 ### 限制
 
 | # | 限制 | 说明 |
 |---|---|---|
-| 1 | 化学品数量按 mB 假设 | 若某 mod 的 helper amount 不是 mB，需要该 mod 适配 |
+| 1 | 化学品数量按 mB 假设 | 反射到的 getAmount 按 mB 处理；若某 mod 返回非 mB 需要适配 |
 | 2 | 流体 tooltip 的数量 | JEI renderer 使用还原 ingredient 的默认量；RecipeBalancer 自身数量在格子上 |
 
 ---
