@@ -23,7 +23,6 @@
 │   screen/BalancerScreen      配方编码终端：配方库 / 编码区 / 背包        │
 │   screen/AmountScreen        用量编辑（+1/+10/+100/+1000、自定义物品）  │
 │   screen/TimeScreen          耗时表达式 + 单位（t/秒/分/时）            │
-│   screen/TargetListScreen    目标产物列表                               │
 │   screen/ScenarioListScreen  已保存配方集：载入 / 另存 / 删除           │
 │   screen/SolveScreen         二级求解报告页                             │
 │   ui/AeStyle                 原版物品栏配色：C6C6C6 面板 / 8B8B8B 18px 槽 │
@@ -427,16 +426,14 @@ public final class RbKeyMappings {
 }
 
 package com.jessetech.recipebalancer.mc.screen;
-/** 配方编码终端（M3）：满高面板；上方配方库、中央 3 列可滚动编码（256 原料/16 产物）+
- *  设备 + 耗时、下方玩家背包；全部槽位 18px（原版物品栏配色）。
- *  左键取物→放置/删除，空手左键空格直接自定义；中键改量；右键配方库两次删除。 */
+/** 配方编码终端（M3/R11）：顶部工作区名/载入/存储，参数+求解一行，
+ *  内联目标（12 列×1~2 行，最多 32，可滚动），配方库（8 列，占据剩余高度），
+ *  编码区（3 列×最多 4 行），底部 9×4 背包；槽位 18px 原版配色。 */
 public final class BalancerScreen extends Screen { /* M3 */ }
 /** 通用用量编辑：物品图标 + 注册名 + 数字框 + ±快捷按钮。 */
 public final class AmountScreen extends Screen { /* M3 */ }
 /** 耗时编辑：表达式 + t/秒/分/时；确定后统一转 tick。 */
 public final class TimeScreen extends Screen { /* M3 */ }
-/** 目标产物列表（左键编辑 / 右键删除）。 */
-public final class TargetListScreen extends Screen { /* M3 */ }
 /** 已保存配方集列表：载入 / 另存 / 删除。 */
 public final class ScenarioListScreen extends Screen { /* M3 */ }
 /** 二级求解报告页（滚动文本）。 */
@@ -444,7 +441,7 @@ public final class SolveScreen extends Screen { /* M3 */ }
 /** 背包拾取小屏（点选物品标记，M4 与 JEI 通道一起）。 */
 public final class InventoryPickerScreen extends Screen { /* M4 */ }
 
-/** JEI 插件：给所有面板 Screen（主界面/用量/耗时/目标/配方集）注册 IGuiProperties。
+/** JEI 插件：给所有面板 Screen（主界面/用量/耗时/配方集）注册 IGuiProperties。
  *  面板字段必须有默认值：JEI 可能在 Screen.init 之前查询；否则首次打开不渲染。 */
 @JeiPlugin
 public final class RecipeBalancerJeiPlugin implements IModPlugin {
@@ -500,7 +497,7 @@ final class GraphView {
 ## 五、JEI 集成（mc/jei/，M4；渲染注册已在 M3/R10 交付）
 
 > 自定义 `Screen` 不会自动获得 JEI 右侧面板：必须通过 `IGuiHandlerRegistration.addGuiScreenHandler`
-> 注册 `IGuiProperties`。主界面、用量、耗时、目标、配方集均已注册；属性字段有默认值，
+> 注册 `IGuiProperties`。主界面、用量、耗时、配方集均已注册；属性字段有默认值，
 > 覆盖 JEI 在 `Screen.init` 之前查询的情况。`SolveScreen` 为纯文本报告，不注册。
 
 | 通道 | 用法 | JEI API（开发 19.39.0.372 / 实机 19.70.0.460，**逐项待核实 R-08**） |
