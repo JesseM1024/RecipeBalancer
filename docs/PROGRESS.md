@@ -5,6 +5,59 @@
 
 ---
 
+## R9 · 2026-10-26 · 编码区滚动（256/16）+ AE 风格 + JEI 渲染
+
+### 实测结果
+
+| 项 | 结果 |
+|---|---|
+| `gradlew test` | **78 tests, 0 failures** |
+| 产物 | `recipebalancer-0.1.0-1.21.1.jar` **2,299,681 B** |
+| 实机部署 | 已复制到 `1.21.1-NeoForge/mods/`（13:25:54） |
+| 未验证 | **实机 GUI / JEI 面板冒烟**（需重启后按 K） |
+
+### 本轮改动
+
+1. **QoL**：空手左键编码空格直接打开自定义物品输入（不再要求中键）；中键仍可改量。
+2. **容量**：`RecipePattern` 从固定 9 格改为
+   - **256 种原料**（`MAX_INPUTS`）
+   - **16 种产物**（`MAX_OUTPUTS`）
+   - 稀疏数组保存，空格保留位置；载入超限时提示并截断。
+3. **编码区滚动**：3 列 × 3 行可视窗口，滚轮上下翻动（共享滚动，输入/输出同步）；
+   右侧细滚动条；最后一格填满后额外留一行空格，保证能继续添加。
+4. **AE 美术风格**：新增 `mc/ui/AeStyle`（自绘，不依赖 AE2 资源）：
+   浅灰面板、深色内嵌槽、细高光/阴影边框、深蓝文字与蓝色强调；
+   主界面及用量/耗时/目标/配方集/结果页统一。
+5. **JEI 渲染**：新增 `mc/jei/RecipeBalancerJeiPlugin`（`@JeiPlugin`），
+   通过 `addGuiScreenHandler(BalancerScreen.class, ...)` 注册 `IGuiProperties`
+   （guiLeft/guiTop/guiWidth/guiHeight/screenWidth/screenHeight）。
+   JEI 只自动识别 `ContainerScreen`，这是自定义 Screen 不显示 JEI 面板的根因。
+
+### 测试与文件
+
+- `RecipePatternTest` 更新为 16 产物上限（17 个触发 truncated）。
+- 新增：`mc/ui/AeStyle.java`、`mc/jei/RecipeBalancerJeiPlugin.java`
+- 修改：`core/model/RecipePattern`（容量/稀疏存储）、`BalancerScreen`（滚动/风格/QoL）、
+  `AmountScreen`/`TimeScreen`/`TargetListScreen`/`ScenarioListScreen`/`SolveScreen`（风格）
+
+### 已知限制
+
+| # | 限制 | 说明 |
+|---|---|---|
+| 1 | 3 列网格 | 256 原料需要滚轮翻很多行；属 AE 终端形态 |
+| 2 | JEI 点击/拖拽仍未接入 | 本轮只解决 JEI **渲染**；ghost 拖拽/JEI 配方写入仍 M4 |
+| 3 | 滚动只支持滚轮 | 不拖动滚动条；滚动条仅指示位置 |
+| 4 | 未实机冒烟 | JEI 是否出现需重启实例确认 |
+
+### 实机验收
+
+1. 重启 → K：面板应为浅灰 AE 风格，右侧出现 JEI 物品面板（若安装 JEI）。
+2. 空手左键一个空格 → 直接弹出自定义物品输入。
+3. 连续填满 9 个原料后向下滚 → 出现下一行空格，可继续添加。
+4. 编码区滚轮翻动，输入/输出同步；滚动条随位置移动。
+
+---
+
 ## R8 · 2026-10-26 · M3：AE 样板编码终端式界面
 
 ### 实测结果
