@@ -359,24 +359,35 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
             graphics.fill(barX, thumbY, barX + 3, thumbY + thumbH, AeStyle.ACCENT_LIGHT);
         }
 
-        graphics.drawString(font, "设备", equipmentX + 18, encodingY + 4, AeStyle.MUTED, false);
+        // 设备/耗时标签在各自槽位的“后方”（右侧），时间值画在槽位内部
         AeStyle.slot(graphics, equipmentX, encodingY);
+        graphics.drawString(font, "设备", equipmentX + SLOT + 2, encodingY + 5,
+                AeStyle.MUTED, false);
         if (!pattern.equipmentKey().isBlank()) {
             ItemKeyMapper.renderIcon(graphics, font, pattern.equipmentKey(), equipmentX,
                     encodingY, null);
         }
 
-        graphics.drawString(font, "耗时", equipmentX + 18, encodingY + 11, AeStyle.MUTED, false);
         int timeY = encodingY + 20;
         AeStyle.slot(graphics, equipmentX, timeY);
-        // 时间值画在槽右侧空白里；空间不足时去掉单位，保证小数不被截成 0
-        int valueX = equipmentX + 18;
-        int valueWidth = Math.max(20, panelW - (valueX - panelX) - 2);
-        String value = TimeExpression.formatNumber(pattern.timeTicks());
-        String withUnit = value + "t";
-        String time = font.width(withUnit) <= valueWidth ? withUnit : value;
-        graphics.drawString(font, font.plainSubstrByWidth(time, valueWidth), valueX,
-                timeY + 5, AeStyle.TEXT, false);
+        graphics.drawString(font, "耗时", equipmentX + SLOT + 2, timeY + 5,
+                AeStyle.MUTED, false);
+
+        String time = TimeExpression.formatNumber(pattern.timeTicks()) + "t";
+        int textWidth = font.width(time);
+        if (textWidth <= SLOT) {
+            graphics.drawString(font, time, equipmentX + (SLOT - textWidth) / 2,
+                    timeY + 5, AeStyle.TEXT, false);
+        } else {
+            // 0.001t 这类较长值缩小到槽内，不溢出、不丢失
+            float scale = Math.min(0.75f, (SLOT - 1.0f) / textWidth);
+            PoseStack pose = graphics.pose();
+            pose.pushPose();
+            pose.translate(equipmentX + 0.5, timeY + 4.5, 0);
+            pose.scale(scale, scale, 1.0f);
+            graphics.drawString(font, time, 0, 0, AeStyle.TEXT, false);
+            pose.popPose();
+        }
     }
 
     private void drawInventory(GuiGraphics graphics, int mouseX, int mouseY) {
