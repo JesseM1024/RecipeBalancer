@@ -105,7 +105,8 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
         int requiredWidth = Math.max(gridWidth, Math.max(paramsWidth, encodingWidth)) + 8;
         panelW = Math.min(requiredWidth, width - 8);
         panelH = height - 8;
-        panelX = (width - panelW) / 2;
+        // 右侧给 JEI 预留 ~210px；宽度不足时靠左，避免 JEI 覆盖面板
+        panelX = Math.max(4, Math.min((width - panelW) / 2, width - 210 - panelW));
         panelY = 4;
 
         // 固定区域：工作区名/参数/目标/配方库/编码/背包/状态

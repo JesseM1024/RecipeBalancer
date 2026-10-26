@@ -38,7 +38,7 @@ public final class TimeScreen extends Screen implements JeiPanelScreen {
 
     @Override
     protected void init() {
-        panelX = (width - PANEL_W) / 2;
+        panelX = Math.max(4, Math.min((width - PANEL_W) / 2, width - 210 - PANEL_W));
         panelY = (height - PANEL_H) / 2;
 
         expressionBox = new EditBox(font, panelX + 8, panelY + 28, 150, 18,

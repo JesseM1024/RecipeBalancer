@@ -9,7 +9,7 @@ import mezz.jei.api.IModPlugin;
 import mezz.jei.api.JeiPlugin;
 import mezz.jei.api.gui.handlers.IGuiProperties;
 import mezz.jei.api.registration.IGuiHandlerRegistration;
-import net.minecraft.client.Minecraft;
+import mezz.jei.api.runtime.IJeiRuntime;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.resources.ResourceLocation;
 
@@ -17,8 +17,8 @@ import net.minecraft.resources.ResourceLocation;
  * 让 JEI 在我们的自定义 Screen（非 ContainerScreen）上渲染：
  * JEI 只自动识别 ContainerScreen，必须为每个屏幕注册 IGuiProperties。
  *
- * <p>注意：属性在 Screen.init 之前也可能被 JEI 查询，因此各屏幕的面板字段都有合法默认值，
- * 否则首次打开不会渲染，必须切一次二级界面再返回才出现。
+ * <p>另外把 {@link IJeiRuntime} 存入不含 JEI 类型的 {@link JeiRuntimeHolder}，
+ * 供 {@link JeiScreenSupport} 反射驱动覆盖层属性缓存（JEI 19.x 无公开刷新 API）。
  */
 @JeiPlugin
 public final class RecipeBalancerJeiPlugin implements IModPlugin {
@@ -29,6 +29,16 @@ public final class RecipeBalancerJeiPlugin implements IModPlugin {
     @Override
     public ResourceLocation getPluginUid() {
         return UID;
+    }
+
+    @Override
+    public void onRuntimeAvailable(IJeiRuntime jeiRuntime) {
+        JeiRuntimeHolder.set(jeiRuntime);
+    }
+
+    @Override
+    public void onRuntimeUnavailable() {
+        JeiRuntimeHolder.set(null);
     }
 
     @Override
@@ -74,13 +84,13 @@ public final class RecipeBalancerJeiPlugin implements IModPlugin {
             @Override
             public int screenWidth() {
                 return screen.width > 0 ? screen.width
-                        : Minecraft.getInstance().getWindow().getGuiScaledWidth();
+                        : net.minecraft.client.Minecraft.getInstance().getWindow().getGuiScaledWidth();
             }
 
             @Override
             public int screenHeight() {
                 return screen.height > 0 ? screen.height
-                        : Minecraft.getInstance().getWindow().getGuiScaledHeight();
+                        : net.minecraft.client.Minecraft.getInstance().getWindow().getGuiScaledHeight();
             }
         };
     }

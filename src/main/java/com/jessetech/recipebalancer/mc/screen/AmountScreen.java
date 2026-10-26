@@ -50,7 +50,7 @@ public final class AmountScreen extends Screen implements JeiPanelScreen {
 
     @Override
     protected void init() {
-        panelX = (width - panelW) / 2;
+        panelX = Math.max(4, Math.min((width - panelW) / 2, width - 210 - panelW));
         panelY = (height - panelH) / 2;
 
         keyBox = new EditBox(font, panelX + 8, panelY + 28, panelW - 16, 18,
