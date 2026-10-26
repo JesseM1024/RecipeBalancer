@@ -26,10 +26,11 @@
 │   screen/TargetListScreen    目标产物列表                               │
 │   screen/ScenarioListScreen  已保存配方集：载入 / 另存 / 删除           │
 │   screen/SolveScreen         二级求解报告页                             │
-│   ui/AeStyle                 AE 终端浅灰/内嵌槽/蓝色强调（自绘，不依赖 AE2）│
+│   ui/AeStyle                 原版物品栏配色：C6C6C6 面板 / 8B8B8B 18px 槽 │
 │   ui/graph/GraphView         流程图绘制（GuiGraphics：节点/边/图标，M5）│
 │   itemmap/ItemKeyMapper      注册名 ↔ 图标 / 未注册物品占位渲染         │
-│   jei/RecipeBalancerJeiPlugin JEI 非 ContainerScreen 渲染注册（可选中） │
+│   screen/JeiPanelScreen      各面板屏幕向 JEI 暴露 guiLeft/Top/尺寸     │
+│   jei/RecipeBalancerJeiPlugin 所有面板 Screen 的 JEI 渲染注册（可选中） │
 │   jei/JeiBridge              JEI ghost/JEI 配方写入（M4）               │
 ├────────────────────────────────────────────────────────────────────────┤
 │ 渲染层  cef/（备选·暂缓，不在主链路；恢复条件见 §二）                     │
@@ -426,9 +427,9 @@ public final class RbKeyMappings {
 }
 
 package com.jessetech.recipebalancer.mc.screen;
-/** 配方编码终端（M3）：上方配方库、中央 3 列可滚动编码（256 原料/16 产物）+ 设备 + 耗时、
- *  下方玩家背包。左键取物→放置/删除，空手左键空格直接自定义；中键改量；右键配方库两次删除。
- *  每次打开用 loadDraft 读取 `scenarios/autosave.json`（允许未填目标/配方）。 */
+/** 配方编码终端（M3）：满高面板；上方配方库、中央 3 列可滚动编码（256 原料/16 产物）+
+ *  设备 + 耗时、下方玩家背包；全部槽位 18px（原版物品栏配色）。
+ *  左键取物→放置/删除，空手左键空格直接自定义；中键改量；右键配方库两次删除。 */
 public final class BalancerScreen extends Screen { /* M3 */ }
 /** 通用用量编辑：物品图标 + 注册名 + 数字框 + ±快捷按钮。 */
 public final class AmountScreen extends Screen { /* M3 */ }
@@ -443,10 +444,11 @@ public final class SolveScreen extends Screen { /* M3 */ }
 /** 背包拾取小屏（点选物品标记，M4 与 JEI 通道一起）。 */
 public final class InventoryPickerScreen extends Screen { /* M4 */ }
 
-/** JEI 插件：给非 ContainerScreen 注册 IGuiProperties，JEI 才会在右侧渲染。 */
+/** JEI 插件：给所有面板 Screen（主界面/用量/耗时/目标/配方集）注册 IGuiProperties。
+ *  面板字段必须有默认值：JEI 可能在 Screen.init 之前查询；否则首次打开不渲染。 */
 @JeiPlugin
 public final class RecipeBalancerJeiPlugin implements IModPlugin {
-    public void registerGuiHandlers(IGuiHandlerRegistration registration); // addGuiScreenHandler(BalancerScreen.class, ...)
+    public void registerGuiHandlers(IGuiHandlerRegistration registration);
 }
 
 package com.jessetech.recipebalancer.mc.itemmap;
@@ -495,7 +497,11 @@ final class GraphView {
 
 ---
 
-## 五、JEI 集成（mc/jei/，M4；渲染注册已在 M3 交付）
+## 五、JEI 集成（mc/jei/，M4；渲染注册已在 M3/R10 交付）
+
+> 自定义 `Screen` 不会自动获得 JEI 右侧面板：必须通过 `IGuiHandlerRegistration.addGuiScreenHandler`
+> 注册 `IGuiProperties`。主界面、用量、耗时、目标、配方集均已注册；属性字段有默认值，
+> 覆盖 JEI 在 `Screen.init` 之前查询的情况。`SolveScreen` 为纯文本报告，不注册。
 
 | 通道 | 用法 | JEI API（开发 19.39.0.372 / 实机 19.70.0.460，**逐项待核实 R-08**） |
 |---|---|---|
