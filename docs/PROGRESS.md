@@ -5,6 +5,47 @@
 
 ---
 
+## R21 · 2026-10-26 · 完整 tooltip / 结果可读名 / 配方按钮图标
+
+### 实测结果
+
+| 项 | 结果 |
+|---|---|
+| `gradlew test` | **80 tests, 0 failures** |
+| 产物 | `recipebalancer-0.1.0-1.21.1.jar` **2,319,998 B** |
+| 实机部署 | 已复制到 `1.21.1-NeoForge/mods/`（17:53:38） |
+| 未验证 | **实机 tooltip/求解报告/按钮图标冒烟** |
+
+### 1. 物品槽完整 tooltip
+
+- `ItemKeyMapper.renderTooltip` 对可解析 ItemStack 改用
+  `graphics.renderTooltip(font, stack, mouseX, mouseY)`。
+- 药水会显示：
+  - 物品名
+  - 效果列表（Water Breathing 00:45 / 02:00）
+  - registry id
+  - 组件数量/模组来源
+- 编码区、目标格、配方库、设备格全部生效；背包原本就是原生 tooltip。
+
+### 2. 求解结果可读化
+
+- 新增 `ItemKeyMapper.reportName` + `prettyText`：
+  - `stack|base64` → `物品名 [效果（时长）]`
+  - 例如 `Lingering Potion of Water Breathing [Water Breathing (00:45)]`
+- `BalancerScreen.solveNow` 在把报告交给 `SolveScreen` 前做文本替换；
+  不影响 `TextReporter`/磁盘数据/Python。
+- 45s 与 2min 的药水在结果中可直接区分。
+
+### 3. JEI 配方按钮图标
+
+- 自定义 `PatternIcon`（16×16）：
+  - 深色底 + 灰内框
+  - 白色中央十字
+  - 四角 L 形
+- 替换默认浅色 `getRecipePlusSign()`，在 JEI 灰色按钮上对比度更高。
+
+---
+
 ## R20 · 2026-10-26 · 药水/组件物品身份修复
 
 ### 实测结果
