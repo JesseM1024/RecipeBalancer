@@ -12,8 +12,8 @@
 | 项 | 结果 |
 |---|---|
 | `gradlew test` | **81 tests, 0 failures**（新增 IngredientKey 编码测试） |
-| 产物 | `recipebalancer-0.1.0-1.21.1.jar` **2,330,323 B** |
-| 实机部署 | 已复制到 `1.21.1-NeoForge/mods/`（18:32:49） |
+| 产物 | `recipebalancer-0.1.0-1.21.1.jar` **2,334,018 B** |
+| 实机部署 | 已复制到 `1.21.1-NeoForge/mods/`（18:39:26） |
 | 未验证 | 实机流体/化学品 ghost 与加号 |
 
 ### 身份
@@ -42,13 +42,26 @@
 - 设备：仍优先 JEI 左侧第一个物品催化剂；
   若 layout CATALYST 是非物品，也能写入设备 key。
 
+### JEI 真实渲染与 R/U
+
+- 新增 `JeiIngredientRenderer implements ItemKeyMapper.IngredientRenderHook`：
+  - runtime 提供后由插件安装；卸载时置空。
+  - 通过 `IIngredientManager.getIngredientRenderer(type)` 调 JEI 原生
+    `IIngredientRenderer.render(...)`，流体/化学品使用真实贴图。
+  - tooltip 用 `IIngredientRenderer.getTooltip(...)`，再追加 B 单位提示。
+  - `ItemKeyMapper` 不直接依赖 JEI；无 JEI 或解析失败时回落占位色块。
+- R/U：
+  - `BalancerScreen.jeiHoveredKey` 返回物品 key **或** ingredient key。
+  - 插件对 ingredient key 用 `JeiIngredientRenderer.resolveTyped` 还原
+    `ITypedIngredient`，再交给 `IClickableIngredientFactory`，因此非物品也能 R/U。
+- 非物品数量仍按 `helper.getAmount()/1000`（B）。
+
 ### 限制
 
 | # | 限制 | 说明 |
 |---|---|---|
-| 1 | 非物品图标为占位色块 | 尚未接 JEI `IIngredientRenderer` 绘制真实流体贴图 |
-| 2 | R/U 仍只支持 ItemStack | 非物品悬停查询未接 |
-| 3 | 化学品数量按 mB 假设 | 若某 mod 的 helper amount 不是 mB，需要该 mod 适配 |
+| 1 | 化学品数量按 mB 假设 | 若某 mod 的 helper amount 不是 mB，需要该 mod 适配 |
+| 2 | 流体 tooltip 的数量 | JEI renderer 使用还原 ingredient 的默认量；RecipeBalancer 自身数量在格子上 |
 
 ---
 
