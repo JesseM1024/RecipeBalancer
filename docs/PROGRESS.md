@@ -5,6 +5,40 @@
 
 ---
 
+## R23 · 2026-10-26 · 药水按物品 tooltip / 1px 图标 / 首个催化剂
+
+### 实测结果
+
+| 项 | 结果 |
+|---|---|
+| `gradlew test` | **80 tests, 0 failures** |
+| 产物 | `recipebalancer-0.1.0-1.21.1.jar` **2,323,952 B** |
+| 实机部署 | 已复制到 `1.21.1-NeoForge/mods/`（18:11:58） |
+| 未验证 | 实机药水/图标/加号冒烟 |
+
+### 药水时长
+
+- `reportName` 不再手动 `PotionContents.addPotionTooltip(..., 1.0f, 20f)`，
+  改为读取物品自身的 `stack.getTooltipLines(...)`。
+- 效果：
+  - `LingeringPotionItem` 的 0.25 时长因子生效 → Water Breathing 显示 `00:45`；
+  - Splash 按原版 tooltip 规则显示（通常为 3:00）；
+  - 不再出现 Lingering 也 3:00 的错误。
+
+### 配方按钮图标
+
+- 仍为 **13×13**。
+- 白色十字与四角 L 全部改为 **1px 线宽**，与参考图一致。
+
+### 加号设备自动填充
+
+- 优先通过 `IJeiRuntime.getRecipeManager()
+  .createRecipeCatalystLookup(layout.getRecipeCategory().getRecipeType())
+  .getItemStack().findFirst()` 取 JEI 左侧“可用设备”列的**第一个**。
+- 没有 catalyst lookup / 没有催化剂时，退回 layout 的 `CATALYST` 槽。
+
+---
+
 ## R22 · 2026-10-26 · 药水时长 / 13px 图标 / R-U 查询 / 加号数量
 
 ### 实测结果
