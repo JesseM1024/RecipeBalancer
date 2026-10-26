@@ -1063,6 +1063,66 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
         return result;
     }
 
+    public record HoveredItem(net.minecraft.world.item.ItemStack stack,
+                              int x, int y, int width, int height) {
+    }
+
+    /** JEI R/U：鼠标下的物品与屏幕矩形。 */
+    public HoveredItem jeiHoveredItem(double mouseX, double mouseY) {
+        int[] slot = encodingSlotAt(mouseX, mouseY);
+        if (slot != null) {
+            String key = slot[0] == 0 ? pattern.inputKey(slot[1]) : pattern.outputKey(slot[1]);
+            if (key != null) {
+                int cols = slot[0] == 0 ? GRID_COLS : OUTPUT_COLS;
+                int row = slot[1] / cols - encodingScrollRow;
+                int col = slot[1] % cols;
+                return hovered(key, (slot[0] == 0 ? inputX : outputX) + col * SLOT,
+                        encodingY + row * SLOT);
+            }
+        }
+        if (inside(mouseX, mouseY, equipmentX, encodingY, SLOT, SLOT)
+                && !pattern.equipmentKey().isBlank()) {
+            return hovered(pattern.equipmentKey(), equipmentX, encodingY);
+        }
+        int target = targetSlotAt(mouseX, mouseY);
+        if (target >= 0) {
+            List<Map.Entry<String, Double>> entries = new ArrayList<>(draft.targets().entrySet());
+            if (target < entries.size()) {
+                int row = target / TARGET_COLS - targetScrollRow;
+                int col = target % TARGET_COLS;
+                return hovered(entries.get(target).getKey(),
+                        panelX + 4 + col * SLOT, targetY + row * SLOT);
+            }
+        }
+        int library = libraryIndexAt(mouseX, mouseY);
+        if (library >= 0) {
+            String product = draft.recipes().get(library).productList().keySet()
+                    .stream().findFirst().orElse("");
+            if (!product.isEmpty()) {
+                int row = library / LIB_COLS - libraryScroll;
+                int col = library % LIB_COLS;
+                return hovered(product, panelX + 4 + col * SLOT, libraryY + row * SLOT);
+            }
+        }
+        int inventory = inventoryIndexAt(mouseX, mouseY);
+        if (inventory >= 0 && minecraft != null && minecraft.player != null) {
+            net.minecraft.world.item.ItemStack stack = minecraft.player.getInventory()
+                    .getItem(inventory);
+            if (!stack.isEmpty()) {
+                int row = inventory < 9 ? 3 : (inventory - 9) / 9;
+                int col = inventory < 9 ? inventory : (inventory - 9) % 9;
+                return new HoveredItem(stack, inventoryX + col * SLOT,
+                        inventoryY + row * SLOT, SLOT, SLOT);
+            }
+        }
+        return null;
+    }
+
+    private static HoveredItem hovered(String key, int x, int y) {
+        net.minecraft.world.item.ItemStack stack = ItemKeyMapper.stack(key);
+        return stack.isEmpty() ? null : new HoveredItem(stack, x, y, SLOT, SLOT);
+    }
+
     public void applyGhost(GhostKind kind, int index, String key) {
         if (key == null || key.isBlank()) {
             return;

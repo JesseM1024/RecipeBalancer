@@ -33,35 +33,35 @@ public final class JeiRecipeButtonFactory implements IRecipeButtonControllerFact
         return new Controller<>(layout, icon);
     }
 
-    /** 16×16 的深色底 + 白色四角/十字，对应参考图标的简化版。 */
+    /** 13×13 的深色底 + 白色四角/十字，对应参考图标。 */
     private static final class PatternIcon implements IDrawable {
         @Override
         public int getWidth() {
-            return 16;
+            return 13;
         }
 
         @Override
         public int getHeight() {
-            return 16;
+            return 13;
         }
 
         @Override
         public void draw(GuiGraphics graphics, int x, int y) {
-            graphics.fill(x, y, x + 16, y + 16, 0xFF101010);
-            graphics.fill(x + 1, y + 1, x + 15, y + 15, 0xFF8B8B8B);
+            graphics.fill(x, y, x + 13, y + 13, 0xFF101010);
+            graphics.fill(x + 1, y + 1, x + 12, y + 12, 0xFF8B8B8B);
             int white = 0xFFFFFFFF;
             // 中央十字
-            graphics.fill(x + 7, y + 2, x + 9, y + 14, white);
-            graphics.fill(x + 2, y + 7, x + 14, y + 9, white);
+            graphics.fill(x + 6, y + 1, x + 8, y + 12, white);
+            graphics.fill(x + 1, y + 6, x + 12, y + 8, white);
             // 四个 L 角
-            graphics.fill(x + 3, y + 3, x + 6, y + 5, white);
-            graphics.fill(x + 3, y + 3, x + 5, y + 6, white);
-            graphics.fill(x + 10, y + 3, x + 13, y + 5, white);
-            graphics.fill(x + 11, y + 3, x + 13, y + 6, white);
-            graphics.fill(x + 3, y + 11, x + 6, y + 13, white);
-            graphics.fill(x + 3, y + 10, x + 5, y + 13, white);
-            graphics.fill(x + 10, y + 11, x + 13, y + 13, white);
-            graphics.fill(x + 11, y + 10, x + 13, y + 13, white);
+            graphics.fill(x + 2, y + 2, x + 5, y + 4, white);
+            graphics.fill(x + 2, y + 2, x + 4, y + 5, white);
+            graphics.fill(x + 8, y + 2, x + 11, y + 4, white);
+            graphics.fill(x + 9, y + 2, x + 11, y + 5, white);
+            graphics.fill(x + 2, y + 9, x + 5, y + 11, white);
+            graphics.fill(x + 2, y + 8, x + 4, y + 11, white);
+            graphics.fill(x + 8, y + 9, x + 11, y + 11, white);
+            graphics.fill(x + 9, y + 8, x + 11, y + 11, white);
         }
     }
 
@@ -107,7 +107,8 @@ public final class JeiRecipeButtonFactory implements IRecipeButtonControllerFact
                     .getSlotViews(RecipeIngredientRole.INPUT)) {
                 Optional<ItemStack> stack = firstItem(slot);
                 if (stack.isPresent() && inputIndex < RecipePattern.MAX_INPUTS) {
-                    pattern.putInput(inputIndex++, ItemKeyMapper.of(stack.get()), 1.0);
+                    pattern.putInput(inputIndex++, ItemKeyMapper.of(stack.get()),
+                            Math.max(1.0, stack.get().getCount()));
                 }
             }
             int outputIndex = 0;
@@ -115,7 +116,9 @@ public final class JeiRecipeButtonFactory implements IRecipeButtonControllerFact
                     .getSlotViews(RecipeIngredientRole.OUTPUT)) {
                 Optional<ItemStack> stack = firstItem(slot);
                 if (stack.isPresent() && outputIndex < RecipePattern.MAX_OUTPUTS) {
-                    pattern.putOutput(outputIndex++, ItemKeyMapper.of(stack.get()), 1.0);
+                    // 合成输出可能是 3 个门等，保留 JEI 槽位的数量
+                    pattern.putOutput(outputIndex++, ItemKeyMapper.of(stack.get()),
+                            Math.max(1.0, stack.get().getCount()));
                 }
             }
             for (IRecipeSlotView slot : layout.getRecipeSlotsView()

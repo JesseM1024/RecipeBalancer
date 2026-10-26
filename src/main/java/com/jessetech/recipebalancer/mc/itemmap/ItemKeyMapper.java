@@ -142,7 +142,8 @@ public final class ItemKeyMapper {
             return name;
         }
         List<Component> effects = new ArrayList<>();
-        contents.addPotionTooltip(effects::add, 1.0f, 1.0f);
+        // 第二个 float 是 tickRate（原版 PotionItem 传 tooltipContext.tickRate()，通常 20）
+        contents.addPotionTooltip(effects::add, 1.0f, 20.0f);
         if (effects.isEmpty()) {
             return name;
         }

@@ -7,12 +7,18 @@ import com.jessetech.recipebalancer.mc.screen.ScenarioListScreen;
 import com.jessetech.recipebalancer.mc.screen.TimeScreen;
 import mezz.jei.api.IModPlugin;
 import mezz.jei.api.JeiPlugin;
+import mezz.jei.api.gui.builder.IClickableIngredientFactory;
 import mezz.jei.api.gui.handlers.IGuiProperties;
+import mezz.jei.api.gui.handlers.IScreenHandler;
 import mezz.jei.api.registration.IAdvancedRegistration;
 import mezz.jei.api.registration.IGuiHandlerRegistration;
+import mezz.jei.api.runtime.IClickableIngredient;
 import mezz.jei.api.runtime.IJeiRuntime;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.renderer.Rect2i;
 import net.minecraft.resources.ResourceLocation;
+
+import java.util.Optional;
 
 /**
  * 让 JEI 在我们的自定义 Screen（非 ContainerScreen）上渲染：
@@ -44,8 +50,25 @@ public final class RecipeBalancerJeiPlugin implements IModPlugin {
 
     @Override
     public void registerGuiHandlers(IGuiHandlerRegistration registration) {
-        registration.addGuiScreenHandler(BalancerScreen.class,
-                screen -> properties(screen, screen));
+        registration.addGuiScreenHandler(BalancerScreen.class, new IScreenHandler<BalancerScreen>() {
+            @Override
+            public IGuiProperties apply(BalancerScreen screen) {
+                return properties(screen, screen);
+            }
+
+            @Override
+            public Optional<? extends IClickableIngredient<?>> getClickableIngredientUnderMouse(
+                    IClickableIngredientFactory factory, BalancerScreen screen,
+                    double mouseX, double mouseY) {
+                BalancerScreen.HoveredItem hovered = screen.jeiHoveredItem(mouseX, mouseY);
+                if (hovered == null) {
+                    return Optional.empty();
+                }
+                return factory.createBuilder(hovered.stack())
+                        .buildWithArea(new Rect2i(hovered.x(), hovered.y(),
+                                hovered.width(), hovered.height()));
+            }
+        });
         registration.addGuiScreenHandler(AmountScreen.class,
                 screen -> properties(screen, screen));
         registration.addGuiScreenHandler(TimeScreen.class,
