@@ -12,8 +12,8 @@
 | 项 | 结果 |
 |---|---|
 | `gradlew test` | **78 tests, 0 failures** |
-| 产物 | `recipebalancer-0.1.0-1.21.1.jar` **2,301,182 B** |
-| 实机部署 | 已复制到 `1.21.1-NeoForge/mods/`（15:12:02） |
+| 产物 | `recipebalancer-0.1.0-1.21.1.jar` **2,301,057 B** |
+| 实机部署 | 已复制到 `1.21.1-NeoForge/mods/`（15:46:50） |
 | 未验证 | 实机 JEI 冒烟（需重启/缩放窗口） |
 
 ### JEI 位置不自动刷新的根因
@@ -48,10 +48,12 @@
   → `updateScreen(screen)` → `forceUpdate()`，直接驱动缓存刷新（JEI 19.x 无公开 API）。
 - 反射失败时写 warn 日志并退回事件机制，便于实机定位。
 
-### 面板左移与可选隔离
+### 面板居中与可选隔离
 
-- 面板不再居中：`panelX` 在右侧预留约 **210px** 给 JEI，宽度不足时靠左（x=4）。
-  小窗口下 JEI 有实际落位空间，不再压在主面板上。
+- 面板恢复**屏幕正中**：`panelX = (width - panelW) / 2`；
+  JEI 由 `guiRight` 自动使用右侧剩余空间，不再靠左让位。
+- 若窗口宽度不足以同时放下面板与 JEI 网格，JEI 会自行压缩/调整列数，
+  而不是把配平面板推离中心。
 - 新增 `JeiRuntimeHolder`（不含任何 JEI 类型）：**未装 JEI 时不会因反射类而缺类崩溃**；
   `RecipeBalancerJeiPlugin` 在 `onRuntimeAvailable` 写入运行时。
 - 延迟补发事件前检查 `Minecraft.screen == screen`，避免关闭界面后把 JEI 缓存刷回旧屏。

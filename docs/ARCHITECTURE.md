@@ -506,7 +506,7 @@ final class GraphView {
 > （并延后一 tick 再补一次）。若 JEI 仍不响应事件，再用 `IJeiRuntime` 反射调用
 > 内部 `getScreenPropertiesUpdater().updateScreen(screen).forceUpdate()` 兜底
 > （运行时引用放在无 JEI 类型的 `JeiRuntimeHolder`，保证 JEI 未安装时也不缺类）。
-> 面板默认在右侧预留约 210px 给 JEI，空间不足时靠左。
+> 配平面板保持屏幕正中；JEI 根据 `guiRight` 使用右侧剩余空间，不左移面板。
 
 | 通道 | 用法 | JEI API（开发 19.39.0.372 / 实机 19.70.0.460，**逐项待核实 R-08**） |
 |---|---|---|
