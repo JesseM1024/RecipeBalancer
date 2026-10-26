@@ -13,6 +13,7 @@ import mezz.jei.api.gui.ingredient.IRecipeSlotView;
 import mezz.jei.api.gui.inputs.IJeiUserInput;
 import mezz.jei.api.recipe.RecipeIngredientRole;
 import mezz.jei.api.recipe.advanced.IRecipeButtonControllerFactory;
+import mezz.jei.api.runtime.IJeiRuntime;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -50,18 +51,18 @@ public final class JeiRecipeButtonFactory implements IRecipeButtonControllerFact
             graphics.fill(x, y, x + 13, y + 13, 0xFF101010);
             graphics.fill(x + 1, y + 1, x + 12, y + 12, 0xFF8B8B8B);
             int white = 0xFFFFFFFF;
-            // 中央十字
-            graphics.fill(x + 6, y + 1, x + 8, y + 12, white);
-            graphics.fill(x + 1, y + 6, x + 12, y + 8, white);
-            // 四个 L 角
-            graphics.fill(x + 2, y + 2, x + 5, y + 4, white);
-            graphics.fill(x + 2, y + 2, x + 4, y + 5, white);
-            graphics.fill(x + 8, y + 2, x + 11, y + 4, white);
-            graphics.fill(x + 9, y + 2, x + 11, y + 5, white);
-            graphics.fill(x + 2, y + 9, x + 5, y + 11, white);
-            graphics.fill(x + 2, y + 8, x + 4, y + 11, white);
-            graphics.fill(x + 8, y + 9, x + 11, y + 11, white);
-            graphics.fill(x + 9, y + 8, x + 11, y + 11, white);
+            // 1px 中央十字
+            graphics.fill(x + 6, y + 1, x + 7, y + 12, white);
+            graphics.fill(x + 1, y + 6, x + 12, y + 7, white);
+            // 四个 1px L 角
+            graphics.fill(x + 2, y + 2, x + 5, y + 3, white);
+            graphics.fill(x + 2, y + 2, x + 3, y + 5, white);
+            graphics.fill(x + 8, y + 2, x + 11, y + 3, white);
+            graphics.fill(x + 10, y + 2, x + 11, y + 5, white);
+            graphics.fill(x + 2, y + 10, x + 5, y + 11, white);
+            graphics.fill(x + 2, y + 8, x + 3, y + 11, white);
+            graphics.fill(x + 8, y + 10, x + 11, y + 11, white);
+            graphics.fill(x + 10, y + 8, x + 11, y + 11, white);
         }
     }
 
@@ -121,12 +122,30 @@ public final class JeiRecipeButtonFactory implements IRecipeButtonControllerFact
                             Math.max(1.0, stack.get().getCount()));
                 }
             }
-            for (IRecipeSlotView slot : layout.getRecipeSlotsView()
-                    .getSlotViews(RecipeIngredientRole.CATALYST)) {
-                Optional<ItemStack> stack = firstItem(slot);
-                if (stack.isPresent()) {
-                    pattern.setEquipmentKey(ItemKeyMapper.of(stack.get()));
-                    break;
+            // JEI 左侧“可用设备”列：取该配方类型的第一个催化剂自动填设备
+            boolean equipmentSet = false;
+            Object runtimeObject = JeiRuntimeHolder.get();
+            if (runtimeObject instanceof IJeiRuntime runtime) {
+                try {
+                    Optional<ItemStack> catalyst = runtime.getRecipeManager()
+                            .createRecipeCatalystLookup(layout.getRecipeCategory().getRecipeType())
+                            .getItemStack().findFirst();
+                    if (catalyst.isPresent()) {
+                        pattern.setEquipmentKey(ItemKeyMapper.of(catalyst.get()));
+                        equipmentSet = true;
+                    }
+                } catch (RuntimeException ignored) {
+                    // 某些自定义类别没有 catalyst lookup，退回 layout CATALYST
+                }
+            }
+            if (!equipmentSet) {
+                for (IRecipeSlotView slot : layout.getRecipeSlotsView()
+                        .getSlotViews(RecipeIngredientRole.CATALYST)) {
+                    Optional<ItemStack> stack = firstItem(slot);
+                    if (stack.isPresent()) {
+                        pattern.setEquipmentKey(ItemKeyMapper.of(stack.get()));
+                        break;
+                    }
                 }
             }
             Minecraft.getInstance().setScreen(new BalancerScreen(pattern));

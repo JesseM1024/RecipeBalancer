@@ -141,20 +141,26 @@ public final class ItemKeyMapper {
         if (contents == null || !contents.hasEffects()) {
             return name;
         }
-        List<Component> effects = new ArrayList<>();
-        // 第二个 float 是 tickRate（原版 PotionItem 传 tooltipContext.tickRate()，通常 20）
-        contents.addPotionTooltip(effects::add, 1.0f, 20.0f);
+        // 直接用物品自身的 tooltip：Lingering 会按 0.25 时长因子、Splash 按原版规则显示
+        Minecraft minecraft = Minecraft.getInstance();
+        net.minecraft.world.item.Item.TooltipContext context =
+                minecraft != null && minecraft.level != null
+                        ? net.minecraft.world.item.Item.TooltipContext.of(minecraft.level)
+                        : net.minecraft.world.item.Item.TooltipContext.EMPTY;
+        List<Component> tooltip = stack.getTooltipLines(context,
+                minecraft == null ? null : minecraft.player,
+                net.minecraft.world.item.TooltipFlag.NORMAL);
+        List<String> effects = new ArrayList<>();
+        for (int i = 1; i < tooltip.size(); i++) {
+            String line = tooltip.get(i).getString();
+            if (!line.isBlank()) {
+                effects.add(line);
+            }
+        }
         if (effects.isEmpty()) {
             return name;
         }
-        StringBuilder builder = new StringBuilder(name).append(" [");
-        for (int i = 0; i < effects.size(); i++) {
-            if (i > 0) {
-                builder.append(" / ");
-            }
-            builder.append(effects.get(i).getString());
-        }
-        return builder.append(']').toString();
+        return name + " [" + String.join(" / ", effects) + "]";
     }
 
     /** 把结果报告中的 stack|base64 替换成可读名称（不影响写入磁盘的数据）。 */
