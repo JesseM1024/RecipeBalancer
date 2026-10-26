@@ -47,8 +47,8 @@ public final class SolveGraphView {
     private static final int EDGE = 0xFF9A9A9A;
     private static final double NODE_GAP = 38.0;
     private static final double EDGE_REST = 84.0;
-    private static final long AUTO_SETTLE_NANOS = 1_500_000_000L;
-    private static final double AUTO_STEP_SECONDS = 1.0 / 60.0;
+    private static final long AUTO_SETTLE_NANOS = 2_000_000_000L;
+    private static final double AUTO_STEP_SECONDS = 1.0 / 100.0;
 
     private enum Category {
         INPUT, INTERMEDIATE, STARTUP, BYPRODUCT, TARGET
@@ -588,7 +588,7 @@ public final class SolveGraphView {
 
     /**
      * 启动动画：选中一个节点并“按住不动”，即它固定在原地，
-     * 但它对邻居的斥力/相连弹簧持续求解，约 1.5 秒后松手。
+     * 但它对邻居的斥力/相连弹簧持续求解，约 2 秒后松手。
      */
     private void startAutoSettleIfNeeded(long now) {
         if (!autoSettlePending) {
@@ -616,7 +616,7 @@ public final class SolveGraphView {
         autoSettleAccumulator += dt;
         int guard = 0;
         while (autoSettleAccumulator >= AUTO_STEP_SECONDS
-                && now < autoSettleEndNanos && guard < 4) {
+                && now < autoSettleEndNanos && guard < 6) {
             autoSettleAccumulator -= AUTO_STEP_SECONDS;
             autoSettleStepCounter++;
             autoSettleStep();
