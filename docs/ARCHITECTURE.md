@@ -31,8 +31,9 @@
 │   screen/UnitPreferences    记住上次耗时/速率单位（ui_units.properties）│
 │   screen/JeiPanelScreen      各面板屏幕向 JEI 暴露 guiLeft/Top/尺寸     │
 │   jei/JeiScreenSupport       resize/二级界面补发 Init.Post，刷新 JEI    │
-│   jei/RecipeBalancerJeiPlugin 所有面板 Screen 的 JEI 渲染注册（可选中） │
-│   jei/JeiBridge              JEI ghost/JEI 配方写入（M4）               │
+│   jei/JeiGhostHandler        JEI 物品拖到编码/设备/目标可见槽          │
+│   jei/JeiRecipeButtonFactory JEI 配方页加号 → 预填编码终端              │
+│   jei/RecipeBalancerJeiPlugin 所有面板 Screen 的 JEI 渲染/拖拽/按钮注册 │
 ├────────────────────────────────────────────────────────────────────────┤
 │ 渲染层  cef/（备选·暂缓，不在主链路；恢复条件见 §二）                     │
 │   CefHost / RbRenderHandler / FrameTexture / InputForwarder / JsBridge │
@@ -443,8 +444,10 @@ public final class TimeScreen extends Screen { /* M3 */ }
 public final class ScenarioListScreen extends Screen { /* M3 */ }
 /** 二级求解报告页（滚动文本）。 */
 public final class SolveScreen extends Screen { /* M3 */ }
-/** 背包拾取小屏（点选物品标记，M4 与 JEI 通道一起）。 */
-public final class InventoryPickerScreen extends Screen { /* M4 */ }
+/** JEI ghost：当前可见编码/设备/目标槽。 */
+public final class JeiGhostHandler implements IGhostIngredientHandler<BalancerScreen> { /* M4 */ }
+/** JEI 配方页加号：layout 槽 → RecipePattern → 打开 BalancerScreen。 */
+public final class JeiRecipeButtonFactory implements IRecipeButtonControllerFactory { /* M4 */ }
 
 /** JEI 插件：给所有面板 Screen（主界面/用量/耗时/配方集）注册 IGuiProperties。
  *  面板字段必须有默认值：JEI 可能在 Screen.init 之前查询；否则首次打开不渲染。 */
@@ -513,8 +516,8 @@ final class GraphView {
 
 | 通道 | 用法 | JEI API（开发 19.39.0.372 / 实机 19.70.0.460，**逐项待核实 R-08**） |
 |---|---|---|
-| G-拖拽 | 从 JEI 物品列表把物品拖到界面配方槽 | `IGhostIngredientHandler<Screen>`：Screen 提供目标矩形集；落点回调拿 `ITypedIngredient` |
-| G-配方写入 | 界面内对某物品点"从 JEI 查配方"→ JEI lookup → 自动填原料/产物（数量带入，**耗时/设备手填**） | `IJeiRuntime.getRecipeManager()` → recipe lookup → `IRecipeWrapper` 的输入/输出 ingredient 列表 |
+| G-拖拽 | 从 JEI 物品列表拖到编码原料/产物/设备/目标可见槽 | `IGhostIngredientHandler<BalancerScreen>`；`ghostSlots()` 返回当前可见 Rect2i；落点写 `RecipePattern`/`ScenarioDraft` |
+| G-配方写入 | JEI 配方页侧边加号 → 读当前 layout 的 INPUT/OUTPUT/CATALYST → 预填编码终端 | `IAdvancedRegistration.addRecipeButtonFactory` + `IRecipeLayoutDrawable.getRecipeSlotsView()`；数量默认 1，设备取催化剂 |
 | G-兼容声明 | mods.toml 已声明 `optional`；运行期 `ModList.get().isLoaded("jei")` 决定 JeiBridge 是否激活 | — |
 
 隔离规则：`mc/jei/` 包外**任何类不得 import `mezz.jei.*`**（compileOnly 类进入运行期

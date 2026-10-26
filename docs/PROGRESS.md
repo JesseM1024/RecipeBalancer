@@ -5,6 +5,53 @@
 
 ---
 
+## R19 · 2026-10-26 · M4：JEI ghost 拖拽 + 配方加号导入
+
+### 实测结果
+
+| 项 | 结果 |
+|---|---|
+| `gradlew test` | **80 tests, 0 failures** |
+| 产物 | `recipebalancer-0.1.0-1.21.1.jar` **2,316,395 B** |
+| 实机部署 | 已复制到 `1.21.1-NeoForge/mods/`（17:35:09） |
+| 未验证 | **实机 JEI 拖拽/加号冒烟** |
+
+### Ghost 拖拽
+
+- 新增 `JeiGhostHandler implements IGhostIngredientHandler<BalancerScreen>`。
+- `BalancerScreen.ghostSlots()` 返回当前**可见**的：
+  - 原料 3 列 × 可视行
+  - 产物 2 列 × 可视行
+  - 设备格
+  - 目标格（可见 9 列 × 1~2 行）
+- 拖入后：
+  - 原料/产物：对应索引放 1 个（同物品累加）；
+  - 设备：设置设备；
+  - 目标：新增 1/t（受 32 上限）。
+- 滚动后重新拖拽即可落到新可见行。
+
+### JEI 配方加号
+
+- 新增 `JeiRecipeButtonFactory`，通过 `IAdvancedRegistration.addRecipeButtonFactory`
+  给 JEI 配方页追加加号按钮（图标 `getRecipePlusSign()`）。
+- 点击后：
+  - 读取 `IRecipeLayoutDrawable.getRecipeSlotsView()`；
+  - INPUT/OUTPUT 各取第一个物品，数量默认 1；
+  - CATALYST 第一项作为设备（取不到则留空，需人工补）；
+  - 生成 `RecipePattern` 并打开编码终端。
+- 加号在无产物配方上隐藏；按住模拟/非左键不触发。
+
+### 已知限制
+
+| # | 限制 | 说明 |
+|---|---|---|
+| 1 | JEI 槽不提供数量 | 一键导入所有数量默认 1，需人工改量 |
+| 2 | 设备取催化剂 | 无催化剂的配方打开后设备为空，需手动设置 |
+| 3 | 仅 ItemStack | 不支持流体 ghost/配方 |
+| 4 | 加号打开终端而非直接入库 | 保留人工复核，避免错误配方直接写入 |
+
+---
+
 ## R18 · 2026-10-26 · 紧凑数字深度修复 + 完整 SI 后缀 + 耗时紧凑显示
 
 ### 实测结果
