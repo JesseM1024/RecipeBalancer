@@ -46,6 +46,7 @@ public final class SolveGraphView {
     private static final int BORDER = 0xFF4A4A4A;
     private static final int EDGE = 0xFF9A9A9A;
     private static final double NODE_GAP = 38.0;
+    private static final double EDGE_REST = 68.0;
 
     private enum Category {
         INPUT, INTERMEDIATE, STARTUP, BYPRODUCT, TARGET
@@ -209,7 +210,7 @@ public final class SolveGraphView {
         // 1) 节点斥力 + 最短距离约束；2) 边弹簧（固定自然长度）；
         // 3) 向心/圆环势能；4) 碰撞松弛；5) 交叉/穿节点的局部能量搜索。
         double k = 52.0;
-        double restLength = 84.0;
+        double restLength = EDGE_REST;
         int iterations = nodes.size() > 180 ? 140 : 260;
         for (int iteration = 0; iteration < iterations; iteration++) {
             double temperature = Math.max(1.0, k * (1.0 - iteration / (double) iterations));
@@ -269,12 +270,9 @@ public final class SolveGraphView {
         collisionRelax();
         minimizeCrossings(targetRadius);
         collisionRelax();
-        // 打开流程图时先做一次“原地收缩”：等价于手动拖动后再松手，
+        // 打开流程图时自动“原地收缩”：等价于手动拖动后再松手，
         // 但不依赖用户操作，直接得到更紧凑的初始布局。
-        for (int i = 0; i < 8; i++) {
-            settleStep();
-        }
-        collisionRelax();
+        compactLayout();
 
         minX = Double.MAX_VALUE;
         minY = Double.MAX_VALUE;
@@ -510,7 +508,7 @@ public final class SolveGraphView {
                 move += (min * 1.3 - dist) * 0.14;
             }
             if (connected(dragged, other)) {
-                double rest = 84.0;
+                double rest = EDGE_REST;
                 move += (rest - dist) * 0.075;
             }
             move = Math.max(-6.0, Math.min(6.0, move));
@@ -536,6 +534,10 @@ public final class SolveGraphView {
 
     /** 松手后的局部回弹，几帧内收敛，不做全图重新布局。 */
     private void settleStep() {
+        settleStep(true);
+    }
+
+    private void settleStep(boolean collide) {
         rebuildGrid();
         double influence = 170.0;
         for (GNode node : nodes) {
@@ -563,12 +565,23 @@ public final class SolveGraphView {
                 double dx = node.x - other.x;
                 double dy = node.y - other.y;
                 double dist = Math.max(0.001, Math.hypot(dx, dy));
-                double spring = (dist - 84.0) * 0.025;
+                double spring = (dist - EDGE_REST) * 0.025;
                 moveX -= dx / dist * spring;
                 moveY -= dy / dist * spring;
             }
             node.x += Math.max(-2.0, Math.min(2.0, moveX));
             node.y += Math.max(-2.0, Math.min(2.0, moveY));
+        }
+        if (collide) {
+            collisionRelax();
+        }
+    }
+
+    /** 打开时自动收缩；不每轮全量碰撞，降低启动耗时。 */
+    private void compactLayout() {
+        int steps = nodes.size() > 160 ? 50 : 90;
+        for (int i = 0; i < steps; i++) {
+            settleStep(i % 8 == 0);
         }
         collisionRelax();
     }
@@ -676,8 +689,9 @@ public final class SolveGraphView {
         double viewMaxX = (areaW - panX) / zoom + 120;
         double viewMinY = (-panY) / zoom - 120;
         double viewMaxY = (areaH - panY) / zoom + 120;
-        boolean showLabels = zoom >= 0.42;
-        boolean showIcons = zoom >= 0.30;
+        // LOD 阈值放低：只有缩得非常小才省略元素。
+        boolean showLabels = zoom >= 0.24;
+        boolean showIcons = zoom >= 0.16;
 
         graphics.pose().pushPose();
         graphics.pose().translate(areaX + panX, areaY + panY, 0);
