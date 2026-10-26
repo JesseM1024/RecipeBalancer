@@ -5,6 +5,50 @@
 
 ---
 
+## R22 · 2026-10-26 · 药水时长 / 13px 图标 / R-U 查询 / 加号数量
+
+### 实测结果
+
+| 项 | 结果 |
+|---|---|
+| `gradlew test` | **80 tests, 0 failures** |
+| 产物 | `recipebalancer-0.1.0-1.21.1.jar` **2,323,369 B** |
+| 实机部署 | 已复制到 `1.21.1-NeoForge/mods/`（18:03:42） |
+| 未验证 | 实机 GUI/JEI 冒烟 |
+
+### 1. 药水显示 1 小时
+
+- `PotionContents.addPotionTooltip` 的第二个 float 不是倍率，而是 **tickRate**。
+- 之前传 `1.0f`：3600 tick 被当成 3600 秒 → `01:00:00`。
+- 改为 **20.0f**，与 `PotionItem` 的 `tooltipContext.tickRate()` 一致；
+  45 秒 / 2 分钟恢复正常。
+
+### 2. 配方按钮 13×13
+
+- 自绘 `PatternIcon` 从 16×16 改为 **13×13**，重新排布四角/十字，
+  避免 JEI 按钮里被裁切或显小。
+
+### 3. 编码区 R/U 查询
+
+- `BalancerScreen` 实现 `jeiHoveredItem`：返回鼠标下的 ItemStack + Rect2i。
+- `RecipeBalancerJeiPlugin` 为主界面注册 `IScreenHandler`，
+  重写 `getClickableIngredientUnderMouse`：
+  - 编码原料/产物
+  - 设备格
+  - 目标格
+  - 配方库产物
+  - 玩家背包
+- 悬停后按 R/U 即可查看 JEI 合成表/用途。
+
+### 4. JEI 加号保留数量
+
+- `IRecipeSlotView` 的 `ItemStack.getCount()` 现在带入 RecipePattern：
+  - 输出 3 个门 → 产物数量 3；
+  - 输入多格木板各自 1 → 合并后总需求正确。
+- 仍然每格默认取显示物品；数量为 0/异常的槽位按 1 处理。
+
+---
+
 ## R21 · 2026-10-26 · 完整 tooltip / 结果可读名 / 配方按钮图标
 
 ### 实测结果
