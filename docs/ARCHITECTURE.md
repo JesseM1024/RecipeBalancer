@@ -26,7 +26,7 @@
 │   screen/ScenarioListScreen  已保存配方集：载入 / 另存 / 删除           │
 │   screen/SolveScreen         二级求解报告页                             │
 │   ui/AeStyle                 原版物品栏配色：C6C6C6 面板 / 8B8B8B 18px 槽 │
-│   ui/graph/GraphView         流程图绘制（GuiGraphics：节点/边/图标，M5）│
+│   ui/graph/SolveGraphView    求解结果流程图（配方节点/物流边/SCC分层，M5）│
 │   itemmap/ItemKeyMapper      注册名 ↔ 图标 / 未注册物品占位渲染         │
 │   screen/UnitPreferences    记住上次耗时/速率单位（ui_units.properties）│
 │   screen/JeiPanelScreen      各面板屏幕向 JEI 暴露 guiLeft/Top/尺寸     │
