@@ -1,6 +1,7 @@
 package com.jessetech.recipebalancer.mc.itemmap;
 
 import com.google.gson.JsonElement;
+import com.jessetech.recipebalancer.mc.i18n.Lang;
 import com.google.gson.JsonParser;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.serialization.JsonOps;
@@ -373,12 +374,12 @@ public final class ItemKeyMapper {
             lines.add(Component.literal(IngredientKey.displayName(id)));
             lines.add(Component.literal(IngredientKey.describe(id))
                     .withStyle(ChatFormatting.GRAY));
-            lines.add(Component.literal("非物品 ingredient；数量单位 B（500 mB = 0.5）")
+            lines.add(Lang.c("非物品 ingredient；数量单位 B（500 mB = 0.5）")
                     .withStyle(ChatFormatting.DARK_GRAY));
         } else {
             lines.add(Component.literal(shortLabel(id)).withStyle(ChatFormatting.GOLD));
             lines.add(Component.literal(id).withStyle(ChatFormatting.GRAY));
-            lines.add(Component.literal("当前整合包未找到此物品（占位显示）")
+            lines.add(Lang.c("当前整合包未找到此物品（占位显示）")
                     .withStyle(ChatFormatting.DARK_GRAY));
         }
         graphics.renderComponentTooltip(font, lines, mouseX, mouseY);

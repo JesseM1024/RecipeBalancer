@@ -4,6 +4,8 @@ import com.jessetech.recipebalancer.core.model.Constants;
 import com.jessetech.recipebalancer.core.model.Recipe;
 import com.jessetech.recipebalancer.core.model.SolveResult;
 import com.jessetech.recipebalancer.core.time.TimeExpression;
+import com.jessetech.recipebalancer.mc.config.GraphAnimationConfig;
+import com.jessetech.recipebalancer.mc.i18n.Lang;
 import com.jessetech.recipebalancer.mc.itemmap.IngredientKey;
 import com.jessetech.recipebalancer.mc.itemmap.ItemKeyMapper;
 import com.jessetech.recipebalancer.mc.ui.AeStyle;
@@ -47,9 +49,9 @@ public final class SolveGraphView {
     private static final int EDGE = 0xFF9A9A9A;
     private static final double NODE_GAP = 38.0;
     private static final double EDGE_REST = 84.0;
-    private static final long AUTO_SETTLE_NANOS = 2_000_000_000L;
-    private static final double AUTO_STEP_SECONDS = 1.0 / 100.0;
-    private static final double AUTO_MAX_MOVE = 6.0;
+    private double autoStepSeconds = 1.0 / 100.0;
+    private long autoDurationNanos = 2_000_000_000L;
+    private double autoMaxMove = 6.0;
 
     private enum Category {
         INPUT, INTERMEDIATE, STARTUP, BYPRODUCT, TARGET
@@ -603,9 +605,13 @@ public final class SolveGraphView {
         if (nodes.isEmpty()) {
             return;
         }
+        GraphAnimationConfig.Settings settings = GraphAnimationConfig.get();
+        autoStepSeconds = 1.0 / settings.stepsPerSecond();
+        autoDurationNanos = (long) (settings.durationSeconds() * 1_000_000_000L);
+        autoMaxMove = settings.stepDistance();
         autoAnchor = chooseAutoAnchor();
         autoSettling = true;
-        autoSettleEndNanos = now + AUTO_SETTLE_NANOS;
+        autoSettleEndNanos = now + autoDurationNanos;
         autoSettleLastNanos = now;
         autoSettleAccumulator = 0.0;
         autoSettleStepCounter = 0;
@@ -615,14 +621,17 @@ public final class SolveGraphView {
         if (!autoSettling) {
             return;
         }
+        GraphAnimationConfig.Settings live = GraphAnimationConfig.get();
+        autoStepSeconds = 1.0 / live.stepsPerSecond();
+        autoMaxMove = live.stepDistance();
         double dt = Math.max(0.0, Math.min(0.05,
                 (now - autoSettleLastNanos) / 1_000_000_000.0));
         autoSettleLastNanos = now;
         autoSettleAccumulator += dt;
         int guard = 0;
-        while (autoSettleAccumulator >= AUTO_STEP_SECONDS
+        while (autoSettleAccumulator >= autoStepSeconds
                 && now < autoSettleEndNanos && guard < 6) {
-            autoSettleAccumulator -= AUTO_STEP_SECONDS;
+            autoSettleAccumulator -= autoStepSeconds;
             autoSettleStepCounter++;
             autoSettleStep();
             guard++;
@@ -643,7 +652,7 @@ public final class SolveGraphView {
         elasticStep(autoAnchor);
         autoAnchor.x = anchorX;
         autoAnchor.y = anchorY;
-        settleStep(false, AUTO_MAX_MOVE);
+        settleStep(false, autoMaxMove);
         autoAnchor.x = anchorX;
         autoAnchor.y = anchorY;
         if (autoSettleStepCounter % 8 == 0) {
@@ -780,7 +789,7 @@ public final class SolveGraphView {
         graphics.enableScissor(areaX, areaY, areaX + areaW, areaY + areaH);
 
         if (nodes.isEmpty()) {
-            graphics.drawString(font, "没有有效配方可绘制", areaX + 8, areaY + 24,
+            graphics.drawString(font, Lang.t("没有有效配方可绘制"), areaX + 8, areaY + 24,
                     AeStyle.MUTED, false);
             graphics.disableScissor();
             return;
@@ -810,7 +819,7 @@ public final class SolveGraphView {
         graphics.disableScissor();
 
         drawLegend(graphics, font, areaX, areaY);
-        graphics.drawString(font, "拖动平移 · 滚轮缩放 · 流量单位 /t",
+        graphics.drawString(font, Lang.t("拖动平移 · 滚轮缩放 · 流量单位 /t"),
                 areaX + 4, areaY + areaH - 12, AeStyle.MUTED, false);
     }
 
@@ -842,10 +851,10 @@ public final class SolveGraphView {
             List<Component> lines = new ArrayList<>();
             lines.add(Component.literal(ItemKeyMapper.displayName(edge.material))
                     .withStyle(ChatFormatting.BOLD));
-            lines.add(Component.literal(nodeLabel(edge.from) + " → " + nodeLabel(edge.to))
+            lines.add(Lang.c(nodeLabel(edge.from) + " → " + nodeLabel(edge.to))
                     .withStyle(ChatFormatting.GRAY));
-            lines.add(Component.literal("流量: "
-                    + TimeExpression.formatEditableNumber(edge.flow) + " /t"));
+            lines.add(Lang.c("流量: %s /t",
+                    TimeExpression.formatEditableNumber(edge.flow)));
             graphics.renderComponentTooltip(font, lines, mouseX, mouseY);
         }
     }
@@ -881,25 +890,25 @@ public final class SolveGraphView {
     private List<Component> recipeTooltip(GNode node) {
         Recipe recipe = recipes.get(node.recipeId);
         List<Component> lines = new ArrayList<>();
-        lines.add(Component.literal("R" + node.recipeId + " · "
-                + ItemKeyMapper.displayName(recipe.equType())).withStyle(ChatFormatting.BOLD));
+        lines.add(Lang.c("R%s · %s", node.recipeId,
+                ItemKeyMapper.displayName(recipe.equType())).withStyle(ChatFormatting.BOLD));
         double perSecond = result.recipeRates().get(node.recipeId);
-        lines.add(Component.literal("设备并行: "
-                + TimeExpression.formatEditableNumber(perSecond * recipe.time())
-                + "  设备数: " + node.machines)
+        lines.add(Lang.c("设备并行: %s  设备数: %s",
+                        TimeExpression.formatEditableNumber(perSecond * recipe.time()),
+                        node.machines)
                 .withStyle(ChatFormatting.GRAY));
         double ratePerTick = perSecond / 20.0;
-        lines.add(Component.literal("运行速率: "
-                + TimeExpression.formatEditableNumber(ratePerTick) + " /t"));
-        lines.add(Component.literal("输入 (/t):").withStyle(ChatFormatting.GREEN));
+        lines.add(Lang.c("运行速率: %s /t",
+                TimeExpression.formatEditableNumber(ratePerTick)));
+        lines.add(Lang.c("输入 (/t):").withStyle(ChatFormatting.GREEN));
         for (Map.Entry<String, Double> entry : recipe.sourceList().entrySet()) {
-            lines.add(Component.literal("  - " + ItemKeyMapper.displayName(entry.getKey())
-                    + " × " + TimeExpression.formatEditableNumber(entry.getValue() * ratePerTick)));
+            lines.add(Lang.c("  - %s × %s", ItemKeyMapper.displayName(entry.getKey()),
+                    TimeExpression.formatEditableNumber(entry.getValue() * ratePerTick)));
         }
-        lines.add(Component.literal("输出 (/t):").withStyle(ChatFormatting.GOLD));
+        lines.add(Lang.c("输出 (/t):").withStyle(ChatFormatting.GOLD));
         for (Map.Entry<String, Double> entry : recipe.productList().entrySet()) {
-            lines.add(Component.literal("  + " + ItemKeyMapper.displayName(entry.getKey())
-                    + " × " + TimeExpression.formatEditableNumber(entry.getValue() * ratePerTick)));
+            lines.add(Lang.c("  + %s × %s", ItemKeyMapper.displayName(entry.getKey()),
+                    TimeExpression.formatEditableNumber(entry.getValue() * ratePerTick)));
         }
         return lines;
     }
@@ -908,7 +917,7 @@ public final class SolveGraphView {
         List<Component> lines = new ArrayList<>();
         lines.add(Component.literal(ItemKeyMapper.displayName(node.key))
                 .withStyle(ChatFormatting.BOLD));
-        lines.add(Component.literal("类别: " + categoryLabel(node.category))
+        lines.add(Lang.c("类别: %s", categoryLabel(node.category))
                 .withStyle(ChatFormatting.GRAY));
         double produced = 0.0;
         double consumed = 0.0;
@@ -920,37 +929,38 @@ public final class SolveGraphView {
                 consumed += edge.flow;
             }
         }
-        lines.add(Component.literal("生成: " + TimeExpression.formatEditableNumber(produced)
-                + " /t  消耗: " + TimeExpression.formatEditableNumber(consumed) + " /t"));
+        lines.add(Lang.c("生成: %s /t  消耗: %s /t",
+                TimeExpression.formatEditableNumber(produced),
+                TimeExpression.formatEditableNumber(consumed)));
         if (node.category == Category.TARGET) {
             Double target = targets.get(node.key);
             if (target != null) {
-                lines.add(Component.literal("目标: "
-                        + TimeExpression.formatEditableNumber(target) + " /t")
+                lines.add(Lang.c("目标: %s /t",
+                                TimeExpression.formatEditableNumber(target))
                         .withStyle(ChatFormatting.LIGHT_PURPLE));
             }
         }
         if (node.category == Category.INPUT) {
             Double amount = result.externalInputs().get(node.key);
             if (amount != null) {
-                lines.add(Component.literal("外部输入: "
-                        + TimeExpression.formatEditableNumber(amount / 20.0) + " /t")
+                lines.add(Lang.c("外部输入: %s /t",
+                                TimeExpression.formatEditableNumber(amount / 20.0))
                         .withStyle(ChatFormatting.GREEN));
             }
         }
         if (node.category == Category.STARTUP) {
             Double amount = result.bootstrapInventory().get(node.key);
             if (amount != null) {
-                lines.add(Component.literal("启动库存: "
-                        + TimeExpression.formatEditableNumber(amount))
+                lines.add(Lang.c("启动库存: %s",
+                                TimeExpression.formatEditableNumber(amount))
                         .withStyle(ChatFormatting.RED));
             }
         }
         if (node.category == Category.BYPRODUCT) {
             Double amount = result.finalOutputs().get(node.key);
             if (amount != null) {
-                lines.add(Component.literal("副产物: "
-                        + TimeExpression.formatEditableNumber(amount / 20.0) + " /t")
+                lines.add(Lang.c("副产物: %s /t",
+                                TimeExpression.formatEditableNumber(amount / 20.0))
                         .withStyle(ChatFormatting.YELLOW));
             }
         }
@@ -963,19 +973,19 @@ public final class SolveGraphView {
     }
 
     private static String categoryLabel(Category category) {
-        return switch (category) {
+        return Lang.t(switch (category) {
             case INPUT -> "外部输入";
             case STARTUP -> "启动库存";
             case BYPRODUCT -> "副产物";
             case TARGET -> "最终目标";
             default -> "中间产物";
-        };
+        });
     }
 
     private void drawLegend(GuiGraphics graphics, Font font, int areaX, int areaY) {
         int x = areaX + 4;
         int y = areaY + 4;
-        String legend = "橙=配方  绿=输入  蓝=中间  红=启动  黄=副产  紫=目标";
+        String legend = Lang.t("橙=配方  绿=输入  蓝=中间  红=启动  黄=副产  紫=目标");
         int width = font.width(legend) + 8;
         graphics.fill(x, y, x + width, y + 13, 0xB0C6C6C6);
         graphics.drawString(font, legend, x + 4, y + 3, AeStyle.TEXT, false);
@@ -1138,7 +1148,8 @@ public final class SolveGraphView {
                     y + 19, 0xFF3A2A10, false);
         }
         if (showLabels) {
-            String name = node.key.isBlank() ? "配方" : ItemKeyMapper.displayName(node.key);
+            String name = node.key.isBlank() ? Lang.t("配方")
+                    : ItemKeyMapper.displayName(node.key);
             drawCenteredLabel(graphics, font, name, node.x, node.y + RECIPE / 2.0 + 3);
         }
     }

@@ -3,6 +3,7 @@ package com.jessetech.recipebalancer.mc.screen;
 import com.jessetech.recipebalancer.core.io.ScenarioStore;
 import com.jessetech.recipebalancer.core.model.Scenario;
 import com.jessetech.recipebalancer.core.model.ScenarioDraft;
+import com.jessetech.recipebalancer.mc.i18n.Lang;
 import com.jessetech.recipebalancer.mc.jei.JeiScreenSupport;
 import com.jessetech.recipebalancer.mc.ui.AeStyle;
 import net.minecraft.client.gui.GuiGraphics;
@@ -34,7 +35,7 @@ public final class ScenarioListScreen extends Screen implements JeiPanelScreen {
     private int listH;
 
     public ScenarioListScreen(BalancerScreen parent, ScenarioStore store, ScenarioDraft draft) {
-        super(Component.literal("配方集"));
+        super(Lang.c("配方集"));
         this.parent = parent;
         this.store = store;
         this.draft = draft;
@@ -50,16 +51,16 @@ public final class ScenarioListScreen extends Screen implements JeiPanelScreen {
         scroll = 0;
 
         nameBox = new EditBox(font, panelX + 8, panelY + PANEL_H - 52, 150, 18,
-                Component.literal("配方集名"));
+                Lang.c("配方集名"));
         nameBox.setMaxLength(48);
         nameBox.setValue("default");
         addRenderableWidget(nameBox);
 
-        addRenderableWidget(Button.builder(Component.literal("另存"), b -> saveCurrent())
+        addRenderableWidget(Button.builder(Lang.c("另存"), b -> saveCurrent())
                 .bounds(panelX + 164, panelY + PANEL_H - 53, 44, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("删除"), b -> deleteSelected())
+        addRenderableWidget(Button.builder(Lang.c("删除"), b -> deleteSelected())
                 .bounds(panelX + 212, panelY + PANEL_H - 53, 44, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("返回"), b -> minecraft.setScreen(parent))
+        addRenderableWidget(Button.builder(Lang.c("返回"), b -> minecraft.setScreen(parent))
                 .bounds(panelX + 8, panelY + PANEL_H - 27, 80, 20).build());
         JeiScreenSupport.notifyGuiInit(this);
     }
@@ -70,15 +71,15 @@ public final class ScenarioListScreen extends Screen implements JeiPanelScreen {
             store.save(name, draft.toScenario());
             nameBox.setValue(name);
             names = new ArrayList<>(store.names());
-            status = "已保存: " + name;
+            status = Lang.t("已保存: %s", name);
         } catch (RuntimeException e) {
-            status = "保存失败: " + e.getMessage();
+            status = Lang.t("保存失败: %s", e.getMessage());
         }
     }
 
     private void deleteSelected() {
         if (selected < 0 || selected >= names.size()) {
-            status = "先选中一个配方集";
+            status = Lang.t("先选中一个配方集");
             return;
         }
         String name = names.get(selected);
@@ -86,9 +87,9 @@ public final class ScenarioListScreen extends Screen implements JeiPanelScreen {
             store.delete(name);
             names = new ArrayList<>(store.names());
             selected = -1;
-            status = "已删除: " + name;
+            status = Lang.t("已删除: %s", name);
         } catch (RuntimeException e) {
-            status = "删除失败: " + e.getMessage();
+            status = Lang.t("删除失败: %s", e.getMessage());
         }
     }
 
@@ -100,7 +101,7 @@ public final class ScenarioListScreen extends Screen implements JeiPanelScreen {
             parent.onScenarioLoaded(name);
             minecraft.setScreen(parent);
         } catch (RuntimeException e) {
-            status = "载入失败: " + e.getMessage();
+            status = Lang.t("载入失败: %s", e.getMessage());
         }
     }
 
@@ -109,7 +110,8 @@ public final class ScenarioListScreen extends Screen implements JeiPanelScreen {
         graphics.fill(0, 0, width, height, 0xB0101010);
         AeStyle.panel(graphics, panelX, panelY, PANEL_W, PANEL_H);
         AeStyle.header(graphics, panelX, panelY, PANEL_W, 20);
-        graphics.drawString(font, "配方集（点击载入）", panelX + 8, panelY + 6, AeStyle.TEXT, false);
+        graphics.drawString(font, Lang.t("配方集（点击载入）"),
+                panelX + 8, panelY + 6, AeStyle.TEXT, false);
     }
 
     @Override
@@ -122,7 +124,7 @@ public final class ScenarioListScreen extends Screen implements JeiPanelScreen {
         double maxScroll = Math.max(0, names.size() * rowH - listH);
         scroll = Math.max(0, Math.min(scroll, maxScroll));
         if (names.isEmpty()) {
-            graphics.drawString(font, "（没有已保存的配方集）", panelX + 8, listY + 4,
+            graphics.drawString(font, Lang.t("（没有已保存的配方集）"), panelX + 8, listY + 4,
                     AeStyle.MUTED, false);
         }
         for (int i = 0; i < names.size(); i++) {

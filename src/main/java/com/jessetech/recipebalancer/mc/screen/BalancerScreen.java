@@ -10,6 +10,7 @@ import com.jessetech.recipebalancer.core.model.SolveResult;
 import com.jessetech.recipebalancer.core.report.TextReporter;
 import com.jessetech.recipebalancer.core.solve.Balancer;
 import com.jessetech.recipebalancer.core.time.TimeExpression;
+import com.jessetech.recipebalancer.mc.i18n.Lang;
 import com.jessetech.recipebalancer.mc.itemmap.ItemKeyMapper;
 import com.jessetech.recipebalancer.mc.jei.JeiScreenSupport;
 import com.jessetech.recipebalancer.mc.ui.AeStyle;
@@ -58,7 +59,7 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
     private final boolean fromJei;
     private int editingIndex = -1;
     private String carriedKey = "";
-    private String status = "左键取物品→点格子放置；中键改量；右键配方库两次删除";
+    private String status = Lang.t("左键取物品→点格子放置；中键改量；右键配方库两次删除");
     private String scenarioName = "default";
 
     private int libraryScroll;
@@ -103,11 +104,11 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
     }
 
     private BalancerScreen(RecipePattern pattern, boolean fromJei) {
-        super(Component.literal("RecipeBalancer · 配方编码终端"));
+        super(Lang.c("RecipeBalancer · 配方编码终端"));
         this.pattern = pattern;
         this.fromJei = fromJei;
         if (fromJei) {
-            status = "已从 JEI 导入编码；请检查设备/产物后点「写入」";
+            status = Lang.t("已从 JEI 导入编码；请检查设备/产物后点「写入」");
         }
     }
 
@@ -175,39 +176,39 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
         targetScrollRow = Math.max(0, Math.min(targetScrollRow, maxTargetScroll()));
 
         nameBox = new EditBox(font, panelX + 30, topY, panelW - 108, 16,
-                Component.literal("工作区名"));
+                Lang.c("工作区名"));
         nameBox.setMaxLength(48);
         nameBox.setValue(scenarioName);
         addRenderableWidget(nameBox);
         // 载入/存储保持一行，仅压缩按钮高度到 14
         int storeX = panelX + panelW - 4 - 34;
         int loadX = storeX - 36;
-        addRenderableWidget(Button.builder(Component.literal("载入"), b -> loadWorkspace())
+        addRenderableWidget(Button.builder(Lang.c("载入"), b -> loadWorkspace())
                 .bounds(loadX, topY + 1, 34, 14).build());
-        addRenderableWidget(Button.builder(Component.literal("存储"), b -> storeWorkspace())
+        addRenderableWidget(Button.builder(Lang.c("存储"), b -> storeWorkspace())
                 .bounds(storeX, topY + 1, 34, 14).build());
 
         int optionW = 30;
-        objectiveButton = addRenderableWidget(Button.builder(Component.literal("目标:设备"),
+        objectiveButton = addRenderableWidget(Button.builder(Lang.c("目标:设备"),
                         b -> draft.toggleObjective())
                 .bounds(panelX + 4, paramsY, optionW, 18).build());
-        rawButton = addRenderableWidget(Button.builder(Component.literal("原料:开"),
+        rawButton = addRenderableWidget(Button.builder(Lang.c("原料:开"),
                         b -> draft.toggleAutoDetectRaw())
                 .bounds(panelX + 4 + optionW + 2, paramsY, optionW, 18).build());
-        seedButton = addRenderableWidget(Button.builder(Component.literal("种子:开"),
+        seedButton = addRenderableWidget(Button.builder(Lang.c("种子:开"),
                         b -> draft.toggleAutoDetectSeed())
                 .bounds(panelX + 4 + 2 * (optionW + 2), paramsY, optionW, 18).build());
-        bootstrapButton = addRenderableWidget(Button.builder(Component.literal("投料:开"),
+        bootstrapButton = addRenderableWidget(Button.builder(Lang.c("投料:开"),
                         b -> draft.toggleAutoBootstrap())
                 .bounds(panelX + 4 + 3 * (optionW + 2), paramsY, optionW, 18).build());
-        addRenderableWidget(Button.builder(Component.literal("求解"), b -> solveNow())
+        addRenderableWidget(Button.builder(Lang.c("求解"), b -> solveNow())
                 .bounds(panelX + 4 + 4 * (optionW + 2), paramsY, 36, 18).build());
 
         // 写入/新建恢复上下排列；高度压缩到 14，正好能塞进耗时下方
-        addRenderableWidget(Button.builder(Component.literal("写入"),
+        addRenderableWidget(Button.builder(Lang.c("写入"),
                         b -> commitPattern(true))
                 .bounds(equipmentX, encodingY + 38, 40, 14).build());
-        addRenderableWidget(Button.builder(Component.literal("新建"),
+        addRenderableWidget(Button.builder(Lang.c("新建"),
                         b -> newPattern())
                 .bounds(equipmentX, encodingY + 54, 40, 14).build());
 
@@ -227,7 +228,7 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
         try {
             STORE.save("autosave", draft.toScenario());
         } catch (RuntimeException e) {
-            status = "自动保存失败: " + e.getMessage();
+            status = Lang.t("自动保存失败: %s", e.getMessage());
         }
     }
 
@@ -241,13 +242,14 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
         AeStyle.panel(graphics, panelX, panelY, panelW, panelH);
         AeStyle.header(graphics, panelX, panelY, panelW, 16);
 
-        graphics.drawString(font, "工作区", panelX + 4, topY + 4, AeStyle.MUTED, false);
+        graphics.drawString(font, Lang.t("工作区"), panelX + 4, topY + 4, AeStyle.MUTED, false);
 
-        graphics.drawString(font, "目标 (" + draft.targets().size() + "/" + MAX_TARGETS
-                        + " · /t)", panelX + 4, targetLabelY, AeStyle.MUTED, false);
+        graphics.drawString(font, Lang.t("目标 (%s/%s · /t)",
+                        draft.targets().size(), MAX_TARGETS), panelX + 4, targetLabelY,
+                AeStyle.MUTED, false);
         drawTargets(graphics, mouseX, mouseY);
 
-        graphics.drawString(font, "配方库 (" + draft.recipeCount() + ")", panelX + 4,
+        graphics.drawString(font, Lang.t("配方库 (%s)", draft.recipeCount()), panelX + 4,
                 libraryLabelY, AeStyle.MUTED, false);
         drawLibrary(graphics, mouseX, mouseY);
 
@@ -258,7 +260,7 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
         }
         drawEncoding(graphics, mouseX, mouseY);
 
-        graphics.drawString(font, "背包", panelX + 4, inventoryLabelY, AeStyle.MUTED, false);
+        graphics.drawString(font, Lang.t("背包"), panelX + 4, inventoryLabelY, AeStyle.MUTED, false);
         drawInventory(graphics, mouseX, mouseY);
 
         graphics.drawString(font, font.plainSubstrByWidth(status, panelW - 8), panelX + 4,
@@ -291,7 +293,8 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
         graphics.fill(panelX + 2, libraryY - 2, panelX + 4 + LIB_COLS * SLOT,
                 libraryY + libRows * SLOT, 0x30000000);
         if (total == 0) {
-            graphics.drawString(font, "（空）在下方编码后点「写入」", panelX + 6, libraryY + 4,
+            graphics.drawString(font, Lang.t("（空）在下方编码后点「写入」"),
+                    panelX + 6, libraryY + 4,
                     AeStyle.MUTED, false);
             return;
         }
@@ -329,10 +332,10 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
     }
 
     private void drawEncoding(GuiGraphics graphics, int mouseX, int mouseY) {
-        graphics.drawString(font, "原料 " + pattern.inputCount(), inputX, encodingLabelY,
-                AeStyle.ACCENT, false);
-        graphics.drawString(font, "产物 " + pattern.outputCount(), outputX, encodingLabelY,
-                AeStyle.ACCENT, false);
+        graphics.drawString(font, Lang.t("原料 %s", pattern.inputCount()),
+                inputX, encodingLabelY, AeStyle.ACCENT, false);
+        graphics.drawString(font, Lang.t("产物 %s", pattern.outputCount()),
+                outputX, encodingLabelY, AeStyle.ACCENT, false);
         graphics.drawString(font, "→", inputX + GRID_COLS * SLOT + 4, encodingY + 18,
                 AeStyle.MUTED, false);
 
@@ -377,7 +380,7 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
 
         // 设备/耗时标签在各自槽位的“后方”（右侧），时间值画在槽位内部
         AeStyle.slot(graphics, equipmentX, encodingY);
-        graphics.drawString(font, "设备", equipmentX + SLOT + 2, encodingY + 5,
+        graphics.drawString(font, Lang.t("设备"), equipmentX + SLOT + 2, encodingY + 5,
                 AeStyle.MUTED, false);
         if (!pattern.equipmentKey().isBlank()) {
             ItemKeyMapper.renderIcon(graphics, font, pattern.equipmentKey(), equipmentX,
@@ -386,7 +389,7 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
 
         int timeY = encodingY + 20;
         AeStyle.slot(graphics, equipmentX, timeY);
-        graphics.drawString(font, "耗时", equipmentX + SLOT + 2, timeY + 5,
+        graphics.drawString(font, Lang.t("耗时"), equipmentX + SLOT + 2, timeY + 5,
                 AeStyle.MUTED, false);
 
         // 一级耗时也用紧凑后缀（μ/m/k/M/G/T/P/E），并抬高 z 防止被槽位盖住
@@ -451,11 +454,11 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
     }
 
     private void updateOptionLabels() {
-        objectiveButton.setMessage(Component.literal(
+        objectiveButton.setMessage(Lang.c(
                 draft.options().objective() == Objective.MACHINE ? "设备" : "配方"));
-        rawButton.setMessage(Component.literal("原料" + onOff(draft.options().autoDetectRaw())));
-        seedButton.setMessage(Component.literal("种子" + onOff(draft.options().autoDetectSeed())));
-        bootstrapButton.setMessage(Component.literal("投料" + onOff(draft.options().autoBootstrap())));
+        rawButton.setMessage(Lang.c("原料%s", onOff(draft.options().autoDetectRaw())));
+        seedButton.setMessage(Lang.c("种子%s", onOff(draft.options().autoDetectSeed())));
+        bootstrapButton.setMessage(Lang.c("投料%s", onOff(draft.options().autoBootstrap())));
     }
 
     private static String onOff(boolean value) {
@@ -479,15 +482,15 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
             Recipe recipe = draft.recipes().get(library);
             String product = recipe.productList().keySet().stream().findFirst().orElse("?");
             List<Component> lines = new ArrayList<>();
-            lines.add(Component.literal("R" + library + " · " + ItemKeyMapper.displayName(product)));
-            lines.add(Component.literal("产物: " + summary(recipe.productList()))
+            lines.add(Lang.c("R%s · %s", library, ItemKeyMapper.displayName(product)));
+            lines.add(Lang.c("产物: %s", summary(recipe.productList()))
                     .withStyle(style -> style.withColor(0xFF90FF90)));
-            lines.add(Component.literal("原料: " + summary(recipe.sourceList()))
+            lines.add(Lang.c("原料: %s", summary(recipe.sourceList()))
                     .withStyle(style -> style.withColor(0xFF90C0FF)));
-            lines.add(Component.literal("设备: " + recipe.equType()
-                    + " · 耗时 " + TimeExpression.formatTicks(recipe.time() * 20.0))
+            lines.add(Lang.c("设备: %s · 耗时 %s", recipe.equType(),
+                            TimeExpression.formatTicks(recipe.time() * 20.0))
                     .withStyle(style -> style.withColor(0xFFC0C0C0)));
-            lines.add(Component.literal("左键载入编辑 · 右键两次删除")
+            lines.add(Lang.c("左键载入编辑 · 右键两次删除")
                     .withStyle(style -> style.withColor(0xFF808080)));
             graphics.renderComponentTooltip(font, lines, mouseX, mouseY);
             return;
@@ -505,7 +508,7 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
 
         if (inside(mouseX, mouseY, equipmentX, encodingY, SLOT, SLOT)) {
             if (pattern.equipmentKey().isBlank()) {
-                graphics.renderTooltip(font, Component.literal("设备标记：左键放置手持物品 / 中键自定义"),
+                graphics.renderTooltip(font, Lang.c("设备标记：左键放置手持物品 / 中键自定义"),
                         mouseX, mouseY);
             } else {
                 ItemKeyMapper.renderTooltip(graphics, font, pattern.equipmentKey(), mouseX, mouseY);
@@ -514,10 +517,10 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
         }
         if (inside(mouseX, mouseY, equipmentX, encodingY + 20, SLOT, SLOT)) {
             List<Component> lines = List.of(
-                    Component.literal("耗时 " + TimeExpression.formatTicks(pattern.timeTicks())),
-                    Component.literal("精确: " + TimeExpression.formatExactTicks(pattern.timeTicks()))
+                    Lang.c("耗时 %s", TimeExpression.formatTicks(pattern.timeTicks())),
+                    Lang.c("精确: %s", TimeExpression.formatExactTicks(pattern.timeTicks()))
                             .withStyle(style -> style.withColor(0xFF808080)),
-                    Component.literal("左键/中键编辑，支持 + - * / ^").withStyle(style ->
+                    Lang.c("左键/中键编辑，支持 + - * / ^").withStyle(style ->
                             style.withColor(0xFF808080)));
             graphics.renderComponentTooltip(font, lines, mouseX, mouseY);
             return;
@@ -530,7 +533,7 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
                 Map.Entry<String, Double> entry = entries.get(target);
                 ItemKeyMapper.renderTooltip(graphics, font, entry.getKey(), mouseX, mouseY);
             } else {
-                graphics.renderTooltip(font, Component.literal("空目标槽：左键从手持标记 / 中键自定义"),
+                graphics.renderTooltip(font, Lang.c("空目标槽：左键从手持标记 / 中键自定义"),
                         mouseX, mouseY);
             }
         }
@@ -691,7 +694,7 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
                 String key = entries.get(slot).getKey();
                 draft.removeTarget(key);
                 onDraftChanged();
-                status = "已删除目标: " + key;
+                status = Lang.t("已删除目标: %s", key);
             }
             return;
         }
@@ -705,13 +708,13 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
             if (slot >= entries.size()) {
                 if (!carriedKey.isEmpty()) {
                     if (draft.targets().size() >= MAX_TARGETS) {
-                        status = "目标最多 " + MAX_TARGETS + " 个";
+                        status = Lang.t("目标最多 %s 个", MAX_TARGETS);
                         return;
                     }
                     // 默认 1/t；ScenarioDraft 内部即每 tick
                     draft.putTarget(carriedKey, 1.0);
                     onDraftChanged();
-                    status = "已添加目标: " + carriedKey + " 1/t";
+                    status = Lang.t("已添加目标: %s 1/t", carriedKey);
                 } else {
                     openTargetAmount("", 1.0);
                 }
@@ -725,7 +728,7 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
     private void openTargetAmount(String key, double amount) {
         boolean adding = key == null || key.isBlank();
         if (adding && draft.targets().size() >= MAX_TARGETS) {
-            status = "目标最多 " + MAX_TARGETS + " 个";
+            status = Lang.t("目标最多 %s 个", MAX_TARGETS);
             return;
         }
         // amount 是每 tick；新目标默认 1/t
@@ -737,13 +740,13 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
                     }
                     if (draft.targets().size() >= MAX_TARGETS
                             && !draft.targets().containsKey(newKey)) {
-                        status = "目标最多 " + MAX_TARGETS + " 个";
+                        status = Lang.t("目标最多 %s 个", MAX_TARGETS);
                         return;
                     }
                     draft.putTarget(newKey, perTick);
                     onDraftChanged();
-                    status = "目标: " + newKey + " × "
-                            + TimeExpression.formatNumber(perTick) + "/t";
+                    status = Lang.t("目标: %s × %s/t", newKey,
+                            TimeExpression.formatNumber(perTick));
                 }));
     }
 
@@ -760,7 +763,7 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
             } else {
                 lastRightClickIndex = index;
                 lastRightClickTime = now;
-                status = "再次右键删除 R" + index;
+                status = Lang.t("再次右键删除 R%s", index);
             }
         }
     }
@@ -776,14 +779,14 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
                 } else {
                     pattern.putOutput(index, carriedKey, 1.0);
                 }
-                status = "已标记 " + ItemKeyMapper.displayName(carriedKey);
+                status = Lang.t("已标记 %s", ItemKeyMapper.displayName(carriedKey));
             } else if (key != null) {
                 if (input) {
                     pattern.removeInput(index);
                 } else {
                     pattern.removeOutput(index);
                 }
-                status = "已移除格子";
+                status = Lang.t("已移除格子");
             } else {
                 // QoL：空手左键空格直接开始自定义（不再要求中键）
                 openPatternAmount(input, index, "", 1.0);
@@ -811,21 +814,21 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
                     } else {
                         pattern.putOutput(index, newKey, newAmount);
                     }
-                    status = (input ? "原料 " : "产物 ") + newKey + " × "
-                            + TimeExpression.formatNumber(newAmount);
+                    status = Lang.t(input ? "原料 %s × %s" : "产物 %s × %s",
+                            newKey, TimeExpression.formatNumber(newAmount));
                 }));
     }
 
     private void handleEquipmentClick(int button) {
         if (button == 0 && !carriedKey.isEmpty()) {
             pattern.setEquipmentKey(carriedKey);
-            status = "设备: " + ItemKeyMapper.displayName(carriedKey);
+            status = Lang.t("设备: %s", ItemKeyMapper.displayName(carriedKey));
             return;
         }
         minecraft.setScreen(new AmountScreen(this, "设备标记", pattern.equipmentKey(), 1.0, false,
                 (key, ignored) -> {
                     pattern.setEquipmentKey(key);
-                    status = "设备: " + ItemKeyMapper.displayName(key);
+                    status = Lang.t("设备: %s", ItemKeyMapper.displayName(key));
                 }));
     }
 
@@ -835,7 +838,7 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
                     : minecraft.player.getInventory().getItem(index);
             if (!stack.isEmpty()) {
                 carriedKey = ItemKeyMapper.of(stack);
-                status = "手持: " + stack.getHoverName().getString();
+                status = Lang.t("手持: %s", stack.getHoverName().getString());
             } else {
                 carriedKey = "";
             }
@@ -847,7 +850,7 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
     private void openTimeEditor() {
         minecraft.setScreen(new TimeScreen(this, pattern.timeTicks(), ticks -> {
             pattern.setTimeTicks(ticks);
-            status = "耗时: " + TimeExpression.formatTicks(ticks);
+            status = Lang.t("耗时: %s", TimeExpression.formatTicks(ticks));
         }));
     }
 
@@ -885,8 +888,8 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
         carriedKey = "";
         encodingScrollRow = 0;
         status = pattern.truncated()
-                ? "R" + index + " 已载入；超过 256/16 的部分未显示"
-                : "R" + index + " 已载入编码区";
+                ? Lang.t("R%s 已载入；超过 256/16 的部分未显示", index)
+                : Lang.t("R%s 已载入编码区", index);
     }
 
     private boolean commitPattern(boolean showStatus) {
@@ -899,12 +902,12 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
                 editingIndex = draft.recipeCount() - 1;
             }
             persistDraft();
-            status = (showStatus ? "已写入 R" + editingIndex : "已保存编码")
-                    + (pattern.truncated() ? "（超过 9 格的部分未写入）" : "");
+            status = (showStatus ? Lang.t("已写入 R%s", editingIndex) : Lang.t("已保存编码"))
+                    + (pattern.truncated() ? Lang.t("（超过 9 格的部分未写入）") : "");
             return true;
         } catch (RuntimeException e) {
             if (showStatus) {
-                status = "写入失败: " + e.getMessage();
+                status = Lang.t("写入失败: %s", e.getMessage());
             }
             return false;
         }
@@ -915,7 +918,7 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
         editingIndex = -1;
         carriedKey = "";
         encodingScrollRow = 0;
-        status = "新建配方编码";
+        status = Lang.t("新建配方编码");
     }
 
     private void deleteRecipe(int index) {
@@ -927,34 +930,34 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
             editingIndex--;
         }
         persistDraft();
-        status = "已删除 R" + index;
+        status = Lang.t("已删除 R%s", index);
     }
 
     private void solveNow() {
         if (pattern.hasContent() && !commitPattern(false)) {
-            status = "编码未完成：至少要有产物、设备和正耗时";
+            status = Lang.t("编码未完成：至少要有产物、设备和正耗时");
             return;
         }
         if (draft.recipeCount() == 0) {
-            status = "至少写入 1 条配方";
+            status = Lang.t("至少写入 1 条配方");
             return;
         }
         if (draft.targets().isEmpty()) {
-            status = "至少添加 1 个目标产物";
+            status = Lang.t("至少添加 1 个目标产物");
             return;
         }
         try {
             SolveResult result = Balancer.solve(draft.toScenario());
             persistDraft();
             // 报告里把 stack|base64 替换成“物品名 [效果/时长]”，不改变磁盘数据
-            String report = ItemKeyMapper.prettyText(
-                    TextReporter.formatPerTick(result, draft.recipes()));
+            String report = Lang.report(ItemKeyMapper.prettyText(
+                    TextReporter.formatPerTick(result, draft.recipes())));
             minecraft.setScreen(new SolveScreen(this, report, result,
                     draft.recipes(), new java.util.LinkedHashMap<>(draft.targets()),
                     draft.options().autoBootstrap(), result.success()));
         } catch (RuntimeException | LinkageError e) {
             RecipeBalancerMod.LOGGER.error("[RecipeBalancer] 求解失败", e);
-            status = "求解失败: " + e;
+            status = Lang.t("求解失败: %s", e);
         }
     }
 
@@ -968,9 +971,9 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
             nameBox.setValue(scenarioName);
             STORE.save(scenarioName, draft.toScenario());
             persistDraft();
-            status = "已存储工作区: " + scenarioName;
+            status = Lang.t("已存储工作区: %s", scenarioName);
         } catch (RuntimeException e) {
-            status = "存储失败: " + e.getMessage();
+            status = Lang.t("存储失败: %s", e.getMessage());
         }
     }
 
@@ -1017,7 +1020,7 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
         libraryScroll = 0;
         targetScrollRow = 0;
         encodingScrollRow = 0;
-        status = "已载入工作区: " + name;
+        status = Lang.t("已载入工作区: %s", name);
         persistDraft();
     }
 
@@ -1138,7 +1141,7 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
             case EQUIPMENT -> pattern.setEquipmentKey(key);
             case TARGET -> {
                 if (draft.targets().size() >= MAX_TARGETS && !draft.targets().containsKey(key)) {
-                    status = "目标最多 " + MAX_TARGETS + " 个";
+                    status = Lang.t("目标最多 %s 个", MAX_TARGETS);
                     return;
                 }
                 draft.putTarget(key, value);

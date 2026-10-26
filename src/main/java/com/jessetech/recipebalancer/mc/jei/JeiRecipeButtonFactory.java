@@ -1,5 +1,7 @@
 package com.jessetech.recipebalancer.mc.jei;
 
+import com.jessetech.recipebalancer.mc.i18n.Lang;
+
 import com.jessetech.recipebalancer.core.model.RecipePattern;
 import com.jessetech.recipebalancer.mc.itemmap.ItemKeyMapper;
 import com.jessetech.recipebalancer.mc.screen.BalancerScreen;
@@ -188,7 +190,7 @@ public final class JeiRecipeButtonFactory implements IRecipeButtonControllerFact
 
         @Override
         public void getTooltips(ITooltipBuilder tooltip) {
-            tooltip.add(Component.literal("编码此配方到 RecipeBalancer"));
+            tooltip.add(Lang.c("编码此配方到 RecipeBalancer"));
         }
     }
 }

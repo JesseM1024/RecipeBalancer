@@ -2,6 +2,7 @@ package com.jessetech.recipebalancer.mc.screen;
 
 import com.jessetech.recipebalancer.core.time.RateUnit;
 import com.jessetech.recipebalancer.core.time.TimeExpression;
+import com.jessetech.recipebalancer.mc.i18n.Lang;
 import com.jessetech.recipebalancer.mc.itemmap.IngredientKey;
 import com.jessetech.recipebalancer.mc.itemmap.ItemKeyMapper;
 import com.jessetech.recipebalancer.mc.jei.JeiScreenSupport;
@@ -45,9 +46,9 @@ public final class AmountScreen extends Screen implements JeiPanelScreen {
     /** rateMode=true：amount 为每 tick 数量，界面显示速率单位。 */
     public AmountScreen(Screen parent, String title, String itemKey, double amount,
                         boolean amountEditable, boolean rateMode, Callback callback) {
-        super(Component.literal(title));
+        super(Component.literal(Lang.t(title)));
         this.parent = parent;
-        this.title = title;
+        this.title = Lang.t(title);
         this.itemKey = ItemKeyMapper.normalize(itemKey);
         this.nonItem = IngredientKey.isIngredientKey(this.itemKey);
         this.amountEditable = amountEditable;
@@ -72,7 +73,7 @@ public final class AmountScreen extends Screen implements JeiPanelScreen {
 
         // 图标槽在注册名输入框左侧；真名/注册名放在它们下方
         keyBox = new EditBox(font, panelX + 30, panelY + 32, panelW - 38, 18,
-                Component.literal("物品注册名"));
+                Lang.c("物品注册名"));
         // 组件物品（药水等）的 key 是 base64，可能远超 128
         keyBox.setMaxLength(4096);
         keyBox.setValue(itemKey);
@@ -81,7 +82,7 @@ public final class AmountScreen extends Screen implements JeiPanelScreen {
         if (amountEditable) {
             int amountWidth = rateMode ? 104 : 112;
             amountBox = new EditBox(font, panelX + 8, panelY + 90, amountWidth, 18,
-                    Component.literal("用量"));
+                    Lang.c("用量"));
             amountBox.setMaxLength(64);
             amountBox.setValue(TimeExpression.formatEditableNumber(amount));
             addRenderableWidget(amountBox);
@@ -116,9 +117,9 @@ public final class AmountScreen extends Screen implements JeiPanelScreen {
         }
 
         // 取消左、确定右
-        addRenderableWidget(Button.builder(Component.literal("取消"), b -> cancel())
+        addRenderableWidget(Button.builder(Lang.c("取消"), b -> cancel())
                 .bounds(panelX + 8, panelY + panelH - 26, 100, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("确定"), b -> confirm())
+        addRenderableWidget(Button.builder(Lang.c("确定"), b -> confirm())
                 .bounds(panelX + panelW - 108, panelY + panelH - 26, 100, 20).build());
 
         if (amountEditable && amountBox != null) {
@@ -168,7 +169,7 @@ public final class AmountScreen extends Screen implements JeiPanelScreen {
     private void confirm() {
         String key = ItemKeyMapper.normalize(keyBox.getValue());
         if (key.isEmpty()) {
-            status = "物品注册名不能为空";
+            status = Lang.t("物品注册名不能为空");
             return;
         }
         double value = 1.0;
@@ -176,11 +177,11 @@ public final class AmountScreen extends Screen implements JeiPanelScreen {
             try {
                 value = TimeExpression.evaluate(amountBox.getValue().trim());
             } catch (RuntimeException e) {
-                status = "表达式无效: " + e.getMessage();
+                status = Lang.t("表达式无效: %s", e.getMessage());
                 return;
             }
             if (!(value > 0) || !Double.isFinite(value)) {
-                status = "用量必须为正数";
+                status = Lang.t("用量必须为正数");
                 return;
             }
             if (rateMode) {
@@ -208,7 +209,8 @@ public final class AmountScreen extends Screen implements JeiPanelScreen {
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         super.render(graphics, mouseX, mouseY, partialTick);
 
-        graphics.drawString(font, "物品 / 注册名", panelX + 8, panelY + 22, AeStyle.MUTED, false);
+        graphics.drawString(font, Lang.t("物品 / 注册名"),
+                panelX + 8, panelY + 22, AeStyle.MUTED, false);
         AeStyle.slot(graphics, panelX + 8, panelY + 32);
 
         String previewKey = ItemKeyMapper.normalize(keyBox.getValue());
@@ -222,9 +224,9 @@ public final class AmountScreen extends Screen implements JeiPanelScreen {
         }
 
         if (amountEditable) {
-            String amountLabel = rateMode ? "速率" : "用量";
+            String amountLabel = rateMode ? Lang.t("速率") : Lang.t("用量");
             if (nonItem) {
-                amountLabel += "（B）";
+                amountLabel += Lang.t("（B）");
             }
             graphics.drawString(font, amountLabel, panelX + 8, panelY + 79,
                     AeStyle.MUTED, false);

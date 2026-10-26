@@ -2,6 +2,7 @@ package com.jessetech.recipebalancer.mc.screen;
 
 import com.jessetech.recipebalancer.core.model.Recipe;
 import com.jessetech.recipebalancer.core.model.SolveResult;
+import com.jessetech.recipebalancer.mc.i18n.Lang;
 import com.jessetech.recipebalancer.mc.ui.AeStyle;
 import com.jessetech.recipebalancer.mc.ui.graph.SolveGraphView;
 import net.minecraft.client.gui.GuiGraphics;
@@ -47,7 +48,7 @@ public final class SolveScreen extends Screen implements JeiPanelScreen {
     public SolveScreen(Screen parent, String report, SolveResult result,
                        List<Recipe> recipes, Map<String, Double> targets,
                        boolean inventoryEnabled, boolean success) {
-        super(Component.literal("求解结果"));
+        super(Lang.c("求解结果"));
         this.parent = parent;
         this.report = report;
         this.result = result;
@@ -79,7 +80,7 @@ public final class SolveScreen extends Screen implements JeiPanelScreen {
         graph = success && result != null
                 ? new SolveGraphView(result, recipes, targets, inventoryEnabled) : null;
 
-        addRenderableWidget(Button.builder(Component.literal("返回编码"), b -> minecraft.setScreen(parent))
+        addRenderableWidget(Button.builder(Lang.c("返回编码"), b -> minecraft.setScreen(parent))
                 .bounds(panelX + 8, panelY + panelH - 26, 100, 20).build());
         if (graph != null) {
             toggleButton = addRenderableWidget(Button.builder(toggleLabel(), b -> toggleView())
@@ -88,7 +89,7 @@ public final class SolveScreen extends Screen implements JeiPanelScreen {
     }
 
     private Component toggleLabel() {
-        return Component.literal(graphMode ? "文本输出" : "流程图");
+        return Lang.c(graphMode ? "文本输出" : "流程图");
     }
 
     private void toggleView() {
@@ -108,7 +109,8 @@ public final class SolveScreen extends Screen implements JeiPanelScreen {
         graphics.fill(0, 0, width, height, 0xD0101010);
         AeStyle.panel(graphics, panelX, panelY, panelW, panelH);
         AeStyle.header(graphics, panelX, panelY, panelW, 20);
-        graphics.drawString(font, success ? "求解成功" : "求解失败", panelX + 8, panelY + 6,
+        graphics.drawString(font, Lang.t(success ? "求解成功" : "求解失败"),
+                panelX + 8, panelY + 6,
                 success ? 0xFF1E6B2E : AeStyle.WARN, false);
     }
 
@@ -138,8 +140,8 @@ public final class SolveScreen extends Screen implements JeiPanelScreen {
         graphics.disableScissor();
 
         if (maxScroll > 0) {
-            graphics.drawString(font, "滚轮滚动", panelX + panelW - 64, panelY + panelH - 21,
-                    AeStyle.MUTED, false);
+            graphics.drawString(font, Lang.t("滚轮滚动"),
+                    panelX + panelW - 64, panelY + panelH - 21, AeStyle.MUTED, false);
         }
     }
 

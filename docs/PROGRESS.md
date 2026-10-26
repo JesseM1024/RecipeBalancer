@@ -5,6 +5,54 @@
 
 ---
 
+## R35 · 2026-10-26 · 启动动画热配置 + 中英文语言文件
+
+### 实测结果
+
+| 项 | 结果 |
+|---|---|
+| `gradlew test` | **82 tests, 0 failures** |
+| 产物 | `recipebalancer-0.1.0-1.21.1.jar` **2,371,115 B** |
+| 实机部署 | 已复制到 `1.21.1-NeoForge/mods/`（22:54:14） |
+| 未验证 | 实机热配置/英文界面 |
+
+### 热配置
+
+文件：
+
+`config/recipebalancer/graph-animation.properties`
+
+```properties
+stepsPerSecond=100
+durationSeconds=2.0
+stepDistance=6.0
+```
+
+- 启动时读取；
+- 动画期间每 1 秒检查一次文件修改时间；
+- `stepsPerSecond`、`stepDistance` 可在动画中生效；
+- `durationSeconds` 在下一次打开流程图时生效；
+- 数值自动限制范围并回退默认值，无需重启。
+
+### 中英文语言文件
+
+- `assets/recipebalancer/lang/en_us.json`
+- `assets/recipebalancer/lang/zh_cn.json`
+
+覆盖：
+
+- 主编码界面：按钮、标签、状态栏、tooltip；
+- 用量/耗时/配方集/求解结果页；
+- 流程图：图例、tooltip、提示；
+- 文本报告的静态段落和设备统计字段；
+- JEI 按钮与物品 tooltip。
+
+实现：`mc/i18n/Lang`，以中文源文本为 key；
+中文环境直接使用源文本，英文环境查 `en_us.json`。
+物品名/自定义名称仍由 Minecraft 自身语言系统处理。
+
+---
+
 ## R34 · 2026-10-26 · 启动动画步长提升
 
 | 项 | 结果 |

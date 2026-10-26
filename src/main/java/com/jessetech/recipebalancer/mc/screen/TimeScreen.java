@@ -2,6 +2,7 @@ package com.jessetech.recipebalancer.mc.screen;
 
 import com.jessetech.recipebalancer.core.time.TimeExpression;
 import com.jessetech.recipebalancer.core.time.TimeUnit;
+import com.jessetech.recipebalancer.mc.i18n.Lang;
 import com.jessetech.recipebalancer.mc.jei.JeiScreenSupport;
 import com.jessetech.recipebalancer.mc.ui.AeStyle;
 import net.minecraft.client.gui.GuiGraphics;
@@ -29,7 +30,7 @@ public final class TimeScreen extends Screen implements JeiPanelScreen {
     private static final int PANEL_H = 132;
 
     public TimeScreen(Screen parent, double ticks, DoubleConsumer callback) {
-        super(Component.literal("配方耗时"));
+        super(Lang.c("配方耗时"));
         this.parent = parent;
         this.ticks = ticks > 0 ? ticks : 1.0;
         this.callback = callback;
@@ -43,7 +44,7 @@ public final class TimeScreen extends Screen implements JeiPanelScreen {
         panelY = (height - PANEL_H) / 2;
 
         expressionBox = new EditBox(font, panelX + 8, panelY + 28, 150, 18,
-                Component.literal("耗时表达式"));
+                Lang.c("耗时表达式"));
         expressionBox.setMaxLength(128);
         expressionBox.setValue(TimeExpression.formatEditableNumber(unit.fromTicks(ticks)));
         addRenderableWidget(expressionBox);
@@ -52,9 +53,9 @@ public final class TimeScreen extends Screen implements JeiPanelScreen {
                 .bounds(panelX + 164, panelY + 27, 64, 20).build());
 
         // 取消左、确定右
-        addRenderableWidget(Button.builder(Component.literal("取消"), b -> cancel())
+        addRenderableWidget(Button.builder(Lang.c("取消"), b -> cancel())
                 .bounds(panelX + 8, panelY + PANEL_H - 28, 104, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("确定"), b -> confirm())
+        addRenderableWidget(Button.builder(Lang.c("确定"), b -> confirm())
                 .bounds(panelX + PANEL_W - 112, panelY + PANEL_H - 28, 104, 20).build());
 
         setInitialFocus(expressionBox);
@@ -97,8 +98,8 @@ public final class TimeScreen extends Screen implements JeiPanelScreen {
         graphics.fill(0, 0, width, height, 0xB0101010);
         AeStyle.panel(graphics, panelX, panelY, PANEL_W, PANEL_H);
         AeStyle.header(graphics, panelX, panelY, PANEL_W, 20);
-        graphics.drawString(font, "配方耗时（支持 + - * / ^ 和括号）", panelX + 8, panelY + 6,
-                AeStyle.TEXT, false);
+        graphics.drawString(font, Lang.t("配方耗时（支持 + - * / ^ 和括号）"),
+                panelX + 8, panelY + 6, AeStyle.TEXT, false);
     }
 
     @Override
@@ -111,11 +112,11 @@ public final class TimeScreen extends Screen implements JeiPanelScreen {
             preview = "= " + TimeExpression.formatExactTicks(result)
                     + "  (" + TimeExpression.formatTicks(result) + ")";
         } catch (RuntimeException e) {
-            preview = "表达式无效: " + e.getMessage();
+            preview = Lang.t("表达式无效: %s", e.getMessage());
         }
         graphics.drawString(font, preview, panelX + 8, panelY + 52, AeStyle.MUTED, false);
-        graphics.drawString(font, "各配方可独立选单位；内部统一按 t 保存", panelX + 8,
-                panelY + 68, AeStyle.MUTED, false);
+        graphics.drawString(font, Lang.t("各配方可独立选单位；内部统一按 t 保存"),
+                panelX + 8, panelY + 68, AeStyle.MUTED, false);
 
         if (!status.isEmpty()) {
             graphics.drawString(font, status, panelX + 8, panelY + 84, AeStyle.WARN, false);

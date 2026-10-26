@@ -1,5 +1,7 @@
 package com.jessetech.recipebalancer.mc.jei;
 
+import com.jessetech.recipebalancer.mc.i18n.Lang;
+
 import com.jessetech.recipebalancer.mc.itemmap.IngredientKey;
 import com.jessetech.recipebalancer.mc.itemmap.ItemKeyMapper;
 import mezz.jei.api.ingredients.IIngredientRenderer;
@@ -54,7 +56,7 @@ public final class JeiIngredientRenderer implements ItemKeyMapper.IngredientRend
             IIngredientRenderer<?> renderer = runtime.getIngredientManager()
                     .getIngredientRenderer(ingredient.getType());
             List<Component> lines = new ArrayList<>(tooltipRaw(renderer, ingredient.getIngredient()));
-            lines.add(Component.literal("RecipeBalancer 数量单位: B").withStyle(
+            lines.add(Lang.c("RecipeBalancer 数量单位: B").withStyle(
                     net.minecraft.ChatFormatting.DARK_GRAY));
             graphics.renderComponentTooltip(font, lines, mouseX, mouseY);
             return true;
