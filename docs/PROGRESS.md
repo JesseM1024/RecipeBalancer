@@ -5,6 +5,52 @@
 
 ---
 
+## R13 · 2026-10-26 · JEI resize/二级缓存刷新 + 小窗按钮
+
+### 实测结果
+
+| 项 | 结果 |
+|---|---|
+| `gradlew test` | **78 tests, 0 failures** |
+| 产物 | `recipebalancer-0.1.0-1.21.1.jar` **2,298,975 B** |
+| 实机部署 | 已复制到 `1.21.1-NeoForge/mods/`（14:45:08） |
+| 未验证 | 实机 JEI 冒烟（需重启/缩放窗口） |
+
+### JEI 位置不自动刷新的根因
+
+- JEI 只在收到 `ScreenEvent.Init.Post` 时刷新 `GuiPropertiesCache`。
+- 窗口 resize / 最大化会重新执行 `Screen.init()`，但 **不会补发** Init.Post →
+  JEI 继续用旧尺寸，表现为内容压在主界面上；进二级菜单返回时因屏幕切换才刷新。
+- 二级 `AmountScreen` 等此前也只在首次打开时被 JEI 拿到默认属性，居中实际面板与
+  JEI 认知不一致。
+
+### 修复
+
+新增 `mc/jei/JeiScreenSupport.notifyGuiInit(Screen)`：在以下屏幕的 `init()` **末尾**
+手动补发 `ScreenEvent.Init.Post`：
+
+- `BalancerScreen`
+- `AmountScreen`
+- `TimeScreen`
+- `ScenarioListScreen`
+
+这样 resize 后和二级界面打开时 JEI 都会用**当前** `IGuiProperties` 重新布局。
+（事件里的 add/remove listener 用空实现，JEI 只读取属性。）
+
+### 小窗口按钮
+
+`写入` / `新建` 改为 **20×16 并排两枚**，位置固定在耗时格下方 `encodingY+38`；
+不再使用 40 宽堆叠，避免小窗口时“新建”压到背包标签/被误认为跑到面板外。
+
+### 待验证
+
+1. 小窗口打开 → 最大化：JEI 应自动移到右侧，无需进二级再返回。
+2. 主界面首次打开：JEI 正常。
+3. 用量/耗时/配方集二级界面：JEI 按其实际居中的面板重新定位，不覆盖面板。
+4. 小窗口下 `写入/新建` 位于耗时下方，不压背包。
+
+---
+
 ## R12 · 2026-10-26 · 动态窄宽（9 格基准）+ 产物两列 + 按钮下移
 
 ### 实测结果

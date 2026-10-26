@@ -29,6 +29,7 @@
 │   ui/graph/GraphView         流程图绘制（GuiGraphics：节点/边/图标，M5）│
 │   itemmap/ItemKeyMapper      注册名 ↔ 图标 / 未注册物品占位渲染         │
 │   screen/JeiPanelScreen      各面板屏幕向 JEI 暴露 guiLeft/Top/尺寸     │
+│   jei/JeiScreenSupport       resize/二级界面补发 Init.Post，刷新 JEI    │
 │   jei/RecipeBalancerJeiPlugin 所有面板 Screen 的 JEI 渲染注册（可选中） │
 │   jei/JeiBridge              JEI ghost/JEI 配方写入（M4）               │
 ├────────────────────────────────────────────────────────────────────────┤
@@ -500,6 +501,8 @@ final class GraphView {
 > 自定义 `Screen` 不会自动获得 JEI 右侧面板：必须通过 `IGuiHandlerRegistration.addGuiScreenHandler`
 > 注册 `IGuiProperties`。主界面、用量、耗时、配方集均已注册；属性字段有默认值，
 > 覆盖 JEI 在 `Screen.init` 之前查询的情况。`SolveScreen` 为纯文本报告，不注册。
+> **resize / 二级界面**：JEI 只在 `ScreenEvent.Init.Post` 刷新属性缓存，而窗口缩放不会
+> 补发该事件；因此 `JeiScreenSupport.notifyGuiInit` 在各面板 `init()` 末尾手动补发。
 
 | 通道 | 用法 | JEI API（开发 19.39.0.372 / 实机 19.70.0.460，**逐项待核实 R-08**） |
 |---|---|---|
