@@ -12,7 +12,7 @@ import net.minecraft.util.FormattedCharSequence;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
+import java.util.Map;
 
 /** 求解结果二级页：只看报告，避免一级编码界面被文字挤占。 */
 public final class SolveScreen extends Screen implements JeiPanelScreen {
@@ -22,7 +22,7 @@ public final class SolveScreen extends Screen implements JeiPanelScreen {
     private final boolean success;
     private final SolveResult result;
     private final List<Recipe> recipes;
-    private final Set<String> targets;
+    private final Map<String, Double> targets;
     private final boolean inventoryEnabled;
     private List<FormattedCharSequence> lines = List.of();
     private SolveGraphView graph;
@@ -40,18 +40,18 @@ public final class SolveScreen extends Screen implements JeiPanelScreen {
     private Button toggleButton;
 
     public SolveScreen(Screen parent, String report, boolean success) {
-        this(parent, report, null, List.of(), Set.of(), false, success);
+        this(parent, report, null, List.of(), Map.of(), false, success);
     }
 
     public SolveScreen(Screen parent, String report, SolveResult result,
-                       List<Recipe> recipes, Set<String> targets,
+                       List<Recipe> recipes, Map<String, Double> targets,
                        boolean inventoryEnabled, boolean success) {
         super(Component.literal("求解结果"));
         this.parent = parent;
         this.report = report;
         this.result = result;
         this.recipes = recipes == null ? List.of() : recipes;
-        this.targets = targets == null ? Set.of() : Set.copyOf(targets);
+        this.targets = targets == null ? Map.of() : Map.copyOf(targets);
         this.inventoryEnabled = inventoryEnabled;
         this.success = success;
     }
@@ -117,7 +117,7 @@ public final class SolveScreen extends Screen implements JeiPanelScreen {
 
         AeStyle.subPanel(graphics, panelX + 4, textY, panelW - 8, textH);
         if (graphMode && graph != null) {
-            renderGraph(graphics);
+            renderGraph(graphics, mouseX, mouseY);
             return;
         }
 
@@ -141,8 +141,9 @@ public final class SolveScreen extends Screen implements JeiPanelScreen {
         }
     }
 
-    private void renderGraph(GuiGraphics graphics) {
+    private void renderGraph(GuiGraphics graphics, int mouseX, int mouseY) {
         graph.render(graphics, font, panelX + 4, textY, panelW - 8, textH);
+        graph.renderTooltip(graphics, font, mouseX, mouseY);
     }
 
     private boolean inGraphArea(double mouseX, double mouseY) {

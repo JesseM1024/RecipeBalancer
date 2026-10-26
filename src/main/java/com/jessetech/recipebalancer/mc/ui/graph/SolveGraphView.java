@@ -7,12 +7,13 @@ import com.jessetech.recipebalancer.core.time.TimeExpression;
 import com.jessetech.recipebalancer.mc.itemmap.IngredientKey;
 import com.jessetech.recipebalancer.mc.itemmap.ItemKeyMapper;
 import com.jessetech.recipebalancer.mc.ui.AeStyle;
+import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.network.chat.Component;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -46,7 +47,7 @@ public final class SolveGraphView {
 
     private final SolveResult result;
     private final List<Recipe> recipes;
-    private final Set<String> targets;
+    private final Map<String, Double> targets;
     private final boolean inventoryEnabled;
     private final List<GNode> nodes = new ArrayList<>();
     private final List<GEdge> edges = new ArrayList<>();
@@ -63,6 +64,10 @@ public final class SolveGraphView {
     private double minY;
     private double contentW = 1;
     private double contentH = 1;
+    private int lastAreaX;
+    private int lastAreaY;
+    private int lastAreaW;
+    private int lastAreaH;
 
     private static final class GNode {
         final boolean recipe;
@@ -98,14 +103,14 @@ public final class SolveGraphView {
     }
 
     public SolveGraphView(SolveResult result, List<Recipe> recipes) {
-        this(result, recipes, Set.of(), false);
+        this(result, recipes, Map.of(), false);
     }
 
     public SolveGraphView(SolveResult result, List<Recipe> recipes,
-                          Set<String> targets, boolean inventoryEnabled) {
+                          Map<String, Double> targets, boolean inventoryEnabled) {
         this.result = result;
         this.recipes = recipes;
-        this.targets = targets == null ? Set.of() : new LinkedHashSet<>(targets);
+        this.targets = targets == null ? Map.of() : new LinkedHashMap<>(targets);
         this.inventoryEnabled = inventoryEnabled;
         build();
         layout();
@@ -145,7 +150,7 @@ public final class SolveGraphView {
             }
         }
         // 目标若未出现在活跃配方里也画出来
-        for (String target : targets) {
+        for (String target : targets.keySet()) {
             material(target, external, byproducts, startup);
         }
     }
@@ -154,7 +159,7 @@ public final class SolveGraphView {
                            Set<String> startup) {
         return materials.computeIfAbsent(key, ignored -> {
             Category category;
-            if (targets.contains(key)) {
+            if (targets.containsKey(key)) {
                 category = Category.TARGET;
             } else if (startup.contains(key)) {
                 category = Category.STARTUP;
@@ -176,7 +181,7 @@ public final class SolveGraphView {
             return;
         }
         Random random = new Random(0x5EEDL);
-        double radius = 80 + nodes.size() * 2.0;
+        double radius = 60 + Math.min(170, nodes.size() * 2.4);
         for (int i = 0; i < nodes.size(); i++) {
             double angle = 2 * Math.PI * i / nodes.size() + random.nextDouble() * 0.3;
             double r = radius * (0.45 + random.nextDouble() * 0.55);
@@ -184,8 +189,8 @@ public final class SolveGraphView {
             nodes.get(i).y = Math.sin(angle) * r;
         }
 
-        double k = 74.0;
-        int iterations = nodes.size() > 180 ? 130 : 320;
+        double k = 54.0;
+        int iterations = nodes.size() > 180 ? 140 : 260;
         for (int iteration = 0; iteration < iterations; iteration++) {
             double temperature = Math.max(1.0, k * (1.0 - iteration / (double) iterations));
             double[] dx = new double[nodes.size()];
@@ -231,11 +236,16 @@ public final class SolveGraphView {
                 dy[j] += uy * force;
             }
 
+            double targetRadius = 58 + Math.sqrt(nodes.size()) * 21.0;
             for (int i = 0; i < nodes.size(); i++) {
                 GNode node = nodes.get(i);
                 double dist = Math.max(1.0, Math.hypot(node.x, node.y));
-                dx[i] -= node.x / dist * dist * 0.045;
-                dy[i] -= node.y / dist * dist * 0.045;
+                // 向心 + 圆环约束：整体团成一个圆形簇
+                dx[i] -= node.x / dist * dist * 0.06;
+                dy[i] -= node.y / dist * dist * 0.06;
+                double radial = (dist - targetRadius) * 0.075;
+                dx[i] -= node.x / dist * radial;
+                dy[i] -= node.y / dist * radial;
                 double length = Math.max(1.0, Math.hypot(dx[i], dy[i]));
                 double step = Math.min(length, temperature);
                 node.x += dx[i] / length * step;
@@ -248,7 +258,7 @@ public final class SolveGraphView {
         double maxX = -Double.MAX_VALUE;
         double maxY = -Double.MAX_VALUE;
         for (GNode node : nodes) {
-            double half = (node.recipe ? RECIPE : MATERIAL) / 2.0 + 54;
+            double half = (node.recipe ? RECIPE : MATERIAL) / 2.0 + 42;
             minX = Math.min(minX, node.x - half);
             minY = Math.min(minY, node.y - half);
             maxX = Math.max(maxX, node.x + half);
@@ -292,6 +302,10 @@ public final class SolveGraphView {
 
     public void render(GuiGraphics graphics, Font font, int areaX, int areaY,
                        int areaW, int areaH) {
+        lastAreaX = areaX;
+        lastAreaY = areaY;
+        lastAreaW = areaW;
+        lastAreaH = areaH;
         if (!cameraReady || cameraAreaW != areaW || cameraAreaH != areaH) {
             resetCamera(areaW, areaH);
         }
@@ -320,6 +334,164 @@ public final class SolveGraphView {
         drawLegend(graphics, font, areaX, areaY);
         graphics.drawString(font, "拖动平移 · 滚轮缩放 · 流量单位 /t",
                 areaX + 4, areaY + areaH - 12, AeStyle.MUTED, false);
+    }
+
+    /** 鼠标悬浮：配方/物质/物流详细 tooltip。 */
+    public void renderTooltip(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+        if (nodes.isEmpty() || lastAreaW <= 0
+                || mouseX < lastAreaX || mouseX >= lastAreaX + lastAreaW
+                || mouseY < lastAreaY || mouseY >= lastAreaY + lastAreaH) {
+            return;
+        }
+        double wx = (mouseX - lastAreaX - panX) / zoom;
+        double wy = (mouseY - lastAreaY - panY) / zoom;
+        GNode hovered = null;
+        for (GNode node : nodes) {
+            double half = (node.recipe ? RECIPE : MATERIAL) / 2.0;
+            if (Math.abs(wx - node.x) <= half && Math.abs(wy - node.y) <= half) {
+                hovered = node;
+                break;
+            }
+        }
+        if (hovered != null) {
+            graphics.renderComponentTooltip(font,
+                    hovered.recipe ? recipeTooltip(hovered) : materialTooltip(hovered),
+                    mouseX, mouseY);
+            return;
+        }
+        GEdge edge = hoveredEdge(wx, wy);
+        if (edge != null) {
+            List<Component> lines = new ArrayList<>();
+            lines.add(Component.literal(ItemKeyMapper.displayName(edge.material))
+                    .withStyle(ChatFormatting.BOLD));
+            lines.add(Component.literal(nodeLabel(edge.from) + " → " + nodeLabel(edge.to))
+                    .withStyle(ChatFormatting.GRAY));
+            lines.add(Component.literal("流量: "
+                    + TimeExpression.formatEditableNumber(edge.flow) + " /t"));
+            graphics.renderComponentTooltip(font, lines, mouseX, mouseY);
+        }
+    }
+
+    private GEdge hoveredEdge(double wx, double wy) {
+        GEdge best = null;
+        double bestDistance = 7.0;
+        for (GEdge edge : edges) {
+            double distance = pointSegmentDistance(wx, wy,
+                    edge.from.x, edge.from.y, edge.to.x, edge.to.y);
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                best = edge;
+            }
+        }
+        return best;
+    }
+
+    private static double pointSegmentDistance(double px, double py,
+                                               double x1, double y1,
+                                               double x2, double y2) {
+        double vx = x2 - x1;
+        double vy = y2 - y1;
+        double lengthSq = vx * vx + vy * vy;
+        if (lengthSq <= 1e-9) {
+            return Math.hypot(px - x1, py - y1);
+        }
+        double t = ((px - x1) * vx + (py - y1) * vy) / lengthSq;
+        t = Math.max(0, Math.min(1, t));
+        return Math.hypot(px - (x1 + vx * t), py - (y1 + vy * t));
+    }
+
+    private List<Component> recipeTooltip(GNode node) {
+        Recipe recipe = recipes.get(node.recipeId);
+        List<Component> lines = new ArrayList<>();
+        lines.add(Component.literal("R" + node.recipeId + " · "
+                + ItemKeyMapper.displayName(recipe.equType())).withStyle(ChatFormatting.BOLD));
+        double perSecond = result.recipeRates().get(node.recipeId);
+        lines.add(Component.literal("设备并行: "
+                + TimeExpression.formatEditableNumber(perSecond * recipe.time())
+                + "  设备数: " + node.machines)
+                .withStyle(ChatFormatting.GRAY));
+        double ratePerTick = perSecond / 20.0;
+        lines.add(Component.literal("运行速率: "
+                + TimeExpression.formatEditableNumber(ratePerTick) + " /t"));
+        lines.add(Component.literal("输入 (/t):").withStyle(ChatFormatting.GREEN));
+        for (Map.Entry<String, Double> entry : recipe.sourceList().entrySet()) {
+            lines.add(Component.literal("  - " + ItemKeyMapper.displayName(entry.getKey())
+                    + " × " + TimeExpression.formatEditableNumber(entry.getValue() * ratePerTick)));
+        }
+        lines.add(Component.literal("输出 (/t):").withStyle(ChatFormatting.GOLD));
+        for (Map.Entry<String, Double> entry : recipe.productList().entrySet()) {
+            lines.add(Component.literal("  + " + ItemKeyMapper.displayName(entry.getKey())
+                    + " × " + TimeExpression.formatEditableNumber(entry.getValue() * ratePerTick)));
+        }
+        return lines;
+    }
+
+    private List<Component> materialTooltip(GNode node) {
+        List<Component> lines = new ArrayList<>();
+        lines.add(Component.literal(ItemKeyMapper.displayName(node.key))
+                .withStyle(ChatFormatting.BOLD));
+        lines.add(Component.literal("类别: " + categoryLabel(node.category))
+                .withStyle(ChatFormatting.GRAY));
+        double produced = 0.0;
+        double consumed = 0.0;
+        for (GEdge edge : edges) {
+            if (edge.to == node) {
+                produced += edge.flow;
+            }
+            if (edge.from == node) {
+                consumed += edge.flow;
+            }
+        }
+        lines.add(Component.literal("生成: " + TimeExpression.formatEditableNumber(produced)
+                + " /t  消耗: " + TimeExpression.formatEditableNumber(consumed) + " /t"));
+        if (node.category == Category.TARGET) {
+            Double target = targets.get(node.key);
+            if (target != null) {
+                lines.add(Component.literal("目标: "
+                        + TimeExpression.formatEditableNumber(target) + " /t")
+                        .withStyle(ChatFormatting.LIGHT_PURPLE));
+            }
+        }
+        if (node.category == Category.INPUT) {
+            Double amount = result.externalInputs().get(node.key);
+            if (amount != null) {
+                lines.add(Component.literal("外部输入: "
+                        + TimeExpression.formatEditableNumber(amount / 20.0) + " /t")
+                        .withStyle(ChatFormatting.GREEN));
+            }
+        }
+        if (node.category == Category.STARTUP) {
+            Double amount = result.bootstrapInventory().get(node.key);
+            if (amount != null) {
+                lines.add(Component.literal("启动库存: "
+                        + TimeExpression.formatEditableNumber(amount))
+                        .withStyle(ChatFormatting.RED));
+            }
+        }
+        if (node.category == Category.BYPRODUCT) {
+            Double amount = result.finalOutputs().get(node.key);
+            if (amount != null) {
+                lines.add(Component.literal("副产物: "
+                        + TimeExpression.formatEditableNumber(amount / 20.0) + " /t")
+                        .withStyle(ChatFormatting.YELLOW));
+            }
+        }
+        return lines;
+    }
+
+    private static String nodeLabel(GNode node) {
+        return node.recipe ? "R" + node.recipeId
+                : ItemKeyMapper.displayName(node.key);
+    }
+
+    private static String categoryLabel(Category category) {
+        return switch (category) {
+            case INPUT -> "外部输入";
+            case STARTUP -> "启动库存";
+            case BYPRODUCT -> "副产物";
+            case TARGET -> "最终目标";
+            default -> "中间产物";
+        };
     }
 
     private void drawLegend(GuiGraphics graphics, Font font, int areaX, int areaY) {
@@ -360,7 +532,7 @@ public final class SolveGraphView {
         drawLine(graphics, x2, y2, backX - px * 3.5, backY - py * 3.5,
                 thickness + 1, EDGE);
 
-        String label = TimeExpression.formatCompact(edge.flow);
+        String label = TimeExpression.formatCompact(edge.flow) + "/t";
         int width = font.width(label);
         float labelX = (float) ((x1 + x2) / 2 - width / 2.0 + px * 4);
         float labelY = (float) ((y1 + y2) / 2 - 4 + py * 4);
