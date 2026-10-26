@@ -426,9 +426,10 @@ public final class RbKeyMappings {
 }
 
 package com.jessetech.recipebalancer.mc.screen;
-/** 配方编码终端（M3/R11）：顶部工作区名/载入/存储，参数+求解一行，
- *  内联目标（12 列×1~2 行，最多 32，可滚动），配方库（8 列，占据剩余高度），
- *  编码区（3 列×最多 4 行），底部 9×4 背包；槽位 18px 原版配色。 */
+/** 配方编码终端（M3/R12）：顶部工作区名/载入/存储，参数+求解一行，
+ *  内联目标（9 列×1~2 行，最多 32，可滚动），配方库（9 列，占据剩余高度），
+ *  编码区（原料 3 列 / 产物 2 列 × 最多 4 行），底部 9×4 背包；
+ *  面板宽度按内容计算；槽位 18px 原版配色。 */
 public final class BalancerScreen extends Screen { /* M3 */ }
 /** 通用用量编辑：物品图标 + 注册名 + 数字框 + ±快捷按钮。 */
 public final class AmountScreen extends Screen { /* M3 */ }
