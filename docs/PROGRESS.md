@@ -12,8 +12,8 @@
 | 项 | 结果 |
 |---|---|
 | `gradlew test` | **78 tests, 0 failures** |
-| 产物 | `recipebalancer-0.1.0-1.21.1.jar` **2,298,975 B** |
-| 实机部署 | 已复制到 `1.21.1-NeoForge/mods/`（14:45:08） |
+| 产物 | `recipebalancer-0.1.0-1.21.1.jar` **2,301,182 B** |
+| 实机部署 | 已复制到 `1.21.1-NeoForge/mods/`（15:12:02） |
 | 未验证 | 实机 JEI 冒烟（需重启/缩放窗口） |
 
 ### JEI 位置不自动刷新的根因
@@ -36,6 +36,25 @@
 
 这样 resize 后和二级界面打开时 JEI 都会用**当前** `IGuiProperties` 重新布局。
 （事件里的 add/remove listener 用空实现，JEI 只读取属性。）
+
+### 二次兜底（15:09 追加）
+
+实机反馈“小窗首次打开仍覆盖”，说明 JEI 19.70 的缓存未必响应手动事件。追加：
+
+- **延后一 tick 再补发** Init.Post（首次 `setScreen` 时 `Minecraft.screen` 可能尚未切换）；
+- 在 `RecipeBalancerJeiPlugin.onRuntimeAvailable` 保存 `IJeiRuntime`；
+  `JeiScreenSupport` 反射调用 JEI 内部
+  `IngredientListOverlay/BookmarkOverlay.getScreenPropertiesUpdater()`
+  → `updateScreen(screen)` → `forceUpdate()`，直接驱动缓存刷新（JEI 19.x 无公开 API）。
+- 反射失败时写 warn 日志并退回事件机制，便于实机定位。
+
+### 面板左移与可选隔离
+
+- 面板不再居中：`panelX` 在右侧预留约 **210px** 给 JEI，宽度不足时靠左（x=4）。
+  小窗口下 JEI 有实际落位空间，不再压在主面板上。
+- 新增 `JeiRuntimeHolder`（不含任何 JEI 类型）：**未装 JEI 时不会因反射类而缺类崩溃**；
+  `RecipeBalancerJeiPlugin` 在 `onRuntimeAvailable` 写入运行时。
+- 延迟补发事件前检查 `Minecraft.screen == screen`，避免关闭界面后把 JEI 缓存刷回旧屏。
 
 ### 小窗口按钮
 
