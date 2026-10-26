@@ -211,10 +211,12 @@ public final class SolveGraphView {
             nodes.get(i).index = i;
         }
         Random random = new Random(0x5EEDL);
-        double targetRadius = Math.max(90, nodes.size() * 10.0);
+        // 圆盘最大半径；只作为外边界，不再作为“必须贴近”的圆环。
+        double targetRadius = Math.max(95, 42 + Math.sqrt(nodes.size()) * 30.0);
         for (int i = 0; i < nodes.size(); i++) {
-            double angle = 2 * Math.PI * i / nodes.size() + random.nextDouble() * 0.35;
-            double r = targetRadius * (0.65 + random.nextDouble() * 0.35);
+            // 均匀圆盘采样：sqrt(u) 保证面积均匀，中心也会有节点。
+            double angle = 2 * Math.PI * random.nextDouble();
+            double r = targetRadius * Math.sqrt(random.nextDouble());
             nodes.get(i).x = Math.cos(angle) * r;
             nodes.get(i).y = Math.sin(angle) * r;
         }
@@ -267,12 +269,15 @@ public final class SolveGraphView {
             for (int i = 0; i < nodes.size(); i++) {
                 GNode node = nodes.get(i);
                 double dist = Math.max(1.0, Math.hypot(node.x, node.y));
-                // 向心重力 + 圆环径向势能，保持整体圆形且不散开
-                dx[i] -= node.x / dist * dist * 0.055;
-                dy[i] -= node.y / dist * dist * 0.055;
-                double radial = (dist - targetRadius) * 0.09;
-                dx[i] -= node.x / dist * radial;
-                dy[i] -= node.y / dist * radial;
+                // 向心势能保持圆盘填充；碰撞力负责把内部节点推开。
+                dx[i] -= node.x / dist * dist * 0.045;
+                dy[i] -= node.y / dist * dist * 0.045;
+                // 只在超出最大半径时施加向内边界力；内部不再有径向目标。
+                if (dist > targetRadius) {
+                    double over = (dist - targetRadius) * 0.14;
+                    dx[i] -= node.x / dist * over;
+                    dy[i] -= node.y / dist * over;
+                }
                 double length = Math.max(1.0, Math.hypot(dx[i], dy[i]));
                 double step = Math.min(length, temperature);
                 node.x += dx[i] / length * step;
@@ -386,7 +391,11 @@ public final class SolveGraphView {
                              List<GEdge> incident, double targetRadius) {
         double cost = 0.0;
         double dist = Math.max(1.0, Math.hypot(x, y));
-        cost += Math.pow(dist - targetRadius, 2) * 0.002;
+        // 向心项，不把节点吸到环上；超出圆盘才额外惩罚。
+        cost += dist * dist * 0.0012;
+        if (dist > targetRadius) {
+            cost += (dist - targetRadius) * (dist - targetRadius) * 0.02;
+        }
 
         for (GEdge edge : incident) {
             GNode other = edge.from == node ? edge.to : edge.from;
