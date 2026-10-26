@@ -949,7 +949,8 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
             // 报告里把 stack|base64 替换成“物品名 [效果/时长]”，不改变磁盘数据
             String report = ItemKeyMapper.prettyText(
                     TextReporter.format(result, draft.recipes()));
-            minecraft.setScreen(new SolveScreen(this, report, result.success()));
+            minecraft.setScreen(new SolveScreen(this, report, result,
+                    draft.recipes(), result.success()));
         } catch (RuntimeException | LinkageError e) {
             RecipeBalancerMod.LOGGER.error("[RecipeBalancer] 求解失败", e);
             status = "求解失败: " + e;
