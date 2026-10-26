@@ -1124,23 +1124,29 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
     }
 
     public void applyGhost(GhostKind kind, int index, String key) {
+        applyGhost(kind, index, key, 1.0);
+    }
+
+    public void applyGhost(GhostKind kind, int index, String key, double amount) {
         if (key == null || key.isBlank()) {
             return;
         }
+        double value = amount > 0 ? amount : 1.0;
         switch (kind) {
-            case INPUT -> pattern.putInput(index, key, 1.0);
-            case OUTPUT -> pattern.putOutput(index, key, 1.0);
+            case INPUT -> pattern.putInput(index, key, value);
+            case OUTPUT -> pattern.putOutput(index, key, value);
             case EQUIPMENT -> pattern.setEquipmentKey(key);
             case TARGET -> {
                 if (draft.targets().size() >= MAX_TARGETS && !draft.targets().containsKey(key)) {
                     status = "目标最多 " + MAX_TARGETS + " 个";
                     return;
                 }
-                draft.putTarget(key, 1.0);
+                draft.putTarget(key, value);
                 onDraftChanged();
             }
         }
-        status = "JEI ghost: " + ItemKeyMapper.displayName(key);
+        status = "JEI ghost: " + ItemKeyMapper.displayName(key)
+                + " × " + TimeExpression.formatNumber(value);
     }
 
     // JEI 非 ContainerScreen 渲染（RecipeBalancerJeiPlugin 使用）

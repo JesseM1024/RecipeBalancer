@@ -11,6 +11,7 @@ import mezz.jei.api.gui.builder.ITooltipBuilder;
 import mezz.jei.api.gui.drawable.IDrawable;
 import mezz.jei.api.gui.ingredient.IRecipeSlotView;
 import mezz.jei.api.gui.inputs.IJeiUserInput;
+import mezz.jei.api.ingredients.ITypedIngredient;
 import mezz.jei.api.recipe.RecipeIngredientRole;
 import mezz.jei.api.recipe.advanced.IRecipeButtonControllerFactory;
 import mezz.jei.api.runtime.IJeiRuntime;
@@ -133,20 +134,17 @@ public final class JeiRecipeButtonFactory implements IRecipeButtonControllerFact
             int inputIndex = 0;
             for (IRecipeSlotView slot : layout.getRecipeSlotsView()
                     .getSlotViews(RecipeIngredientRole.INPUT)) {
-                Optional<ItemStack> stack = firstItem(slot);
-                if (stack.isPresent() && inputIndex < RecipePattern.MAX_INPUTS) {
-                    pattern.putInput(inputIndex++, ItemKeyMapper.of(stack.get()),
-                            Math.max(1.0, stack.get().getCount()));
+                JeiIngredientMapper.Mapped mapped = firstIngredient(slot);
+                if (mapped != null && inputIndex < RecipePattern.MAX_INPUTS) {
+                    pattern.putInput(inputIndex++, mapped.key(), mapped.amount());
                 }
             }
             int outputIndex = 0;
             for (IRecipeSlotView slot : layout.getRecipeSlotsView()
                     .getSlotViews(RecipeIngredientRole.OUTPUT)) {
-                Optional<ItemStack> stack = firstItem(slot);
-                if (stack.isPresent() && outputIndex < RecipePattern.MAX_OUTPUTS) {
-                    // 合成输出可能是 3 个门等，保留 JEI 槽位的数量
-                    pattern.putOutput(outputIndex++, ItemKeyMapper.of(stack.get()),
-                            Math.max(1.0, stack.get().getCount()));
+                JeiIngredientMapper.Mapped mapped = firstIngredient(slot);
+                if (mapped != null && outputIndex < RecipePattern.MAX_OUTPUTS) {
+                    pattern.putOutput(outputIndex++, mapped.key(), mapped.amount());
                 }
             }
             // JEI 左侧“可用设备”列：取该配方类型的第一个催化剂自动填设备
@@ -168,9 +166,9 @@ public final class JeiRecipeButtonFactory implements IRecipeButtonControllerFact
             if (!equipmentSet) {
                 for (IRecipeSlotView slot : layout.getRecipeSlotsView()
                         .getSlotViews(RecipeIngredientRole.CATALYST)) {
-                    Optional<ItemStack> stack = firstItem(slot);
-                    if (stack.isPresent()) {
-                        pattern.setEquipmentKey(ItemKeyMapper.of(stack.get()));
+                    JeiIngredientMapper.Mapped mapped = firstIngredient(slot);
+                    if (mapped != null) {
+                        pattern.setEquipmentKey(mapped.key());
                         break;
                     }
                 }
@@ -179,12 +177,13 @@ public final class JeiRecipeButtonFactory implements IRecipeButtonControllerFact
             return true;
         }
 
-        private static Optional<ItemStack> firstItem(IRecipeSlotView slot) {
-            Optional<ItemStack> displayed = slot.getDisplayedItemStack();
+        private static JeiIngredientMapper.Mapped firstIngredient(IRecipeSlotView slot) {
+            Optional<ITypedIngredient<?>> displayed = slot.getDisplayedIngredient();
             if (displayed.isPresent()) {
-                return displayed;
+                return JeiIngredientMapper.of(displayed.get());
             }
-            return slot.getItemStacks().findFirst();
+            return slot.getAllIngredientsList().stream().findFirst()
+                    .map(JeiIngredientMapper::of).orElse(null);
         }
 
         @Override

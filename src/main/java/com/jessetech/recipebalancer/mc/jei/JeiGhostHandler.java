@@ -1,11 +1,9 @@
 package com.jessetech.recipebalancer.mc.jei;
 
-import com.jessetech.recipebalancer.mc.itemmap.ItemKeyMapper;
 import com.jessetech.recipebalancer.mc.screen.BalancerScreen;
 import mezz.jei.api.gui.handlers.IGhostIngredientHandler;
 import mezz.jei.api.ingredients.ITypedIngredient;
 import net.minecraft.client.renderer.Rect2i;
-import net.minecraft.world.item.ItemStack;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -17,11 +15,10 @@ public final class JeiGhostHandler implements IGhostIngredientHandler<BalancerSc
     public <I> List<Target<I>> getTargetsTyped(BalancerScreen screen,
                                                ITypedIngredient<I> ingredient,
                                                boolean doStart) {
-        ItemStack stack = ingredient.getItemStack().orElse(ItemStack.EMPTY);
-        if (stack.isEmpty()) {
+        JeiIngredientMapper.Mapped mapped = JeiIngredientMapper.of(ingredient);
+        if (mapped == null) {
             return List.of();
         }
-        String key = ItemKeyMapper.of(stack);
         List<Target<I>> targets = new ArrayList<>();
         for (BalancerScreen.GhostSlot slot : screen.ghostSlots()) {
             targets.add(new Target<I>() {
@@ -32,9 +29,7 @@ public final class JeiGhostHandler implements IGhostIngredientHandler<BalancerSc
 
                 @Override
                 public void accept(I value) {
-                    if (value instanceof ItemStack dropped) {
-                        screen.applyGhost(slot.kind(), slot.index(), ItemKeyMapper.of(dropped));
-                    }
+                    screen.applyGhost(slot.kind(), slot.index(), mapped.key(), mapped.amount());
                 }
             });
         }

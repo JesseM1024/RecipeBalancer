@@ -36,6 +36,8 @@ public final class ItemKeyMapper {
     private static final String STACK_PREFIX = "stack|";
     private static final Map<String, ItemStack> STACK_CACHE = new ConcurrentHashMap<>();
     private static final Pattern STACK_KEY_PATTERN = Pattern.compile("stack\\|[A-Za-z0-9_-]+");
+    private static final Pattern INGREDIENT_KEY_PATTERN =
+            Pattern.compile("ingredient\\|[A-Za-z0-9_-]+(?:\\|[A-Za-z0-9_-]+){2}");
 
     private ItemKeyMapper() {
     }
@@ -123,6 +125,9 @@ public final class ItemKeyMapper {
     }
 
     public static String displayName(String key) {
+        if (IngredientKey.isIngredientKey(key)) {
+            return IngredientKey.displayName(key);
+        }
         ItemStack stack = stack(key);
         if (!stack.isEmpty()) {
             return stack.getHoverName().getString();
@@ -130,8 +135,11 @@ public final class ItemKeyMapper {
         return normalize(key);
     }
 
-    /** 结果报告中的可读名称：物品名 + 药水效果（含时长）。 */
+    /** 结果报告中的可读名称：物品名 + 药水效果（含时长）；非物品用显示名。 */
     public static String reportName(String key) {
+        if (IngredientKey.isIngredientKey(key)) {
+            return IngredientKey.displayName(key);
+        }
         ItemStack stack = stack(key);
         if (stack.isEmpty()) {
             return registryName(key);
@@ -168,7 +176,12 @@ public final class ItemKeyMapper {
         if (text == null || text.isEmpty()) {
             return text;
         }
-        Matcher matcher = STACK_KEY_PATTERN.matcher(text);
+        String replaced = replaceKeys(text, STACK_KEY_PATTERN);
+        return replaceKeys(replaced, INGREDIENT_KEY_PATTERN);
+    }
+
+    private static String replaceKeys(String text, Pattern pattern) {
+        Matcher matcher = pattern.matcher(text);
         StringBuffer output = new StringBuffer(text.length());
         while (matcher.find()) {
             matcher.appendReplacement(output,
@@ -180,12 +193,18 @@ public final class ItemKeyMapper {
 
     /** 注册名（tooltip/用量界面展示）；组件物品只显示底层 registry id。 */
     public static String registryName(String key) {
+        if (IngredientKey.isIngredientKey(key)) {
+            return IngredientKey.describe(key);
+        }
         String id = baseItemId(key);
         return id.isEmpty() ? normalize(key) : id;
     }
 
     /** 未注册物品的短标签：ASCII 取前 3 个字母，中文取第一个字。 */
     public static String shortLabel(String key) {
+        if (IngredientKey.isIngredientKey(key)) {
+            return IngredientKey.shortLabel(key);
+        }
         String id = baseItemId(key);
         int colon = id.indexOf(':');
         String path = colon >= 0 ? id.substring(colon + 1) : id;
@@ -261,6 +280,17 @@ public final class ItemKeyMapper {
         if (id.isEmpty()) {
             return;
         }
+        if (IngredientKey.isIngredientKey(id)) {
+            int color = placeholderColor(id);
+            graphics.fill(x + 1, y + 1, x + 17, y + 17, color);
+            graphics.fill(x + 1, y + 1, x + 17, y + 2, 0x40FFFFFF);
+            graphics.fill(x + 1, y + 16, x + 17, y + 17, 0x60000000);
+            String label = shortLabel(id);
+            graphics.drawString(font, label, x + 9 - font.width(label) / 2, y + 5,
+                    0xFF101010, false);
+            renderAmount(graphics, font, amount, x, y);
+            return;
+        }
         ItemStack stack = stack(id);
         if (!stack.isEmpty()) {
             graphics.renderItem(stack, x + 1, y + 1);
@@ -312,10 +342,18 @@ public final class ItemKeyMapper {
             return;
         }
         List<Component> lines = new ArrayList<>();
-        lines.add(Component.literal(shortLabel(id)).withStyle(ChatFormatting.GOLD));
-        lines.add(Component.literal(id).withStyle(ChatFormatting.GRAY));
-        lines.add(Component.literal("当前整合包未找到此物品（占位显示）")
-                .withStyle(ChatFormatting.DARK_GRAY));
+        if (IngredientKey.isIngredientKey(id)) {
+            lines.add(Component.literal(IngredientKey.displayName(id)));
+            lines.add(Component.literal(IngredientKey.describe(id))
+                    .withStyle(ChatFormatting.GRAY));
+            lines.add(Component.literal("非物品 ingredient；数量单位 B（500 mB = 0.5）")
+                    .withStyle(ChatFormatting.DARK_GRAY));
+        } else {
+            lines.add(Component.literal(shortLabel(id)).withStyle(ChatFormatting.GOLD));
+            lines.add(Component.literal(id).withStyle(ChatFormatting.GRAY));
+            lines.add(Component.literal("当前整合包未找到此物品（占位显示）")
+                    .withStyle(ChatFormatting.DARK_GRAY));
+        }
         graphics.renderComponentTooltip(font, lines, mouseX, mouseY);
     }
 }

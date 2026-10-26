@@ -2,6 +2,7 @@ package com.jessetech.recipebalancer.mc.screen;
 
 import com.jessetech.recipebalancer.core.time.RateUnit;
 import com.jessetech.recipebalancer.core.time.TimeExpression;
+import com.jessetech.recipebalancer.mc.itemmap.IngredientKey;
 import com.jessetech.recipebalancer.mc.itemmap.ItemKeyMapper;
 import com.jessetech.recipebalancer.mc.jei.JeiScreenSupport;
 import com.jessetech.recipebalancer.mc.ui.AeStyle;
@@ -29,6 +30,7 @@ public final class AmountScreen extends Screen implements JeiPanelScreen {
     private final boolean rateMode;
     private final Callback callback;
     private final String itemKey;
+    private final boolean nonItem;
     private String status = "";
     private RateUnit rateUnit;
     private EditBox keyBox;
@@ -47,6 +49,7 @@ public final class AmountScreen extends Screen implements JeiPanelScreen {
         this.parent = parent;
         this.title = title;
         this.itemKey = ItemKeyMapper.normalize(itemKey);
+        this.nonItem = IngredientKey.isIngredientKey(this.itemKey);
         this.amountEditable = amountEditable;
         this.rateMode = rateMode;
         this.callback = callback;
@@ -84,7 +87,7 @@ public final class AmountScreen extends Screen implements JeiPanelScreen {
             addRenderableWidget(amountBox);
             if (rateMode) {
                 unitButton = addRenderableWidget(Button.builder(
-                                Component.literal(rateUnit.label()), b -> cycleRateUnit())
+                                Component.literal(rateLabel()), b -> cycleRateUnit())
                         .bounds(panelX + 116, panelY + 89, 60, 20).build());
             }
         }
@@ -140,7 +143,11 @@ public final class AmountScreen extends Screen implements JeiPanelScreen {
         UnitPreferences.setRateUnit(rateUnit);
         amount = rateUnit.fromPerTick(perTick);
         amountBox.setValue(TimeExpression.formatEditableNumber(amount));
-        unitButton.setMessage(Component.literal(rateUnit.label()));
+        unitButton.setMessage(Component.literal(rateLabel()));
+    }
+
+    private String rateLabel() {
+        return (nonItem ? "B" : "") + rateUnit.label();
     }
 
     private void adjust(double delta) {
@@ -215,8 +222,12 @@ public final class AmountScreen extends Screen implements JeiPanelScreen {
         }
 
         if (amountEditable) {
-            graphics.drawString(font, rateMode ? "速率" : "用量",
-                    panelX + 8, panelY + 79, AeStyle.MUTED, false);
+            String amountLabel = rateMode ? "速率" : "用量";
+            if (nonItem) {
+                amountLabel += "（B）";
+            }
+            graphics.drawString(font, amountLabel, panelX + 8, panelY + 79,
+                    AeStyle.MUTED, false);
         }
 
         if (!status.isEmpty()) {
