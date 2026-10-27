@@ -12,8 +12,8 @@
 | 项 | 结果 |
 |---|---|
 | `gradlew test` | **83 tests, 0 failures** |
-| 产物 | `recipebalancer-0.1.0-1.21.1.jar` **2,388,420 B** |
-| 实机部署 | 已复制到 `1.21.1-NeoForge/mods/`（15:19:43） |
+| 产物 | `recipebalancer-0.1.0-1.21.1.jar` **2,388,425 B** |
+| 实机部署 | 已复制到 `1.21.1-NeoForge/mods/`（15:19:02） |
 | 未验证 | 图标方向/动态图标/实机 FPS |
 
 ### 实现

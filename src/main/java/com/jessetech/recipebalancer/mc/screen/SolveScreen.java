@@ -80,7 +80,7 @@ public final class SolveScreen extends Screen implements JeiPanelScreen {
         graph = success && result != null
                 ? new SolveGraphView(result, recipes, targets, inventoryEnabled) : null;
 
-        addRenderableWidget(Button.builder(Lang.c("返回编码"), b -> onClose())
+        addRenderableWidget(Button.builder(Lang.c("返回编码"), b -> minecraft.setScreen(parent))
                 .bounds(panelX + 8, panelY + panelH - 26, 100, 20).build());
         if (graph != null) {
             toggleButton = addRenderableWidget(Button.builder(toggleLabel(), b -> toggleView())
