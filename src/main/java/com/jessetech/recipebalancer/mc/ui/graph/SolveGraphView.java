@@ -101,6 +101,10 @@ public final class SolveGraphView {
         final int recipeId;
         final Category category;
         final long machines;
+        String displayName;
+        String initial;
+        String label;
+        boolean hasIcon;
         int index;
         double x;
         double y;
@@ -120,12 +124,15 @@ public final class SolveGraphView {
         final GNode to;
         final double flow;
         final String material;
+        final String label;
+        boolean reciprocal;
 
         private GEdge(GNode from, GNode to, double flow, String material) {
             this.from = from;
             this.to = to;
             this.flow = flow;
             this.material = material;
+            this.label = TimeExpression.formatCompact(flow) + "/t";
         }
     }
 
@@ -190,6 +197,9 @@ public final class SolveGraphView {
             Recipe recipe = recipes.get(index);
             GNode node = new GNode(true, recipe.equType(), index, null,
                     (long) Math.ceil(rate * recipe.time()));
+            node.displayName = ItemKeyMapper.displayName(recipe.equType());
+            node.initial = node.key.isBlank() ? "?" : shortInitial(node.displayName);
+            node.hasIcon = !node.key.isBlank() && !ItemKeyMapper.stack(node.key).isEmpty();
             recipeNodes.put(index, node);
             nodes.add(node);
         }
@@ -213,6 +223,9 @@ public final class SolveGraphView {
         for (String target : targets.keySet()) {
             material(target, external, byproducts, startup);
         }
+        for (GEdge edge : edges) {
+            edge.reciprocal = hasReverse(edge);
+        }
     }
 
     private GNode material(String key, Set<String> external, Set<String> byproducts,
@@ -231,6 +244,10 @@ public final class SolveGraphView {
                 category = Category.INTERMEDIATE;
             }
             GNode node = new GNode(false, key, -1, category, 0);
+            node.displayName = ItemKeyMapper.displayName(key);
+            node.initial = shortInitial(node.displayName);
+            node.hasIcon = !ItemKeyMapper.stack(key).isEmpty()
+                    || IngredientKey.isIngredientKey(key);
             nodes.add(node);
             return node;
         });
@@ -1481,7 +1498,7 @@ public final class SolveGraphView {
      * 弧线按节点 index 选定统一的基准方向，使两条反向边分别弯向两侧。
      */
     private EdgeCurve curveFor(GEdge edge) {
-        if (edge.from == edge.to || !hasReverse(edge)) {
+        if (edge.from == edge.to || !edge.reciprocal) {
             return null;
         }
         double sx = edge.from.x;
@@ -1550,7 +1567,7 @@ public final class SolveGraphView {
             labelCenterY = (y1 + y2) / 2 + ux * 4;
         }
 
-        String label = TimeExpression.formatCompact(edge.flow) + "/t";
+        String label = edge.label;
         int width = font.width(label);
         graphics.drawString(font, label,
                 (int) (labelCenterX - width / 2.0),
@@ -1614,18 +1631,15 @@ public final class SolveGraphView {
                 x + RECIPE / 2 - font.width(count) / 2,
                 y + RECIPE - 10, 0xFF3A2A10, false);
 
-        if (showIcons && !node.key.isBlank() && !ItemKeyMapper.stack(node.key).isEmpty()) {
+        if (showIcons && node.hasIcon) {
             ItemKeyMapper.renderIcon(graphics, font, node.key, x + 12, y + 12, null);
         } else {
-            String initial = node.key.isBlank() ? "?" : shortInitial(
-                    ItemKeyMapper.displayName(node.key));
+            String initial = node.initial;
             graphics.drawString(font, initial, x + RECIPE / 2 - font.width(initial) / 2,
                     y + 16, 0xFF3A2A10, false);
         }
         if (showLabels) {
-            String name = node.key.isBlank() ? Lang.t("配方")
-                    : ItemKeyMapper.displayName(node.key);
-            drawCenteredLabel(graphics, font, name, node.x, node.y + RECIPE / 2.0 + 3);
+            drawCenteredLabel(graphics, font, node, node.x, node.y + RECIPE / 2.0 + 3);
         }
     }
 
@@ -1643,27 +1657,26 @@ public final class SolveGraphView {
         roundedFill(graphics, x - 1, y - 1, MATERIAL + 2, MATERIAL + 2, 5, BORDER);
         roundedFill(graphics, x, y, MATERIAL, MATERIAL, 4, color);
 
-        boolean hasIcon = showIcons && (!ItemKeyMapper.stack(node.key).isEmpty()
-                || IngredientKey.isIngredientKey(node.key));
-        if (hasIcon) {
+        if (showIcons && node.hasIcon) {
             ItemKeyMapper.renderIcon(graphics, font, node.key, x + 2, y + 2, null);
         } else {
-            String initial = shortInitial(ItemKeyMapper.displayName(node.key));
+            String initial = node.initial;
             graphics.drawString(font, initial,
                     x + MATERIAL / 2 - font.width(initial) / 2, y + 7,
                     0xFF202020, false);
         }
         if (showLabels) {
-            drawCenteredLabel(graphics, font, ItemKeyMapper.displayName(node.key),
-                    node.x, node.y + MATERIAL / 2.0 + 3);
+            drawCenteredLabel(graphics, font, node, node.x, node.y + MATERIAL / 2.0 + 3);
         }
     }
 
-    private void drawCenteredLabel(GuiGraphics graphics, Font font, String text,
+    private void drawCenteredLabel(GuiGraphics graphics, Font font, GNode node,
                                    double centerX, double y) {
-        String label = font.plainSubstrByWidth(text, 84);
-        graphics.drawString(font, label,
-                (int) Math.round(centerX - font.width(label) / 2.0),
+        if (node.label == null) {
+            node.label = font.plainSubstrByWidth(node.displayName, 84);
+        }
+        graphics.drawString(font, node.label,
+                (int) Math.round(centerX - font.width(node.label) / 2.0),
                 (int) Math.round(y), AeStyle.TEXT, false);
     }
 
@@ -1677,13 +1690,22 @@ public final class SolveGraphView {
 
     private static void roundedFill(GuiGraphics graphics, int x, int y,
                                     int width, int height, int radius, int color) {
-        for (int row = 0; row < height; row++) {
-            int inset = 0;
-            if (row < radius) {
-                inset = radius - row;
-            } else if (row >= height - radius) {
-                inset = row - (height - radius) + 1;
-            }
+        if (radius <= 0 || radius * 2 >= height) {
+            graphics.fill(x, y, x + width, y + height, color);
+            return;
+        }
+        // 中间整段一次 fill；上下只画圆角行，视觉结果与原逐行绘制一致。
+        int bodyTop = y + radius;
+        int bodyBottom = y + height - radius;
+        if (bodyBottom > bodyTop) {
+            graphics.fill(x, bodyTop, x + width, bodyBottom, color);
+        }
+        for (int row = 0; row < radius; row++) {
+            int inset = radius - row;
+            graphics.fill(x + inset, y + row, x + width - inset, y + row + 1, color);
+        }
+        for (int row = height - radius; row < height; row++) {
+            int inset = row - (height - radius) + 1;
             graphics.fill(x + inset, y + row, x + width - inset, y + row + 1, color);
         }
     }
