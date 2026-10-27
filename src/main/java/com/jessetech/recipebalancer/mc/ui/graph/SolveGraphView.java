@@ -554,31 +554,22 @@ public final class SolveGraphView {
     }
 
     /**
-     * 全局模拟退火：单节点随机移动，按整张图的能量接受/回退。
-     * 交叉惩罚远高于边长，因此优先消除交叉；温度降低后逐步收敛。
+     * 保留圆盘视觉，但把全局退火改成“单节点增量能量”：
+     * 移动一个节点只重算与它相关的边/节点，不再每次扫描整张图。
      */
     private void optimizeGlobalCrossings(double targetRadius) {
         if (nodes.size() < 4 || edges.size() < 2 || edges.size() > 240) {
             return;
         }
-        double current = totalLayoutCost(targetRadius);
-        double best = current;
-        double[] bestX = new double[nodes.size()];
-        double[] bestY = new double[nodes.size()];
-        for (int i = 0; i < nodes.size(); i++) {
-            bestX[i] = nodes.get(i).x;
-            bestY[i] = nodes.get(i).y;
-        }
-
         Random random = new Random(0x0C0FFEEL);
-        int iterations = edges.size() <= 120 ? 1800 : 900;
-        double temperature = 3000.0;
+        int iterations = edges.size() <= 120 ? 900 : 450;
+        double temperature = 2500.0;
         for (int iteration = 0; iteration < iterations; iteration++) {
             GNode node = nodes.get(random.nextInt(nodes.size()));
             double oldX = node.x;
             double oldY = node.y;
+            double before = localNodeCost(node, targetRadius);
             if (random.nextDouble() < 0.12) {
-                // 少量全局重定位，避免一直困在同一个局部极小值。
                 double angle = random.nextDouble() * Math.PI * 2.0;
                 double radius = targetRadius * Math.sqrt(random.nextDouble());
                 node.x = Math.cos(angle) * radius;
@@ -589,30 +580,81 @@ public final class SolveGraphView {
                 node.x += Math.cos(angle) * radius;
                 node.y += Math.sin(angle) * radius;
             }
-            double next = totalLayoutCost(targetRadius);
-            double delta = next - current;
+            double after = localNodeCost(node, targetRadius);
+            double delta = after - before;
             boolean accept = delta <= 0.0
                     || random.nextDouble() < Math.exp(-delta / temperature);
-            if (accept) {
-                current = next;
-                if (current < best - 1e-6) {
-                    best = current;
-                    for (int i = 0; i < nodes.size(); i++) {
-                        bestX[i] = nodes.get(i).x;
-                        bestY[i] = nodes.get(i).y;
-                    }
-                }
-            } else {
+            if (!accept) {
                 node.x = oldX;
                 node.y = oldY;
             }
-            temperature = Math.max(2.0, temperature * 0.997);
+            temperature = Math.max(2.0, temperature * 0.994);
         }
-        for (int i = 0; i < nodes.size(); i++) {
-            nodes.get(i).x = bestX[i];
-            nodes.get(i).y = bestY[i];
+    }
+
+    /** 只计算与指定节点位置相关的能量，避免全局 O(E²) 重算。 */
+    private double localNodeCost(GNode node, double targetRadius) {
+        double cost = 0.0;
+        double dist = Math.max(1.0, Math.hypot(node.x, node.y));
+        cost += dist * dist * 0.0012;
+        if (dist > targetRadius) {
+            cost += (dist - targetRadius) * (dist - targetRadius) * 0.02;
         }
-        refineBySwaps(targetRadius);
+        for (GNode other : nodes) {
+            if (other == node) {
+                continue;
+            }
+            double gap = minDistance(node, other)
+                    - Math.hypot(node.x - other.x, node.y - other.y);
+            if (gap > 0) {
+                cost += gap * gap * 12.0;
+            }
+        }
+        for (GEdge edge : edges) {
+            boolean incident = edge.from == node || edge.to == node;
+            if (!incident) {
+                if (pointSegmentDistance(node.x, node.y,
+                        edge.from.x, edge.from.y, edge.to.x, edge.to.y) < 14.0) {
+                    cost += 1500.0;
+                }
+                continue;
+            }
+
+            double length = Math.hypot(edge.to.x - edge.from.x,
+                    edge.to.y - edge.from.y);
+            double lengthGap = length - edgeNaturalLength;
+            cost += lengthGap * lengthGap * 0.001;
+
+            for (GNode check : nodes) {
+                if (check == edge.from || check == edge.to) {
+                    continue;
+                }
+                if (pointSegmentDistance(check.x, check.y,
+                        edge.from.x, edge.from.y, edge.to.x, edge.to.y) < 14.0) {
+                    cost += 1500.0;
+                }
+            }
+
+            for (GEdge other : edges) {
+                if (other == edge || other.from == edge.from || other.from == edge.to
+                        || other.to == edge.from || other.to == edge.to) {
+                    continue;
+                }
+                if (segmentsIntersect(edge.from.x, edge.from.y,
+                        edge.to.x, edge.to.y, other.from.x, other.from.y,
+                        other.to.x, other.to.y)) {
+                    cost += 6000.0;
+                } else {
+                    double gap = segmentDistance(edge.from.x, edge.from.y,
+                            edge.to.x, edge.to.y, other.from.x, other.from.y,
+                            other.to.x, other.to.y);
+                    if (gap < 14.0) {
+                        cost += (14.0 - gap) * 180.0;
+                    }
+                }
+            }
+        }
+        return cost;
     }
 
     /**
