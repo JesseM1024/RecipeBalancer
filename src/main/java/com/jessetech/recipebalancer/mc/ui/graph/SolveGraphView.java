@@ -15,6 +15,7 @@ import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.item.ItemStack;
 import org.joml.Matrix4f;
 
 import java.util.ArrayList;
@@ -104,6 +105,7 @@ public final class SolveGraphView {
         String displayName;
         String initial;
         String label;
+        ItemStack iconStack;
         boolean hasIcon;
         int index;
         double x;
@@ -199,7 +201,8 @@ public final class SolveGraphView {
                     (long) Math.ceil(rate * recipe.time()));
             node.displayName = ItemKeyMapper.displayName(recipe.equType());
             node.initial = node.key.isBlank() ? "?" : shortInitial(node.displayName);
-            node.hasIcon = !node.key.isBlank() && !ItemKeyMapper.stack(node.key).isEmpty();
+            node.iconStack = ItemKeyMapper.stack(node.key);
+            node.hasIcon = !node.iconStack.isEmpty();
             recipeNodes.put(index, node);
             nodes.add(node);
         }
@@ -246,7 +249,8 @@ public final class SolveGraphView {
             GNode node = new GNode(false, key, -1, category, 0);
             node.displayName = ItemKeyMapper.displayName(key);
             node.initial = shortInitial(node.displayName);
-            node.hasIcon = !ItemKeyMapper.stack(key).isEmpty()
+            node.iconStack = ItemKeyMapper.stack(key);
+            node.hasIcon = !node.iconStack.isEmpty()
                     || IngredientKey.isIngredientKey(key);
             nodes.add(node);
             return node;
@@ -1048,6 +1052,10 @@ public final class SolveGraphView {
         return best;
     }
 
+    public void close() {
+        ItemIconTextureCache.INSTANCE.close();
+    }
+
     private boolean connected(GNode a, GNode b) {
         for (GEdge edge : edges) {
             if ((edge.from == a && edge.to == b) || (edge.from == b && edge.to == a)) {
@@ -1159,6 +1167,16 @@ public final class SolveGraphView {
         boolean showNodeLabels = zoom >= 0.26;
         boolean showEdgeLabels = zoom >= 0.33;
         boolean showIcons = zoom >= 0.22;
+
+        if (showIcons) {
+            // 在开始画图前一次性准备静态图标，避免节点循环里切换 FBO。
+            for (GNode node : nodes) {
+                if (node.iconStack != null && !node.iconStack.isEmpty()) {
+                    ItemIconTextureCache.INSTANCE.prepare(
+                            graphics, node.key, node.iconStack);
+                }
+            }
+        }
 
         graphics.pose().pushPose();
         graphics.pose().translate(areaX + panX, areaY + panY, 0);
@@ -1632,7 +1650,12 @@ public final class SolveGraphView {
                 y + RECIPE - 10, 0xFF3A2A10, false);
 
         if (showIcons && node.hasIcon) {
-            ItemKeyMapper.renderIcon(graphics, font, node.key, x + 12, y + 12, null);
+            boolean cached = node.iconStack != null
+                    && ItemIconTextureCache.INSTANCE.draw(
+                    graphics, node.key, x + 12, y + 12, 16);
+            if (!cached) {
+                ItemKeyMapper.renderIcon(graphics, font, node.key, x + 12, y + 12, null);
+            }
         } else {
             String initial = node.initial;
             graphics.drawString(font, initial, x + RECIPE / 2 - font.width(initial) / 2,
@@ -1658,7 +1681,12 @@ public final class SolveGraphView {
         roundedFill(graphics, x, y, MATERIAL, MATERIAL, 4, color);
 
         if (showIcons && node.hasIcon) {
-            ItemKeyMapper.renderIcon(graphics, font, node.key, x + 2, y + 2, null);
+            boolean cached = node.iconStack != null
+                    && ItemIconTextureCache.INSTANCE.draw(
+                    graphics, node.key, x + 2, y + 2, 16);
+            if (!cached) {
+                ItemKeyMapper.renderIcon(graphics, font, node.key, x + 2, y + 2, null);
+            }
         } else {
             String initial = node.initial;
             graphics.drawString(font, initial,
