@@ -1158,7 +1158,8 @@ public final class SolveGraphView {
         // LOD 阈值放低：只有缩得非常小才省略元素。
         boolean showNodeLabels = zoom >= 0.26;
         boolean showEdgeLabels = zoom >= 0.33;
-        boolean showIcons = zoom >= 0.22;
+        // 最小缩放是 0.25；阈值必须高于它，缩到最小时关闭物品模型渲染。
+        boolean showIcons = zoom > 0.28;
 
         graphics.pose().pushPose();
         graphics.pose().translate(areaX + panX, areaY + panY, 0);
@@ -1179,6 +1180,19 @@ public final class SolveGraphView {
         drawLegend(graphics, font, areaX, areaY);
         graphics.drawString(font, Lang.t("拖动平移 · 滚轮缩放 · 流量单位 /t"),
                 areaX + 4, areaY + areaH - 12, AeStyle.MUTED, false);
+        drawCameraHud(graphics, font, areaX, areaY, areaW);
+    }
+
+    /** 实时显示缩放比例和当前可见世界范围。 */
+    private void drawCameraHud(GuiGraphics graphics, Font font,
+                               int areaX, int areaY, int areaW) {
+        String zoomText = Math.round(zoom * 100.0) + "%";
+        long viewWidth = Math.round(areaW / zoom);
+        long viewHeight = Math.round(lastAreaH / zoom);
+        String text = Lang.t("缩放 %s · 视野 %s×%s",
+                zoomText, viewWidth, viewHeight);
+        int x = areaX + areaW - font.width(text) - 6;
+        graphics.drawString(font, text, x, areaY + 4, AeStyle.MUTED, false);
     }
 
     /** 鼠标悬浮：配方/物质/物流详细 tooltip。 */
