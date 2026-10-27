@@ -219,9 +219,6 @@ public final class SolveScreen extends Screen implements JeiPanelScreen {
 
     @Override
     public void onClose() {
-        if (graph != null) {
-            graph.close();
-        }
         if (minecraft != null) {
             minecraft.setScreen(parent);
         }

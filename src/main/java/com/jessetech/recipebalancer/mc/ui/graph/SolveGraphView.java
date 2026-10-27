@@ -9,18 +9,13 @@ import com.jessetech.recipebalancer.mc.i18n.Lang;
 import com.jessetech.recipebalancer.mc.itemmap.IngredientKey;
 import com.jessetech.recipebalancer.mc.itemmap.ItemKeyMapper;
 import com.jessetech.recipebalancer.mc.ui.AeStyle;
-import com.mojang.blaze3d.platform.GlStateManager;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.ChatFormatting;
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.renderer.RenderType;
-import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
 import org.joml.Matrix4f;
-import org.lwjgl.opengl.GL11;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -86,22 +81,6 @@ public final class SolveGraphView {
     private int lastAreaW;
     private int lastAreaH;
 
-    // 静态帧缓存：图层不变化时只 blit 一张纹理，避免每帧重画全部物品图标。
-    private DynamicTexture cacheTexture;
-    private ResourceLocation cacheTextureId;
-    private int cacheTexW;
-    private int cacheTexH;
-    private int cacheGuiScale;
-    private int cacheAreaX;
-    private int cacheAreaY;
-    private int cacheAreaW;
-    private int cacheAreaH;
-    private double cachePanX;
-    private double cachePanY;
-    private double cacheZoom;
-    private boolean cacheValid;
-    private boolean cacheDisabled;
-
     private final Map<Long, List<GNode>> spatialGrid = new HashMap<>();
     private GNode draggingNode;
     private double dragOffsetX;
@@ -122,10 +101,6 @@ public final class SolveGraphView {
         final int recipeId;
         final Category category;
         final long machines;
-        String displayName;
-        String initial;
-        String label;
-        boolean hasIcon;
         int index;
         double x;
         double y;
@@ -145,15 +120,12 @@ public final class SolveGraphView {
         final GNode to;
         final double flow;
         final String material;
-        final String label;
-        boolean reciprocal;
 
         private GEdge(GNode from, GNode to, double flow, String material) {
             this.from = from;
             this.to = to;
             this.flow = flow;
             this.material = material;
-            this.label = TimeExpression.formatCompact(flow) + "/t";
         }
     }
 
@@ -218,9 +190,6 @@ public final class SolveGraphView {
             Recipe recipe = recipes.get(index);
             GNode node = new GNode(true, recipe.equType(), index, null,
                     (long) Math.ceil(rate * recipe.time()));
-            node.displayName = ItemKeyMapper.displayName(recipe.equType());
-            node.initial = node.key.isBlank() ? "?" : shortInitial(node.displayName);
-            node.hasIcon = !node.key.isBlank() && !ItemKeyMapper.stack(node.key).isEmpty();
             recipeNodes.put(index, node);
             nodes.add(node);
         }
@@ -244,9 +213,6 @@ public final class SolveGraphView {
         for (String target : targets.keySet()) {
             material(target, external, byproducts, startup);
         }
-        for (GEdge edge : edges) {
-            edge.reciprocal = hasReverse(edge);
-        }
     }
 
     private GNode material(String key, Set<String> external, Set<String> byproducts,
@@ -265,10 +231,6 @@ public final class SolveGraphView {
                 category = Category.INTERMEDIATE;
             }
             GNode node = new GNode(false, key, -1, category, 0);
-            node.displayName = ItemKeyMapper.displayName(key);
-            node.initial = shortInitial(node.displayName);
-            node.hasIcon = !ItemKeyMapper.stack(key).isEmpty()
-                    || IngredientKey.isIngredientKey(key);
             nodes.add(node);
             return node;
         });
@@ -1143,125 +1105,6 @@ public final class SolveGraphView {
         panY = mouseY - worldY * zoom;
     }
 
-    private boolean canUseCache(boolean moving, int areaX, int areaY,
-                                int areaW, int areaH) {
-        if (cacheDisabled || !cacheValid || moving || cacheTextureId == null) {
-            return false;
-        }
-        int scale = guiScale();
-        return cacheGuiScale == scale
-                && cacheAreaX == areaX && cacheAreaY == areaY
-                && cacheAreaW == areaW && cacheAreaH == areaH
-                && Math.abs(cachePanX - panX) < 1e-6
-                && Math.abs(cachePanY - panY) < 1e-6
-                && Math.abs(cacheZoom - zoom) < 1e-6;
-    }
-
-    private void drawCachedGraph(GuiGraphics graphics, int areaX, int areaY,
-                                 int areaW, int areaH) {
-        try {
-            // glCopy 的纹理行顺序与 GUI 顶左原点相反，这里反转 V。
-            graphics.blit(cacheTextureId, areaX, areaY, areaW, areaH,
-                    0, cacheTexH, cacheTexW, -cacheTexH, cacheTexW, cacheTexH);
-        } catch (RuntimeException e) {
-            cacheDisabled = true;
-            cacheValid = false;
-        }
-    }
-
-    /**
-     * 把当前已渲染的图区域复制到动态纹理。只在图静止时执行一次，
-     * 后续帧只 blit 纹理，避免每帧重复渲染物品模型。
-     */
-    private void cacheGraphArea(GuiGraphics graphics, int areaX, int areaY,
-                                int areaW, int areaH) {
-        if (cacheDisabled || areaW <= 0 || areaH <= 0) {
-            return;
-        }
-        Minecraft minecraft = Minecraft.getInstance();
-        if (minecraft == null || minecraft.getWindow() == null) {
-            return;
-        }
-        try {
-            int scale = guiScale();
-            int texW = Math.max(1, areaW * scale);
-            int texH = Math.max(1, areaH * scale);
-            ensureCacheTexture(texW, texH);
-            if (cacheTexture == null) {
-                return;
-            }
-            graphics.flush();
-            int fbHeight = minecraft.getWindow().getHeight();
-            int srcX = areaX * scale;
-            int srcY = fbHeight - (areaY + areaH) * scale;
-            if (srcX < 0 || srcY < 0
-                    || srcX + texW > minecraft.getWindow().getWidth()
-                    || srcY + texH > fbHeight) {
-                return;
-            }
-            GlStateManager._bindTexture(cacheTexture.getId());
-            GL11.glCopyTexSubImage2D(GL11.GL_TEXTURE_2D, 0, 0, 0,
-                    srcX, srcY, texW, texH);
-            GlStateManager._bindTexture(0);
-            cacheGuiScale = scale;
-            cacheAreaX = areaX;
-            cacheAreaY = areaY;
-            cacheAreaW = areaW;
-            cacheAreaH = areaH;
-            cachePanX = panX;
-            cachePanY = panY;
-            cacheZoom = zoom;
-            cacheValid = true;
-        } catch (RuntimeException e) {
-            cacheDisabled = true;
-            cacheValid = false;
-        }
-    }
-
-    private void ensureCacheTexture(int texW, int texH) {
-        if (cacheTexture != null && cacheTextureId != null
-                && cacheTexW == texW && cacheTexH == texH) {
-            return;
-        }
-        releaseCacheTexture();
-        Minecraft minecraft = Minecraft.getInstance();
-        if (minecraft == null) {
-            return;
-        }
-        try {
-            DynamicTexture texture = new DynamicTexture(texW, texH, false);
-            texture.setFilter(false, false);
-            cacheTextureId = minecraft.getTextureManager()
-                    .register("recipebalancer_graph_cache", texture);
-            cacheTexture = texture;
-            cacheTexW = texW;
-            cacheTexH = texH;
-        } catch (RuntimeException e) {
-            cacheDisabled = true;
-            cacheTexture = null;
-            cacheTextureId = null;
-        }
-    }
-
-    private int guiScale() {
-        Minecraft minecraft = Minecraft.getInstance();
-        return minecraft == null || minecraft.getWindow() == null
-                ? 1 : Math.max(1, (int) Math.round(minecraft.getWindow().getGuiScale()));
-    }
-
-    public void close() {
-        releaseCacheTexture();
-    }
-
-    private void releaseCacheTexture() {
-        cacheValid = false;
-        cacheTexture = null;
-        if (cacheTextureId != null && Minecraft.getInstance() != null) {
-            Minecraft.getInstance().getTextureManager().release(cacheTextureId);
-            cacheTextureId = null;
-        }
-    }
-
     public void render(GuiGraphics graphics, Font font, int areaX, int areaY,
                        int areaW, int areaH) {
         lastAreaX = areaX;
@@ -1281,15 +1124,6 @@ public final class SolveGraphView {
             settleStep();
             settleSteps--;
         }
-        boolean moving = draggingNode != null || autoSettling || settleSteps > 0;
-        if (canUseCache(moving, areaX, areaY, areaW, areaH)) {
-            drawCachedGraph(graphics, areaX, areaY, areaW, areaH);
-            drawLegend(graphics, font, areaX, areaY);
-            graphics.drawString(font, Lang.t("拖动平移 · 滚轮缩放 · 流量单位 /t"),
-                    areaX + 4, areaY + areaH - 12, AeStyle.MUTED, false);
-            return;
-        }
-
         graphics.fill(areaX, areaY, areaX + areaW, areaY + areaH, 0x10FFFFFF);
         graphics.enableScissor(areaX, areaY, areaX + areaW, areaY + areaH);
 
@@ -1324,10 +1158,6 @@ public final class SolveGraphView {
         graphics.disableScissor();
         // 节点图标走独立缓冲；先 flush 再画图例，避免图标盖住图例。
         graphics.flush();
-
-        if (!moving) {
-            cacheGraphArea(graphics, areaX, areaY, areaW, areaH);
-        }
 
         drawLegend(graphics, font, areaX, areaY);
         graphics.drawString(font, Lang.t("拖动平移 · 滚轮缩放 · 流量单位 /t"),
@@ -1651,7 +1481,7 @@ public final class SolveGraphView {
      * 弧线按节点 index 选定统一的基准方向，使两条反向边分别弯向两侧。
      */
     private EdgeCurve curveFor(GEdge edge) {
-        if (edge.from == edge.to || !edge.reciprocal) {
+        if (edge.from == edge.to || !hasReverse(edge)) {
             return null;
         }
         double sx = edge.from.x;
@@ -1720,7 +1550,7 @@ public final class SolveGraphView {
             labelCenterY = (y1 + y2) / 2 + ux * 4;
         }
 
-        String label = edge.label;
+        String label = TimeExpression.formatCompact(edge.flow) + "/t";
         int width = font.width(label);
         graphics.drawString(font, label,
                 (int) (labelCenterX - width / 2.0),
@@ -1784,15 +1614,18 @@ public final class SolveGraphView {
                 x + RECIPE / 2 - font.width(count) / 2,
                 y + RECIPE - 10, 0xFF3A2A10, false);
 
-        if (showIcons && node.hasIcon) {
+        if (showIcons && !node.key.isBlank() && !ItemKeyMapper.stack(node.key).isEmpty()) {
             ItemKeyMapper.renderIcon(graphics, font, node.key, x + 12, y + 12, null);
         } else {
-            String initial = node.initial;
+            String initial = node.key.isBlank() ? "?" : shortInitial(
+                    ItemKeyMapper.displayName(node.key));
             graphics.drawString(font, initial, x + RECIPE / 2 - font.width(initial) / 2,
                     y + 16, 0xFF3A2A10, false);
         }
         if (showLabels) {
-            drawCenteredLabel(graphics, font, node, node.x, node.y + RECIPE / 2.0 + 3);
+            String name = node.key.isBlank() ? Lang.t("配方")
+                    : ItemKeyMapper.displayName(node.key);
+            drawCenteredLabel(graphics, font, name, node.x, node.y + RECIPE / 2.0 + 3);
         }
     }
 
@@ -1810,26 +1643,27 @@ public final class SolveGraphView {
         roundedFill(graphics, x - 1, y - 1, MATERIAL + 2, MATERIAL + 2, 5, BORDER);
         roundedFill(graphics, x, y, MATERIAL, MATERIAL, 4, color);
 
-        if (showIcons && node.hasIcon) {
+        boolean hasIcon = showIcons && (!ItemKeyMapper.stack(node.key).isEmpty()
+                || IngredientKey.isIngredientKey(node.key));
+        if (hasIcon) {
             ItemKeyMapper.renderIcon(graphics, font, node.key, x + 2, y + 2, null);
         } else {
-            String initial = node.initial;
+            String initial = shortInitial(ItemKeyMapper.displayName(node.key));
             graphics.drawString(font, initial,
                     x + MATERIAL / 2 - font.width(initial) / 2, y + 7,
                     0xFF202020, false);
         }
         if (showLabels) {
-            drawCenteredLabel(graphics, font, node, node.x, node.y + MATERIAL / 2.0 + 3);
+            drawCenteredLabel(graphics, font, ItemKeyMapper.displayName(node.key),
+                    node.x, node.y + MATERIAL / 2.0 + 3);
         }
     }
 
-    private void drawCenteredLabel(GuiGraphics graphics, Font font, GNode node,
+    private void drawCenteredLabel(GuiGraphics graphics, Font font, String text,
                                    double centerX, double y) {
-        if (node.label == null) {
-            node.label = font.plainSubstrByWidth(node.displayName, 84);
-        }
-        graphics.drawString(font, node.label,
-                (int) Math.round(centerX - font.width(node.label) / 2.0),
+        String label = font.plainSubstrByWidth(text, 84);
+        graphics.drawString(font, label,
+                (int) Math.round(centerX - font.width(label) / 2.0),
                 (int) Math.round(y), AeStyle.TEXT, false);
     }
 
@@ -1843,22 +1677,13 @@ public final class SolveGraphView {
 
     private static void roundedFill(GuiGraphics graphics, int x, int y,
                                     int width, int height, int radius, int color) {
-        if (radius <= 0 || radius * 2 >= height) {
-            graphics.fill(x, y, x + width, y + height, color);
-            return;
-        }
-        // 中间整段一次 fill；上下只画圆角行，视觉结果与原逐行绘制一致。
-        int bodyTop = y + radius;
-        int bodyBottom = y + height - radius;
-        if (bodyBottom > bodyTop) {
-            graphics.fill(x, bodyTop, x + width, bodyBottom, color);
-        }
-        for (int row = 0; row < radius; row++) {
-            int inset = radius - row;
-            graphics.fill(x + inset, y + row, x + width - inset, y + row + 1, color);
-        }
-        for (int row = height - radius; row < height; row++) {
-            int inset = row - (height - radius) + 1;
+        for (int row = 0; row < height; row++) {
+            int inset = 0;
+            if (row < radius) {
+                inset = radius - row;
+            } else if (row >= height - radius) {
+                inset = row - (height - radius) + 1;
+            }
             graphics.fill(x + inset, y + row, x + width - inset, y + row + 1, color);
         }
     }
