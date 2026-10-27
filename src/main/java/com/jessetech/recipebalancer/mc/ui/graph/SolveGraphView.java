@@ -32,8 +32,7 @@ import java.util.Set;
  *   <li>橙色方形 = 配方（设备图标/首字母）；</li>
  *   <li>绿/蓝/红/黄/紫圆角矩形 = 外部输入/中间产物/启动库存/副产物/最终目标；</li>
  *   <li>箭头按每 tick 物流绘制，线宽随流量变化；</li>
- *   <li>分层布局：目标/汇点锚定，材料与配方按依赖分列；</li>
- *   <li>支持拖动平移和滚轮缩放。</li>
+ *   <li>力导向布局，支持拖动平移和滚轮缩放。</li>
  * </ul>
  */
 public final class SolveGraphView {
@@ -244,10 +243,88 @@ public final class SolveGraphView {
         for (int i = 0; i < nodes.size(); i++) {
             nodes.get(i).index = i;
         }
-        // 分层布局是静态的，不再跑启动物理求解，避免打开流程图时卡顿。
-        autoSettlePending = false;
-        autoSettling = false;
-        layeredLayout();
+        Random random = new Random(0x5EEDL);
+        // 圆盘最大半径；只作为外边界，不再作为“必须贴近”的圆环。
+        double targetRadius = Math.max(95, 42 + Math.sqrt(nodes.size()) * 30.0);
+        for (int i = 0; i < nodes.size(); i++) {
+            // 均匀圆盘采样：sqrt(u) 保证面积均匀，中心也会有节点。
+            double angle = 2 * Math.PI * random.nextDouble();
+            double r = targetRadius * Math.sqrt(random.nextDouble());
+            nodes.get(i).x = Math.cos(angle) * r;
+            nodes.get(i).y = Math.sin(angle) * r;
+        }
+
+        // 势能最小化：
+        // 1) 节点斥力 + 最短距离约束；2) 边弹簧（固定自然长度）；
+        // 3) 向心/圆环势能；4) 碰撞松弛；5) 交叉/穿节点的局部能量搜索。
+        double k = 52.0;
+        double restLength = edgeNaturalLength;
+        int iterations = nodes.size() > 180 ? 140 : 260;
+        for (int iteration = 0; iteration < iterations; iteration++) {
+            double temperature = Math.max(1.0, k * (1.0 - iteration / (double) iterations));
+            double[] dx = new double[nodes.size()];
+            double[] dy = new double[nodes.size()];
+
+            for (int i = 0; i < nodes.size(); i++) {
+                GNode a = nodes.get(i);
+                for (int j = i + 1; j < nodes.size(); j++) {
+                    GNode b = nodes.get(j);
+                    double vx = a.x - b.x;
+                    double vy = a.y - b.y;
+                    double dist = Math.max(1.0, Math.hypot(vx, vy));
+                    double minDist = minDistance(a, b);
+                    double force = k * k / dist;
+                    if (dist < minDist) {
+                        force += (minDist - dist) * 5.0;
+                    }
+                    double ux = vx / dist;
+                    double uy = vy / dist;
+                    dx[i] += ux * force;
+                    dy[i] += uy * force;
+                    dx[j] -= ux * force;
+                    dy[j] -= uy * force;
+                }
+            }
+
+            for (GEdge edge : edges) {
+                double vx = edge.from.x - edge.to.x;
+                double vy = edge.from.y - edge.to.y;
+                double dist = Math.max(1.0, Math.hypot(vx, vy));
+                double force = (dist - restLength) * 0.065;
+                double ux = vx / dist;
+                double uy = vy / dist;
+                dx[edge.from.index] -= ux * force;
+                dy[edge.from.index] -= uy * force;
+                dx[edge.to.index] += ux * force;
+                dy[edge.to.index] += uy * force;
+            }
+
+            for (int i = 0; i < nodes.size(); i++) {
+                GNode node = nodes.get(i);
+                double dist = Math.max(1.0, Math.hypot(node.x, node.y));
+                // 向心势能保持圆盘填充；碰撞力负责把内部节点推开。
+                dx[i] -= node.x / dist * dist * 0.045;
+                dy[i] -= node.y / dist * dist * 0.045;
+                // 只在超出最大半径时施加向内边界力；内部不再有径向目标。
+                if (dist > targetRadius) {
+                    double over = (dist - targetRadius) * 0.14;
+                    dx[i] -= node.x / dist * over;
+                    dy[i] -= node.y / dist * over;
+                }
+                double length = Math.max(1.0, Math.hypot(dx[i], dy[i]));
+                double step = Math.min(length, temperature);
+                node.x += dx[i] / length * step;
+                node.y += dy[i] / length * step;
+            }
+        }
+
+        collisionRelax();
+        minimizeCrossings(targetRadius);
+        collisionRelax();
+        // pyvis 的 forceAtlas2 只负责把图铺开，不能保证边不交叉。
+        // 这里再做一次全局交叉能量退火，允许节点跳出单点局部最优。
+        optimizeGlobalCrossings(targetRadius);
+        collisionRelax();
 
         minX = Double.MAX_VALUE;
         minY = Double.MAX_VALUE;
@@ -263,196 +340,6 @@ public final class SolveGraphView {
         contentW = Math.max(1.0, maxX - minX);
         contentH = Math.max(1.0, maxY - minY);
         cameraReady = false;
-    }
-
-    /**
-     * 快速分层布局：
-     * 1. 从目标/汇点反向 BFS，材料与配方按依赖深度分列；
-     * 2. 每列用重心法（barycenter）左右扫描，减少相邻列间交叉；
-     * 3. 按层坐标直接落位，O((V+E) log V) 级别，不再做全局退火。
-     */
-    private void layeredLayout() {
-        int n = nodes.size();
-        List<List<GEdge>> incoming = new ArrayList<>(n);
-        List<List<GEdge>> outgoing = new ArrayList<>(n);
-        boolean[] hasOutgoing = new boolean[n];
-        for (int i = 0; i < n; i++) {
-            incoming.add(new ArrayList<>());
-            outgoing.add(new ArrayList<>());
-        }
-        for (GEdge edge : edges) {
-            incoming.get(edge.to.index).add(edge);
-            outgoing.get(edge.from.index).add(edge);
-            hasOutgoing[edge.from.index] = true;
-        }
-
-        // 反向 BFS：以目标产物和最终汇点为右端锚点。
-        int[] depth = new int[n];
-        java.util.Arrays.fill(depth, -1);
-        java.util.ArrayDeque<GNode> queue = new java.util.ArrayDeque<>();
-        for (GNode node : nodes) {
-            if (node.category == Category.TARGET || !hasOutgoing[node.index]) {
-                if (depth[node.index] < 0) {
-                    depth[node.index] = 0;
-                    queue.add(node);
-                }
-            }
-        }
-        if (queue.isEmpty()) {
-            GNode seed = targets.isEmpty() ? nodes.get(0)
-                    : materials.getOrDefault(targets.keySet().iterator().next(), nodes.get(0));
-            depth[seed.index] = 0;
-            queue.add(seed);
-        }
-        while (!queue.isEmpty()) {
-            GNode current = queue.removeFirst();
-            int nextDepth = depth[current.index] + 1;
-            for (GEdge edge : incoming.get(current.index)) {
-                GNode previous = edge.from;
-                if (depth[previous.index] < 0) {
-                    depth[previous.index] = nextDepth;
-                    queue.addLast(previous);
-                }
-            }
-        }
-        // 闭合环等无法从汇点到达的节点，给一个兜底深度。
-        for (GNode node : nodes) {
-            if (depth[node.index] >= 0) {
-                continue;
-            }
-            depth[node.index] = 0;
-            queue.addLast(node);
-            while (!queue.isEmpty()) {
-                GNode current = queue.removeFirst();
-                int nextDepth = depth[current.index] + 1;
-                for (GEdge edge : incoming.get(current.index)) {
-                    GNode previous = edge.from;
-                    if (depth[previous.index] < 0) {
-                        depth[previous.index] = nextDepth;
-                        queue.addLast(previous);
-                    }
-                }
-            }
-        }
-
-        int maxDepth = 0;
-        for (int value : depth) {
-            maxDepth = Math.max(maxDepth, value);
-        }
-        int layerCount = maxDepth + 1;
-        List<List<GNode>> layers = new ArrayList<>(layerCount);
-        for (int i = 0; i < layerCount; i++) {
-            layers.add(new ArrayList<>());
-        }
-        int[] layerOf = new int[n];
-        for (GNode node : nodes) {
-            int layer = maxDepth - depth[node.index];
-            layerOf[node.index] = layer;
-            layers.get(layer).add(node);
-        }
-        for (List<GNode> layer : layers) {
-            layer.sort(java.util.Comparator.comparingInt(node -> node.index));
-        }
-
-        int[] pos = new int[n];
-        updatePositions(layers, pos);
-        int bestCrossings = countAdjacentCrossings(layers, layerOf, pos, outgoing);
-        int[] bestPos = pos.clone();
-        for (int sweep = 0; sweep < 8; sweep++) {
-            boolean leftToRight = sweep % 2 == 0;
-            for (int layer = 0; layer < layers.size(); layer++) {
-                if (leftToRight && layer == 0) {
-                    continue;
-                }
-                if (!leftToRight && layer == layers.size() - 1) {
-                    continue;
-                }
-                List<GNode> current = layers.get(layer);
-                Map<GNode, Double> key = new HashMap<>();
-                for (GNode node : current) {
-                    double sum = 0.0;
-                    int count = 0;
-                    if (leftToRight) {
-                        for (GEdge edge : incoming.get(node.index)) {
-                            if (layerOf[edge.from.index] == layer - 1) {
-                                sum += pos[edge.from.index];
-                                count++;
-                            }
-                        }
-                    } else {
-                        for (GEdge edge : outgoing.get(node.index)) {
-                            if (layerOf[edge.to.index] == layer + 1) {
-                                sum += pos[edge.to.index];
-                                count++;
-                            }
-                        }
-                    }
-                    key.put(node, count == 0 ? pos[node.index] : sum / count);
-                }
-                current.sort((a, b) -> {
-                    int byKey = Double.compare(key.get(a), key.get(b));
-                    return byKey != 0 ? byKey : Integer.compare(a.index, b.index);
-                });
-                updatePositions(layers, pos);
-            }
-            int crossings = countAdjacentCrossings(layers, layerOf, pos, outgoing);
-            if (crossings < bestCrossings) {
-                bestCrossings = crossings;
-                bestPos = pos.clone();
-            }
-        }
-        final int[] finalBestPos = bestPos;
-        for (List<GNode> layer : layers) {
-            layer.sort(java.util.Comparator.comparingInt(node -> finalBestPos[node.index]));
-        }
-        updatePositions(layers, pos);
-
-        double stepY = Math.max(76.0, nodeGap + 44.0);
-        double stepX = Math.max(120.0, edgeNaturalLength + nodeGap * 0.5);
-        double x0 = -(layers.size() - 1) * stepX / 2.0;
-        for (int layer = 0; layer < layers.size(); layer++) {
-            List<GNode> current = layers.get(layer);
-            double y0 = -(current.size() - 1) * stepY / 2.0;
-            for (int i = 0; i < current.size(); i++) {
-                GNode node = current.get(i);
-                node.x = x0 + layer * stepX;
-                node.y = y0 + i * stepY;
-            }
-        }
-    }
-
-    private static void updatePositions(List<List<GNode>> layers, int[] pos) {
-        for (List<GNode> layer : layers) {
-            for (int i = 0; i < layer.size(); i++) {
-                pos[layer.get(i).index] = i;
-            }
-        }
-    }
-
-    /** 只统计相邻层之间的边交叉；长边由层间距自然拉开。 */
-    private static int countAdjacentCrossings(List<List<GNode>> layers, int[] layerOf,
-                                              int[] pos, List<List<GEdge>> outgoing) {
-        int crossings = 0;
-        for (int layer = 0; layer + 1 < layers.size(); layer++) {
-            List<int[]> links = new ArrayList<>();
-            for (GNode node : layers.get(layer)) {
-                for (GEdge edge : outgoing.get(node.index)) {
-                    if (layerOf[edge.to.index] == layer + 1) {
-                        links.add(new int[]{pos[edge.from.index], pos[edge.to.index]});
-                    }
-                }
-            }
-            for (int i = 0; i < links.size(); i++) {
-                for (int j = i + 1; j < links.size(); j++) {
-                    int[] a = links.get(i);
-                    int[] b = links.get(j);
-                    if ((a[0] - b[0]) * (a[1] - b[1]) < 0) {
-                        crossings++;
-                    }
-                }
-            }
-        }
-        return crossings;
     }
 
     private double minDistance(GNode a, GNode b) {
