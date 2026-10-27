@@ -5,6 +5,54 @@
 
 ---
 
+## R44 · 2026-10-27 · 目标身份归一化 + 图例深色置顶
+
+### 实测结果
+
+| 项 | 结果 |
+|---|---|
+| `gradlew test` | **83 tests, 0 failures** |
+| 产物 | `recipebalancer-0.1.0-1.21.1.jar` **2,381,134 B** |
+| 实机部署 | 已复制到 `1.21.1-NeoForge/mods/`（14:31:41） |
+| 未验证 | 实机重新求解裂变燃料目标 |
+
+### “大产线成功、单独目标失败”的根因
+
+`autosave.json` 中：
+
+- 目标 key：
+  `ingredient|...|Y2hlbWljYWw6bWVrYW5pc206Zmlzc2lsZV9mdWVs|6KOC5Y-Y54eD5paZ`
+  （显示名“裂变燃料”）
+- R19 产物 key：
+  `ingredient|...|Y2hlbWljYWw6bWVrYW5pc206Zmlzc2lsZV9mdWVs|Rmlzc2lsZSBGdWVs`
+  （显示名“Fissile Fuel”）
+
+两者前两段完全相同，仅最后的显示名不同；旧逻辑把整串 key 当物品身份，
+于是目标产物没有任何配方能产出，LP 判定 `infeasible`。
+大产线中裂变燃料只是中间物，不经过目标 key，因此能成功。
+
+### 修复
+
+- `IngredientKey.identity`：忽略显示名，只比较类型 + uniqueId；
+- `ScenarioKeyNormalizer`：
+  - 载入、求解、保存前统一同身份 key；
+  - 目标键优先作为代表；
+  - 配方 source/product 中的同身份 key 一起改写；
+  - 新增目标时复用配方已有 key；
+- 覆盖位置：
+  - 自动保存载入/保存；
+  - 求解前；
+  - 工作区保存/载入；
+  - 目标新增/编辑。
+
+### 图例
+
+- 图例区域改为深色半透明灰 `0xC02E2E2E`；
+- 文字改为白色；
+- 图例整体提高 z=300，节点/物品图标位于其下方。
+
+---
+
 ## R43 · 2026-10-26 · 双向边改为对称弧形箭头
 
 ### 实测结果

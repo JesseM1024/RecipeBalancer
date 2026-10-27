@@ -1314,16 +1314,19 @@ public final class SolveGraphView {
         for (String label : labels) {
             total += font.width(label) + gap;
         }
-        // 不透明底，保证底下的节点/图标不会透出来。
-        graphics.fill(x, y, x + total, y + 17, 0xFFC6C6C6);
+        // 深色半透明底；提高 z，确保节点/物品图标在其下方。
+        graphics.pose().pushPose();
+        graphics.pose().translate(0, 0, 300);
+        graphics.fill(x, y, x + total, y + 17, 0xC02E2E2E);
         int cursor = x + 4;
         for (int i = 0; i < labels.length; i++) {
             int width = font.width(labels[i]);
-            graphics.drawString(font, labels[i], cursor, y + 2, AeStyle.TEXT, false);
+            graphics.drawString(font, labels[i], cursor, y + 2, 0xFFFFFFFF, false);
             // 与节点一致的色条画在文字下方。
             graphics.fill(cursor, y + 12, cursor + width, y + 15, colors[i]);
             cursor += width + gap;
         }
+        graphics.pose().popPose();
         graphics.flush();
     }
 

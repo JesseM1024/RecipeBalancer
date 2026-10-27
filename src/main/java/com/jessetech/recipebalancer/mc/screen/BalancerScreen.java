@@ -5,6 +5,7 @@ import com.jessetech.recipebalancer.core.io.ScenarioStore;
 import com.jessetech.recipebalancer.core.model.Objective;
 import com.jessetech.recipebalancer.core.model.Recipe;
 import com.jessetech.recipebalancer.core.model.RecipePattern;
+import com.jessetech.recipebalancer.core.model.Scenario;
 import com.jessetech.recipebalancer.core.model.ScenarioDraft;
 import com.jessetech.recipebalancer.core.model.SolveResult;
 import com.jessetech.recipebalancer.core.report.TextReporter;
@@ -12,6 +13,7 @@ import com.jessetech.recipebalancer.core.solve.Balancer;
 import com.jessetech.recipebalancer.core.time.TimeExpression;
 import com.jessetech.recipebalancer.mc.i18n.Lang;
 import com.jessetech.recipebalancer.mc.itemmap.ItemKeyMapper;
+import com.jessetech.recipebalancer.mc.itemmap.ScenarioKeyNormalizer;
 import com.jessetech.recipebalancer.mc.jei.JeiScreenSupport;
 import com.jessetech.recipebalancer.mc.ui.AeStyle;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -25,6 +27,7 @@ import net.minecraft.world.item.ItemStack;
 import net.neoforged.fml.loading.FMLPaths;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -218,7 +221,8 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
 
     private static ScenarioDraft loadAutosave() {
         try {
-            return ScenarioDraft.from(STORE.loadDraft("autosave"));
+            return ScenarioDraft.from(ScenarioKeyNormalizer.normalize(
+                    STORE.loadDraft("autosave")));
         } catch (RuntimeException e) {
             return ScenarioDraft.blank();
         }
@@ -226,10 +230,18 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
 
     private void persistDraft() {
         try {
-            STORE.save("autosave", draft.toScenario());
+            STORE.save("autosave", ScenarioKeyNormalizer.normalize(draft.toScenario()));
         } catch (RuntimeException e) {
             status = Lang.t("自动保存失败: %s", e.getMessage());
         }
+    }
+
+    /** Scenario 的目标是每秒；流程图 tooltip 使用每 tick。 */
+    private static Map<String, Double> perTickTargets(Scenario scenario) {
+        Map<String, Double> result = new LinkedHashMap<>();
+        scenario.targetProducts().forEach(
+                (key, perSecond) -> result.put(key, perSecond / 20.0));
+        return result;
     }
 
     // ------------------------------------------------------------------
@@ -712,9 +724,11 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
                         return;
                     }
                     // 默认 1/t；ScenarioDraft 内部即每 tick
-                    draft.putTarget(carriedKey, 1.0);
+                    String targetKey = ScenarioKeyNormalizer.preferredTargetKey(
+                            carriedKey, draft.recipes(), draft.targets());
+                    draft.putTarget(targetKey, 1.0);
                     onDraftChanged();
-                    status = Lang.t("已添加目标: %s 1/t", carriedKey);
+                    status = Lang.t("已添加目标: %s 1/t", targetKey);
                 } else {
                     openTargetAmount("", 1.0);
                 }
@@ -733,20 +747,22 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
         }
         // amount 是每 tick；新目标默认 1/t
         double initialPerTick = adding ? 1.0 : amount;
-        minecraft.setScreen(new AmountScreen(this, "目标产物", key, initialPerTick, true, true,
+        minecraft.setScreen(            new AmountScreen(this, "目标产物", key, initialPerTick, true, true,
                 (newKey, perTick) -> {
-                    if (!newKey.equals(key)) {
-                        draft.removeTarget(key);
-                    }
-                    if (draft.targets().size() >= MAX_TARGETS
-                            && !draft.targets().containsKey(newKey)) {
-                        status = Lang.t("目标最多 %s 个", MAX_TARGETS);
-                        return;
-                    }
-                    draft.putTarget(newKey, perTick);
-                    onDraftChanged();
-                    status = Lang.t("目标: %s × %s/t", newKey,
-                            TimeExpression.formatNumber(perTick));
+                String targetKey = ScenarioKeyNormalizer.preferredTargetKey(
+                        newKey, draft.recipes(), draft.targets());
+                if (!targetKey.equals(key)) {
+                    draft.removeTarget(key);
+                }
+                if (draft.targets().size() >= MAX_TARGETS
+                        && !draft.targets().containsKey(targetKey)) {
+                    status = Lang.t("目标最多 %s 个", MAX_TARGETS);
+                    return;
+                }
+                draft.putTarget(targetKey, perTick);
+                onDraftChanged();
+                status = Lang.t("目标: %s × %s/t", targetKey,
+                        TimeExpression.formatNumber(perTick));
                 }));
     }
 
@@ -947,13 +963,15 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
             return;
         }
         try {
-            SolveResult result = Balancer.solve(draft.toScenario());
-            persistDraft();
+            // 目标与配方可能来自不同语言的 JEI 页面；求解前统一非物品身份。
+            Scenario scenario = ScenarioKeyNormalizer.normalize(draft.toScenario());
+            SolveResult result = Balancer.solve(scenario);
+            STORE.save("autosave", scenario);
             // 报告里把 stack|base64 替换成“物品名 [效果/时长]”，不改变磁盘数据
             String report = Lang.report(ItemKeyMapper.prettyText(
-                    TextReporter.formatPerTick(result, draft.recipes())));
+                    TextReporter.formatPerTick(result, scenario.recipes())));
             minecraft.setScreen(new SolveScreen(this, report, result,
-                    draft.recipes(), new java.util.LinkedHashMap<>(draft.targets()),
+                    scenario.recipes(), perTickTargets(scenario),
                     draft.options().autoBootstrap(), result.success()));
         } catch (RuntimeException | LinkageError e) {
             RecipeBalancerMod.LOGGER.error("[RecipeBalancer] 求解失败", e);
@@ -969,7 +987,7 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
         try {
             scenarioName = ScenarioStore.sanitize(nameBox.getValue());
             nameBox.setValue(scenarioName);
-            STORE.save(scenarioName, draft.toScenario());
+            STORE.save(scenarioName, ScenarioKeyNormalizer.normalize(draft.toScenario()));
             persistDraft();
             status = Lang.t("已存储工作区: %s", scenarioName);
         } catch (RuntimeException e) {

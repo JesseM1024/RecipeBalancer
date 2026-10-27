@@ -4,6 +4,7 @@ import com.jessetech.recipebalancer.core.io.ScenarioStore;
 import com.jessetech.recipebalancer.core.model.Scenario;
 import com.jessetech.recipebalancer.core.model.ScenarioDraft;
 import com.jessetech.recipebalancer.mc.i18n.Lang;
+import com.jessetech.recipebalancer.mc.itemmap.ScenarioKeyNormalizer;
 import com.jessetech.recipebalancer.mc.jei.JeiScreenSupport;
 import com.jessetech.recipebalancer.mc.ui.AeStyle;
 import net.minecraft.client.gui.GuiGraphics;
@@ -68,7 +69,7 @@ public final class ScenarioListScreen extends Screen implements JeiPanelScreen {
     private void saveCurrent() {
         try {
             String name = ScenarioStore.sanitize(nameBox.getValue());
-            store.save(name, draft.toScenario());
+            store.save(name, ScenarioKeyNormalizer.normalize(draft.toScenario()));
             nameBox.setValue(name);
             names = new ArrayList<>(store.names());
             status = Lang.t("已保存: %s", name);
@@ -97,7 +98,7 @@ public final class ScenarioListScreen extends Screen implements JeiPanelScreen {
         try {
             // 工作区允许未填完（目标/配方为空），用草稿宽松读取
             Scenario scenario = store.loadDraft(name);
-            draft.loadFrom(scenario);
+            draft.loadFrom(ScenarioKeyNormalizer.normalize(scenario));
             parent.onScenarioLoaded(name);
             minecraft.setScreen(parent);
         } catch (RuntimeException e) {

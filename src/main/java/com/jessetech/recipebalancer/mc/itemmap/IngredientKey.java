@@ -24,6 +24,21 @@ public final class IngredientKey {
         return key != null && key.startsWith(PREFIX);
     }
 
+    /**
+     * 用于求解身份比较：忽略最后的显示名，只保留类型和唯一 ID。
+     * 同一化学品在中文/英文客户端下显示名不同，但物理身份相同。
+     */
+    public static String identity(String key) {
+        if (!isIngredientKey(key)) {
+            return key;
+        }
+        String[] parts = key.split("\\|", -1);
+        if (parts.length < 3) {
+            return key;
+        }
+        return PREFIX + parts[1] + "|" + parts[2];
+    }
+
     public static String typeUid(String key) {
         return decodePart(key, 1);
     }
