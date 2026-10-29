@@ -2,8 +2,10 @@ package com.jessetech.recipebalancer.mc.jei;
 
 import com.jessetech.recipebalancer.mc.itemmap.ItemKeyMapper;
 import com.jessetech.recipebalancer.mc.screen.AmountScreen;
+import com.jessetech.recipebalancer.mc.screen.AutoRecipeHooks;
 import com.jessetech.recipebalancer.mc.screen.BalancerScreen;
 import com.jessetech.recipebalancer.mc.screen.JeiPanelScreen;
+import com.jessetech.recipebalancer.mc.screen.KeySetScreen;
 import com.jessetech.recipebalancer.mc.screen.ScenarioListScreen;
 import com.jessetech.recipebalancer.mc.screen.TimeScreen;
 import mezz.jei.api.IModPlugin;
@@ -42,12 +44,17 @@ public final class RecipeBalancerJeiPlugin implements IModPlugin {
     @Override
     public void onRuntimeAvailable(IJeiRuntime jeiRuntime) {
         JeiRuntimeHolder.set(jeiRuntime);
-        ItemKeyMapper.setIngredientRenderHook(new JeiIngredientRenderer());
+        JeiIngredientRenderer renderer = new JeiIngredientRenderer();
+        ItemKeyMapper.setIngredientRenderHook(renderer);
+        ItemKeyMapper.setIngredientNameHook(renderer);
+        AutoRecipeHooks.set(new JeiAutoRecipe());
     }
 
     @Override
     public void onRuntimeUnavailable() {
         ItemKeyMapper.setIngredientRenderHook(null);
+        ItemKeyMapper.setIngredientNameHook(null);
+        AutoRecipeHooks.set(null);
         JeiRuntimeHolder.set(null);
     }
 
@@ -86,6 +93,8 @@ public final class RecipeBalancerJeiPlugin implements IModPlugin {
             }
         });
         registration.addGuiScreenHandler(AmountScreen.class,
+                screen -> properties(screen, screen));
+        registration.addGuiScreenHandler(KeySetScreen.class,
                 screen -> properties(screen, screen));
         registration.addGuiScreenHandler(TimeScreen.class,
                 screen -> properties(screen, screen));

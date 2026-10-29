@@ -68,6 +68,8 @@ public final class AmountScreen extends Screen implements JeiPanelScreen {
 
     @Override
     protected void init() {
+        // 只选物质种类（无数量）时不需要 ±按钮，面板也收短，避免中间一大片空白
+        panelH = amountEditable ? 208 : 132;
         panelX = (width - panelW) / 2;
         panelY = (height - panelH) / 2;
 
@@ -93,19 +95,19 @@ public final class AmountScreen extends Screen implements JeiPanelScreen {
             }
         }
 
-        int buttonY = panelY + 114;
-        int buttonW = 48;
-        int gap = 3;
-        addRenderableWidget(Button.builder(Component.literal("+1"), b -> adjust(1))
-                .bounds(panelX + 8, buttonY, buttonW, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("+10"), b -> adjust(10))
-                .bounds(panelX + 8 + (buttonW + gap), buttonY, buttonW, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("+100"), b -> adjust(100))
-                .bounds(panelX + 8 + 2 * (buttonW + gap), buttonY, buttonW, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("+1000"), b -> adjust(1000))
-                .bounds(panelX + 8 + 3 * (buttonW + gap), buttonY, buttonW, 20).build());
-
         if (amountEditable) {
+            int buttonY = panelY + 114;
+            int buttonW = 48;
+            int gap = 3;
+            addRenderableWidget(Button.builder(Component.literal("+1"), b -> adjust(1))
+                    .bounds(panelX + 8, buttonY, buttonW, 20).build());
+            addRenderableWidget(Button.builder(Component.literal("+10"), b -> adjust(10))
+                    .bounds(panelX + 8 + (buttonW + gap), buttonY, buttonW, 20).build());
+            addRenderableWidget(Button.builder(Component.literal("+100"), b -> adjust(100))
+                    .bounds(panelX + 8 + 2 * (buttonW + gap), buttonY, buttonW, 20).build());
+            addRenderableWidget(Button.builder(Component.literal("+1000"), b -> adjust(1000))
+                    .bounds(panelX + 8 + 3 * (buttonW + gap), buttonY, buttonW, 20).build());
+
             addRenderableWidget(Button.builder(Component.literal("-1"), b -> adjust(-1))
                     .bounds(panelX + 8, buttonY + 24, buttonW, 20).build());
             addRenderableWidget(Button.builder(Component.literal("-10"), b -> adjust(-10))

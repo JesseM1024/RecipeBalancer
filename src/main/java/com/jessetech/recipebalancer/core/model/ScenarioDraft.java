@@ -145,6 +145,21 @@ public final class ScenarioDraft {
                 options.autoDetectRaw(), options.autoDetectSeed(), !options.autoBootstrap());
     }
 
+    /** 手动指定的原料（只按物品种类，不带数量）。 */
+    public void setRawMaterials(Set<String> keys) {
+        options = new SolveOptions(keys, options.initialInventory(),
+                options.disabledRecipes(), options.allowedExternalCycInputs(),
+                options.objective(), options.autoDetectRaw(), options.autoDetectSeed(),
+                options.autoBootstrap());
+    }
+
+    /** 允许从外部循环补充的物料白名单（空集 = 不限制）。 */
+    public void setAllowedExternalCycInputs(Set<String> keys) {
+        options = new SolveOptions(options.rawMaterials(), options.initialInventory(),
+                options.disabledRecipes(), keys, options.objective(),
+                options.autoDetectRaw(), options.autoDetectSeed(), options.autoBootstrap());
+    }
+
     private SolveOptions withDisabled(Set<Integer> disabled) {
         return new SolveOptions(options.rawMaterials(), options.initialInventory(), disabled,
                 options.allowedExternalCycInputs(), options.objective(),

@@ -19,7 +19,13 @@ import java.util.List;
 import java.util.Optional;
 
 /** 用 JEI 的 IIngredientRenderer 绘制流体/化学品等非物品。 */
-public final class JeiIngredientRenderer implements ItemKeyMapper.IngredientRenderHook {
+public final class JeiIngredientRenderer
+        implements ItemKeyMapper.IngredientRenderHook, ItemKeyMapper.IngredientNameHook {
+
+    @Override
+    public String displayName(String key) {
+        return resolveTyped(key).map(JeiIngredientMapper::displayNameOf).orElse(null);
+    }
 
     @Override
     public boolean render(GuiGraphics graphics, Font font, String key, int x, int y, String amount) {

@@ -40,61 +40,55 @@ public final class Lang {
         String[] lines = text.split("\n", -1);
         StringBuilder builder = new StringBuilder(text.length() + 128);
         for (int i = 0; i < lines.length; i++) {
-            String line = lines[i];
-            String translated = switch (line) {
-                case "配方运行方案（流量单位 /t）" -> "Recipe Plan (flow unit /t)";
-                case "配方运行方案" -> "Recipe Plan";
-                case "汇总数据" -> "Summary";
-                case "无" -> "None";
-                case ">>自动检测外部原料" -> ">>Auto-detected external inputs";
-                case ">>自增殖配方启动库存" -> ">>Self-propagating recipe bootstrap";
-                case ">>完美循环启动投料（最小集合）" -> ">>Perfect-cycle bootstrap (minimal set)";
-                case ">>原料输入（/t）" -> ">>External input (/t)";
-                case ">>原料输入" -> ">>External input";
-                case ">>副产物产出（/t）" -> ">>Byproducts (/t)";
-                case ">>副产物产出" -> ">>Byproducts";
-                case ">>设备统计" -> ">>Equipment";
-                default -> null;
-            };
-            if (translated == null) {
-                translated = translatePrefix(line);
-            }
             if (i > 0) {
                 builder.append('\n');
             }
-            builder.append(translated);
+            builder.append(translateLine(lines[i]));
         }
         return builder.toString();
     }
 
-    private static String translatePrefix(String line) {
-        String[][] prefixes = {
-                {"设备类型: ", "Equipment: "},
-                {"设备并行数: ", "Parallel: "},
-                {"需要设备数: ", "Machines: "},
-                {"实际并行数: ", "Parallel: "},
-                {"实际并行数和: ", "Parallel sum: "},
-                {"最小设备数和: ", "Minimum machines: "},
-                {"单配方设备数和: ", "Per-recipe machines: "},
-                {"最小总设备数: ", "Minimum total machines: "},
-                {"最小单配方总设备数: ", "Minimum per-recipe total: "},
-                {">>最小总设备数: ", ">>Minimum total machines: "},
-                {">>最小单配方总设备数: ", ">>Minimum per-recipe total: "},
-                {"求解失败:", "Solve failed:"}
-        };
-        for (String[] prefix : prefixes) {
-            if (line.startsWith(prefix[0])) {
-                return prefix[1] + line.substring(prefix[0].length());
-            }
+    /**
+     * 逐行翻译报告：保留行首缩进（设备统计段落是缩进的），
+     * 整行命中语言文件时直接替换，否则把 "标签: 值" 的标签部分替换掉。
+     */
+    private static String translateLine(String line) {
+        int indent = 0;
+        while (indent < line.length() && line.charAt(indent) == ' ') {
+            indent++;
         }
-        return line;
+        String body = line.substring(indent);
+        if (body.isEmpty()) {
+            return line;
+        }
+        String translated = translateBody(body);
+        return indent == 0 ? translated : " ".repeat(indent) + translated;
     }
 
-    private static boolean isChinese() {
+    private static String translateBody(String body) {
+        if (I18n.exists(body)) {
+            return I18n.get(body);
+        }
+        int colon = body.indexOf(':');
+        if (colon > 0) {
+            String label = body.substring(0, colon);
+            if (I18n.exists(label)) {
+                return I18n.get(label) + body.substring(colon);
+            }
+        }
+        return body;
+    }
+
+    /** 当前游戏语言代码（如 {@code en_us}）；语言切换时可用来判断缓存是否过期。 */
+    public static String languageCode() {
         Minecraft minecraft = Minecraft.getInstance();
         String code = minecraft == null || minecraft.options == null
                 ? "en_us" : minecraft.options.languageCode;
-        return code != null && code.toLowerCase(Locale.ROOT).startsWith("zh");
+        return code == null ? "en_us" : code;
+    }
+
+    private static boolean isChinese() {
+        return languageCode().toLowerCase(Locale.ROOT).startsWith("zh");
     }
 
     private static String format(String key, Object... args) {

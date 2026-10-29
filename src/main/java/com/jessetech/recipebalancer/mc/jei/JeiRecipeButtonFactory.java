@@ -3,27 +3,29 @@ package com.jessetech.recipebalancer.mc.jei;
 import com.jessetech.recipebalancer.mc.i18n.Lang;
 
 import com.jessetech.recipebalancer.core.model.RecipePattern;
-import com.jessetech.recipebalancer.mc.itemmap.ItemKeyMapper;
+import com.jessetech.recipebalancer.mc.itemmap.ProductIndex;
 import com.jessetech.recipebalancer.mc.screen.BalancerScreen;
 import com.mojang.blaze3d.platform.InputConstants;
+import net.minecraft.ChatFormatting;
 import mezz.jei.api.gui.IRecipeLayoutDrawable;
 import mezz.jei.api.gui.buttons.IButtonState;
 import mezz.jei.api.gui.buttons.IIconButtonController;
 import mezz.jei.api.gui.builder.ITooltipBuilder;
 import mezz.jei.api.gui.drawable.IDrawable;
+import mezz.jei.api.gui.ingredient.IRecipeSlotDrawable;
 import mezz.jei.api.gui.ingredient.IRecipeSlotView;
 import mezz.jei.api.gui.inputs.IJeiUserInput;
 import mezz.jei.api.ingredients.ITypedIngredient;
 import mezz.jei.api.recipe.RecipeIngredientRole;
 import mezz.jei.api.recipe.advanced.IRecipeButtonControllerFactory;
-import mezz.jei.api.runtime.IJeiRuntime;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.Rect2i;
 import net.minecraft.network.chat.Component;
-import net.minecraft.world.item.ItemStack;
 
-import java.util.Optional;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * 给 JEI 配方页追加一个“编码此配方”按钮。
@@ -89,8 +91,17 @@ public final class JeiRecipeButtonFactory implements IRecipeButtonControllerFact
     }
 
     private static final class Controller<T> implements IIconButtonController {
+
+        /** 深蓝、低不透明度的“已有配方”高亮。 */
+        private static final int HIGHLIGHT_FILL = 0x40004688;
+        private static final int HIGHLIGHT_BORDER = 0x9F004E96;
+        /** 我们编码区的原料列数，决定 JEI 槽位行列如何映射。 */
+        private static final int INPUT_COLS = 3;
+
         private final IRecipeLayoutDrawable<T> layout;
         private final PatternIcon icon;
+        private long highlightAt;
+        private List<IRecipeSlotView> highlighted = List.of();
 
         private Controller(IRecipeLayoutDrawable<T> layout, PatternIcon icon) {
             this.layout = layout;
@@ -118,9 +129,78 @@ public final class JeiRecipeButtonFactory implements IRecipeButtonControllerFact
         @Override
         public void drawExtras(GuiGraphics graphics, Rect2i rect, int mouseX, int mouseY,
                                float partialTick) {
-            if (rect.contains(mouseX, mouseY)) {
-                icon.drawHoverBorder(graphics, rect);
+            if (!rect.contains(mouseX, mouseY)) {
+                return;
             }
+            icon.drawHoverBorder(graphics, rect);
+            // AE 风格：悬停时把配方库里能自产的槽位标蓝
+            for (IRecipeSlotView slot : craftableSlots()) {
+                drawSlotHighlight(graphics, slot);
+            }
+        }
+
+        /**
+         * 自己画高亮：JEI 的 {@code drawHighlight} 用的是配方局部坐标，直接调用会画到左上角，
+         * 这里用布局原点把槽位 rect 换算成屏幕坐标，并做一次范围校验避免画飞。
+         */
+        private void drawSlotHighlight(GuiGraphics graphics, IRecipeSlotView slot) {
+            if (!(slot instanceof IRecipeSlotDrawable drawable)) {
+                return;
+            }
+            Rect2i layoutRect = layout.getRect();
+            Rect2i slotRect = drawable.getRect();
+            int x = slotRect.getX();
+            int y = slotRect.getY();
+            if (!layoutRect.contains(x + 1, y + 1)) {
+                // 槽位 rect 是配方局部坐标，加上布局原点才是屏幕坐标
+                x += layoutRect.getX();
+                y += layoutRect.getY();
+            }
+            if (!layoutRect.contains(x + 1, y + 1)) {
+                return;
+            }
+            int x2 = x + slotRect.getWidth();
+            int y2 = y + slotRect.getHeight();
+            // guiOverlay：不吃深度，保证盖在物品图标之上（和 JEI 自带高亮一致）
+            overlayFill(graphics, x, y, x2, y2, HIGHLIGHT_FILL);
+            overlayFill(graphics, x, y, x2, y + 1, HIGHLIGHT_BORDER);
+            overlayFill(graphics, x, y2 - 1, x2, y2, HIGHLIGHT_BORDER);
+            overlayFill(graphics, x, y, x + 1, y2, HIGHLIGHT_BORDER);
+            overlayFill(graphics, x2 - 1, y, x2, y2, HIGHLIGHT_BORDER);
+        }
+
+        private static void overlayFill(GuiGraphics graphics, int x1, int y1, int x2, int y2,
+                                        int color) {
+            graphics.fillGradient(RenderType.guiOverlay(), x1, y1, x2, y2, color, color, 0);
+        }
+
+        /** 该槽位是否至少有一种候选物质能由配方库自产（结果缓存 500ms，避免每帧重算）。 */
+        private List<IRecipeSlotView> craftableSlots() {
+            long now = System.currentTimeMillis();
+            if (now - highlightAt < 500) {
+                return highlighted;
+            }
+            highlightAt = now;
+            ProductIndex index = ProductIndex.current();
+            List<IRecipeSlotView> result = new ArrayList<>();
+            for (IRecipeSlotView slot : layout.getRecipeSlotsView().getSlotViews()) {
+                if (slot.isEmpty()) {
+                    continue;
+                }
+                RecipeIngredientRole role = slot.getRole();
+                if (role != RecipeIngredientRole.INPUT && role != RecipeIngredientRole.OUTPUT) {
+                    continue;
+                }
+                for (ITypedIngredient<?> ingredient : slot.getAllIngredientsList()) {
+                    JeiIngredientMapper.Mapped mapped = JeiIngredientMapper.of(ingredient);
+                    if (mapped != null && index.produces(mapped.key())) {
+                        result.add(slot);
+                        break;
+                    }
+                }
+            }
+            highlighted = result;
+            return result;
         }
 
         @Override
@@ -132,65 +212,15 @@ public final class JeiRecipeButtonFactory implements IRecipeButtonControllerFact
             if (key.getType() != InputConstants.Type.MOUSE || key.getValue() != 0) {
                 return false;
             }
-            RecipePattern pattern = new RecipePattern();
-            int inputIndex = 0;
-            for (IRecipeSlotView slot : layout.getRecipeSlotsView()
-                    .getSlotViews(RecipeIngredientRole.INPUT)) {
-                JeiIngredientMapper.Mapped mapped = firstIngredient(slot);
-                if (mapped != null && inputIndex < RecipePattern.MAX_INPUTS) {
-                    pattern.putInput(inputIndex++, mapped.key(), mapped.amount());
-                }
-            }
-            int outputIndex = 0;
-            for (IRecipeSlotView slot : layout.getRecipeSlotsView()
-                    .getSlotViews(RecipeIngredientRole.OUTPUT)) {
-                JeiIngredientMapper.Mapped mapped = firstIngredient(slot);
-                if (mapped != null && outputIndex < RecipePattern.MAX_OUTPUTS) {
-                    pattern.putOutput(outputIndex++, mapped.key(), mapped.amount());
-                }
-            }
-            // JEI 左侧“可用设备”列：取该配方类型的第一个催化剂自动填设备
-            boolean equipmentSet = false;
-            Object runtimeObject = JeiRuntimeHolder.get();
-            if (runtimeObject instanceof IJeiRuntime runtime) {
-                try {
-                    Optional<ItemStack> catalyst = runtime.getRecipeManager()
-                            .createRecipeCatalystLookup(layout.getRecipeCategory().getRecipeType())
-                            .getItemStack().findFirst();
-                    if (catalyst.isPresent()) {
-                        pattern.setEquipmentKey(ItemKeyMapper.of(catalyst.get()));
-                        equipmentSet = true;
-                    }
-                } catch (RuntimeException ignored) {
-                    // 某些自定义类别没有 catalyst lookup，退回 layout CATALYST
-                }
-            }
-            if (!equipmentSet) {
-                for (IRecipeSlotView slot : layout.getRecipeSlotsView()
-                        .getSlotViews(RecipeIngredientRole.CATALYST)) {
-                    JeiIngredientMapper.Mapped mapped = firstIngredient(slot);
-                    if (mapped != null) {
-                        pattern.setEquipmentKey(mapped.key());
-                        break;
-                    }
-                }
-            }
+            RecipePattern pattern = JeiPatternImporter.build(layout);
             Minecraft.getInstance().setScreen(new BalancerScreen(pattern));
             return true;
-        }
-
-        private static JeiIngredientMapper.Mapped firstIngredient(IRecipeSlotView slot) {
-            Optional<ITypedIngredient<?>> displayed = slot.getDisplayedIngredient();
-            if (displayed.isPresent()) {
-                return JeiIngredientMapper.of(displayed.get());
-            }
-            return slot.getAllIngredientsList().stream().findFirst()
-                    .map(JeiIngredientMapper::of).orElse(null);
         }
 
         @Override
         public void getTooltips(ITooltipBuilder tooltip) {
             tooltip.add(Lang.c("编码此配方到 RecipeBalancer"));
+            tooltip.add(Lang.c("高亮的物品已有配方存在配方库中").withStyle(ChatFormatting.GRAY));
         }
     }
 }

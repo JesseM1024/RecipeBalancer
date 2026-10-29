@@ -9,6 +9,7 @@ import com.jessetech.recipebalancer.mc.i18n.Lang;
 import com.jessetech.recipebalancer.mc.itemmap.IngredientKey;
 import com.jessetech.recipebalancer.mc.itemmap.ItemKeyMapper;
 import com.jessetech.recipebalancer.mc.ui.AeStyle;
+import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.Font;
@@ -47,6 +48,12 @@ public final class SolveGraphView {
     private static final int RECIPE_FILL = 0xFFE8A33D;
     private static final int BORDER = 0xFF4A4A4A;
     private static final int EDGE = 0xFF9A9A9A;
+    /** 物质图标显示阈值：缩放低于它时退回首字母，避免糊成一团。 */
+    private static final double MATERIAL_ICON_ZOOM = 0.37;
+    /** 配方图标显示阈值。 */
+    private static final double RECIPE_ICON_ZOOM = 0.28;
+    /** 节点标签的最小屏幕字号（相对原始大小）；缩得再小也只缩到 50%。 */
+    private static final float MIN_LABEL_TEXT_SCALE = 0.5f;
     private double nodeGap = 38.0;
     private double edgeNaturalLength = 84.0;
     private double autoStepSeconds = 1.0 / 100.0;
@@ -69,6 +76,7 @@ public final class SolveGraphView {
     private double panX;
     private double panY;
     private double zoom = 1.0;
+    private String nameLanguage;
     private boolean cameraReady;
     private int cameraAreaW;
     private int cameraAreaH;
@@ -179,8 +187,23 @@ public final class SolveGraphView {
         GraphAnimationConfig.Settings settings = GraphAnimationConfig.get();
         this.nodeGap = settings.nodeGap();
         this.edgeNaturalLength = settings.edgeLength();
+        this.nameLanguage = Lang.languageCode();
         build();
         layout();
+    }
+
+    /** 切换语言后重新解析节点名称（key 里固化的名称可能还是旧语言）。 */
+    private void refreshNamesIfNeeded() {
+        String code = Lang.languageCode();
+        if (code.equals(nameLanguage)) {
+            return;
+        }
+        nameLanguage = code;
+        for (GNode node : nodes) {
+            node.displayName = ItemKeyMapper.displayName(node.key);
+            node.initial = node.key.isBlank() ? "?" : shortInitial(node.displayName);
+            node.label = null;
+        }
     }
 
     private void build() {
@@ -1128,6 +1151,7 @@ public final class SolveGraphView {
         lastAreaY = areaY;
         lastAreaW = areaW;
         lastAreaH = areaH;
+        refreshNamesIfNeeded();
         if (!cameraReady || cameraAreaW != areaW || cameraAreaH != areaH) {
             resetCamera(areaW, areaH);
         }
@@ -1155,11 +1179,11 @@ public final class SolveGraphView {
         double viewMaxX = (areaW - panX) / zoom + 120;
         double viewMinY = (-panY) / zoom - 120;
         double viewMaxY = (areaH - panY) / zoom + 120;
-        // LOD 阈值放低：只有缩得非常小才省略元素。
-        boolean showNodeLabels = zoom >= 0.26;
+        // 节点标签始终显示（小缩放由 drawCenteredLabel 兜底字号）；
+        // 图标按各自阈值退回首字母。
         boolean showEdgeLabels = zoom >= 0.33;
-        // 最小缩放是 0.25；阈值必须高于它，缩到最小时关闭物品模型渲染。
-        boolean showIcons = zoom > 0.28;
+        boolean showRecipeIcons = zoom > RECIPE_ICON_ZOOM;
+        boolean showMaterialIcons = zoom >= MATERIAL_ICON_ZOOM;
 
         graphics.pose().pushPose();
         graphics.pose().translate(areaX + panX, areaY + panY, 0);
@@ -1170,7 +1194,7 @@ public final class SolveGraphView {
                     || node.y < viewMinY || node.y > viewMaxY) {
                 continue;
             }
-            drawNode(graphics, font, node, showNodeLabels, showIcons);
+            drawNode(graphics, font, node, showRecipeIcons, showMaterialIcons);
         }
         graphics.pose().popPose();
         graphics.disableScissor();
@@ -1202,6 +1226,7 @@ public final class SolveGraphView {
                 || mouseY < lastAreaY || mouseY >= lastAreaY + lastAreaH) {
             return;
         }
+        refreshNamesIfNeeded();
         double wx = (mouseX - lastAreaX - panX) / zoom;
         double wy = (mouseY - lastAreaY - panY) / zoom;
         GNode hovered = null;
@@ -1613,11 +1638,11 @@ public final class SolveGraphView {
     }
 
     private void drawNode(GuiGraphics graphics, Font font, GNode node,
-                          boolean showLabels, boolean showIcons) {
+                          boolean showRecipeIcons, boolean showMaterialIcons) {
         if (node.recipe) {
-            drawRecipeNode(graphics, font, node, showLabels, showIcons);
+            drawRecipeNode(graphics, font, node, showRecipeIcons);
         } else {
-            drawMaterialNode(graphics, font, node, showLabels, showIcons);
+            drawMaterialNode(graphics, font, node, showMaterialIcons);
         }
         if (node == draggingNode) {
             int half = (node.recipe ? RECIPE : MATERIAL) / 2;
@@ -1632,7 +1657,7 @@ public final class SolveGraphView {
     }
 
     private void drawRecipeNode(GuiGraphics graphics, Font font, GNode node,
-                                boolean showLabels, boolean showIcons) {
+                                boolean showIcons) {
         int x = (int) Math.round(node.x) - RECIPE / 2;
         int y = (int) Math.round(node.y) - RECIPE / 2;
         graphics.fill(x - 1, y - 1, x + RECIPE + 1, y + RECIPE + 1, BORDER);
@@ -1652,13 +1677,11 @@ public final class SolveGraphView {
             graphics.drawString(font, initial, x + RECIPE / 2 - font.width(initial) / 2,
                     y + 16, 0xFF3A2A10, false);
         }
-        if (showLabels) {
-            drawCenteredLabel(graphics, font, node, node.x, node.y + RECIPE / 2.0 + 3);
-        }
+        drawCenteredLabel(graphics, font, node, node.x, node.y + RECIPE / 2.0 + 3);
     }
 
     private void drawMaterialNode(GuiGraphics graphics, Font font, GNode node,
-                                  boolean showLabels, boolean showIcons) {
+                                  boolean showIcons) {
         int color = switch (node.category) {
             case INPUT -> INPUT;
             case STARTUP -> STARTUP;
@@ -1679,9 +1702,7 @@ public final class SolveGraphView {
                     x + MATERIAL / 2 - font.width(initial) / 2, y + 7,
                     0xFF202020, false);
         }
-        if (showLabels) {
-            drawCenteredLabel(graphics, font, node, node.x, node.y + MATERIAL / 2.0 + 3);
-        }
+        drawCenteredLabel(graphics, font, node, node.x, node.y + MATERIAL / 2.0 + 3);
     }
 
     private void drawCenteredLabel(GuiGraphics graphics, Font font, GNode node,
@@ -1689,9 +1710,15 @@ public final class SolveGraphView {
         if (node.label == null) {
             node.label = font.plainSubstrByWidth(node.displayName, 84);
         }
-        graphics.drawString(font, node.label,
-                (int) Math.round(centerX - font.width(node.label) / 2.0),
-                (int) Math.round(y), AeStyle.TEXT, false);
+        // 整张图按 zoom 缩放；这里反向补偿，使屏幕上字号不小于 50%（缩得再小也不再变小）。
+        float textScale = (float) Math.max(1.0, MIN_LABEL_TEXT_SCALE / zoom);
+        PoseStack pose = graphics.pose();
+        pose.pushPose();
+        pose.translate(centerX, y, 0);
+        pose.scale(textScale, textScale, 1.0f);
+        graphics.drawString(font, node.label, Math.round(-font.width(node.label) / 2.0f), 0,
+                AeStyle.TEXT, false);
+        pose.popPose();
     }
 
     private static String shortInitial(String name) {

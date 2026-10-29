@@ -59,8 +59,12 @@ public final class IngredientKey {
     }
 
     public static String shortLabel(String key) {
-        String name = displayName(key);
-        if (name.isBlank()) {
+        return shortLabelOf(displayName(key));
+    }
+
+    /** 用外部解析出的名称生成短标签（语言切换后名称会变，不能只看 key 里的固化名）。 */
+    public static String shortLabelOf(String name) {
+        if (name == null || name.isBlank()) {
             return "?";
         }
         int first = name.codePointAt(0);

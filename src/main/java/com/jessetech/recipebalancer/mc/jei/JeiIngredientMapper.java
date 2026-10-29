@@ -58,6 +58,33 @@ public final class JeiIngredientMapper {
         }
     }
 
+    /**
+     * 按当前游戏语言重新取显示名。
+     * 配方/场景里 key 存的是编码当时的名称，切到别的语言后必须重新问 JEI。
+     *
+     * @return 解析不出来时返回 null
+     */
+    @SuppressWarnings("unchecked")
+    static String displayNameOf(ITypedIngredient<?> typed) {
+        if (typed == null) {
+            return null;
+        }
+        IJeiRuntime runtime = runtime();
+        if (runtime == null) {
+            return null;
+        }
+        try {
+            Object ingredient = typed.getIngredient();
+            IIngredientHelper<Object> helper = (IIngredientHelper<Object>)
+                    (IIngredientHelper<?>) runtime.getIngredientManager()
+                            .getIngredientHelper(typed.getType());
+            String name = helper.getDisplayName(ingredient);
+            return name == null || name.isBlank() ? null : name;
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
     private static long reflectiveAmount(Object ingredient) {
         try {
             Method method = ingredient.getClass().getMethod("getAmount");

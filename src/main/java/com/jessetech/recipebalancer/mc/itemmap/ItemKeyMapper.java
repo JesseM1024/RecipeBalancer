@@ -40,6 +40,9 @@ public final class ItemKeyMapper {
     private static final Pattern INGREDIENT_KEY_PATTERN =
             Pattern.compile("ingredient\\|[A-Za-z0-9_-]+(?:\\|[A-Za-z0-9_-]+){2}");
 
+    /** ingredient key 里固化的是编码当时的名称，换语言后需重新问 JEI。 */
+    private static final Map<String, String> INGREDIENT_NAME_CACHE = new ConcurrentHashMap<>();
+
     /** JEI 渲染钩子；由 RecipeBalancerJeiPlugin 在 JEI 可用时安装，避免无 JEI 环境加载 JEI 类。 */
     public interface IngredientRenderHook {
         boolean render(GuiGraphics graphics, Font font, String key, int x, int y, String amount);
@@ -47,10 +50,21 @@ public final class ItemKeyMapper {
         boolean renderTooltip(GuiGraphics graphics, Font font, String key, int mouseX, int mouseY);
     }
 
+    /** 按当前语言取 ingredient 显示名的钩子；返回 null 表示解析不了，回退到固化名。 */
+    public interface IngredientNameHook {
+        String displayName(String key);
+    }
+
     private static volatile IngredientRenderHook ingredientRenderHook;
+    private static volatile IngredientNameHook ingredientNameHook;
 
     public static void setIngredientRenderHook(IngredientRenderHook hook) {
         ingredientRenderHook = hook;
+    }
+
+    public static void setIngredientNameHook(IngredientNameHook hook) {
+        ingredientNameHook = hook;
+        INGREDIENT_NAME_CACHE.clear();
     }
 
     private ItemKeyMapper() {
@@ -140,7 +154,7 @@ public final class ItemKeyMapper {
 
     public static String displayName(String key) {
         if (IngredientKey.isIngredientKey(key)) {
-            return IngredientKey.displayName(key);
+            return ingredientDisplayName(key);
         }
         ItemStack stack = stack(key);
         if (!stack.isEmpty()) {
@@ -149,10 +163,68 @@ public final class ItemKeyMapper {
         return normalize(key);
     }
 
+    /**
+     * 非物品 ingredient 的显示名：优先按当前语言向 JEI 重新解析，
+     * 解析不到才回退到 key 里固化的名称（按语言缓存，切换语言自然失效）。
+     */
+    public static String ingredientDisplayName(String key) {
+        IngredientNameHook hook = ingredientNameHook;
+        if (hook == null) {
+            return IngredientKey.displayName(key);
+        }
+        String cacheKey = Lang.languageCode() + '|' + IngredientKey.identity(key);
+        String cached = INGREDIENT_NAME_CACHE.get(cacheKey);
+        if (cached != null) {
+            return cached;
+        }
+        String resolved = hook.displayName(key);
+        if (resolved == null || resolved.isBlank()) {
+            return IngredientKey.displayName(key);
+        }
+        INGREDIENT_NAME_CACHE.put(cacheKey, resolved);
+        return resolved;
+    }
+
+    /**
+     * 把手输文本解析成物品 key：注册名直接使用，否则按真名/注册名短名在所有已注册物品里找。
+     *
+     * @return 解析不到返回 null
+     */
+    public static String resolveKey(String raw) {
+        String value = raw == null ? "" : raw.trim();
+        if (value.isEmpty()) {
+            return null;
+        }
+        if (IngredientKey.isIngredientKey(value)) {
+            return value;
+        }
+        String normalized = normalize(value);
+        if (exists(normalized)) {
+            return normalized;
+        }
+        String lower = value.toLowerCase(Locale.ROOT);
+        String partial = null;
+        for (ResourceLocation id : BuiltInRegistries.ITEM.keySet()) {
+            String path = id.getPath();
+            if (path.equalsIgnoreCase(lower)) {
+                return id.toString();
+            }
+            String name = new ItemStack(BuiltInRegistries.ITEM.get(id)).getHoverName().getString();
+            if (name.equalsIgnoreCase(value)) {
+                return id.toString();
+            }
+            if (partial == null && (name.toLowerCase(Locale.ROOT).contains(lower)
+                    || path.toLowerCase(Locale.ROOT).contains(lower))) {
+                partial = id.toString();
+            }
+        }
+        return partial;
+    }
+
     /** 结果报告中的可读名称：物品名 + 药水效果（含时长）；非物品用显示名。 */
     public static String reportName(String key) {
         if (IngredientKey.isIngredientKey(key)) {
-            return IngredientKey.displayName(key);
+            return ingredientDisplayName(key);
         }
         ItemStack stack = stack(key);
         if (stack.isEmpty()) {
@@ -217,7 +289,7 @@ public final class ItemKeyMapper {
     /** 未注册物品的短标签：ASCII 取前 3 个字母，中文取第一个字。 */
     public static String shortLabel(String key) {
         if (IngredientKey.isIngredientKey(key)) {
-            return IngredientKey.shortLabel(key);
+            return IngredientKey.shortLabelOf(ingredientDisplayName(key));
         }
         String id = baseItemId(key);
         int colon = id.indexOf(':');
@@ -371,7 +443,7 @@ public final class ItemKeyMapper {
             if (hook != null && hook.renderTooltip(graphics, font, id, mouseX, mouseY)) {
                 return;
             }
-            lines.add(Component.literal(IngredientKey.displayName(id)));
+            lines.add(Component.literal(ingredientDisplayName(id)));
             lines.add(Component.literal(IngredientKey.describe(id))
                     .withStyle(ChatFormatting.GRAY));
             lines.add(Lang.c("非物品 ingredient；数量单位 B（500 mB = 0.5）")

@@ -25,6 +25,26 @@ public final class RecipePattern {
     private double timeTicks = 1.0;
     private boolean truncated;
 
+    /** 用另一份样板整体覆盖当前内容（JEI 自动撰写用）。 */
+    public void copyFrom(RecipePattern other) {
+        clear();
+        for (int i = 0; i < MAX_INPUTS; i++) {
+            if (other.inputKeys[i] != null) {
+                inputKeys[i] = other.inputKeys[i];
+                inputAmounts[i] = other.inputAmounts[i];
+            }
+        }
+        for (int i = 0; i < MAX_OUTPUTS; i++) {
+            if (other.outputKeys[i] != null) {
+                outputKeys[i] = other.outputKeys[i];
+                outputAmounts[i] = other.outputAmounts[i];
+            }
+        }
+        equipmentKey = other.equipmentKey;
+        timeTicks = other.timeTicks;
+        truncated = other.truncated;
+    }
+
     public void clear() {
         clear(inputKeys, inputAmounts);
         clear(outputKeys, outputAmounts);
