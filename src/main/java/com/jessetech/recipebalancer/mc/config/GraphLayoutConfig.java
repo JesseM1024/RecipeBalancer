@@ -11,28 +11,30 @@ import java.nio.file.Path;
 import java.util.Properties;
 
 /**
- * 流程图启动动画的热读取配置。
+ * 流程图布局的热读取配置（分层布局的间距）。
  *
- * <p>文件：{@code config/recipebalancer/graph-animation.properties}
+ * <p>文件：{@code config/recipebalancer/graph-layout.properties}
  * 每 {@link #CHECK_INTERVAL_MS} 毫秒检查一次修改时间，无需重启游戏。
  */
-public final class GraphAnimationConfig {
+public final class GraphLayoutConfig {
 
     private static final long CHECK_INTERVAL_MS = 1_000L;
     private static final Path FILE = FMLPaths.CONFIGDIR.get()
-            .resolve("recipebalancer").resolve("graph-animation.properties");
-    private static final Settings DEFAULTS = new Settings(128.0, 1.0, 32.0, 32.0, 128.0);
+            .resolve("recipebalancer").resolve("graph-layout.properties");
+    private static final Settings DEFAULTS = new Settings(32.0, 128.0);
 
     private static Settings cached = DEFAULTS;
     private static long lastCheckMillis;
     private static long lastModified = Long.MIN_VALUE;
 
-    private GraphAnimationConfig() {
+    private GraphLayoutConfig() {
     }
 
-    public record Settings(double stepsPerSecond, double durationSeconds,
-                           double stepDistance, double nodeGap,
-                           double edgeLength) {
+    /**
+     * @param nodeGap    同列节点间距附加量（像素）
+     * @param edgeLength 列间距基准（像素）
+     */
+    public record Settings(double nodeGap, double edgeLength) {
     }
 
     public static Settings get() {
@@ -52,7 +54,7 @@ public final class GraphAnimationConfig {
             }
         } catch (IOException | RuntimeException e) {
             RecipeBalancerMod.LOGGER.warn(
-                    "[RecipeBalancer] 读取流程图动画配置失败，使用默认值: {}", e.toString());
+                    "[RecipeBalancer] 读取流程图布局配置失败，使用默认值: {}", e.toString());
             cached = DEFAULTS;
         }
         return cached;
@@ -63,17 +65,9 @@ public final class GraphAnimationConfig {
         try (Reader reader = Files.newBufferedReader(FILE, StandardCharsets.UTF_8)) {
             properties.load(reader);
         }
-        double steps = parse(properties, "stepsPerSecond",
-                DEFAULTS.stepsPerSecond(), 1.0, 1_000.0);
-        double duration = parse(properties, "durationSeconds",
-                DEFAULTS.durationSeconds(), 0.1, 10.0);
-        double distance = parse(properties, "stepDistance",
-                DEFAULTS.stepDistance(), 0.1, 100.0);
-        double nodeGap = parse(properties, "nodeGap",
-                DEFAULTS.nodeGap(), 0.0, 200.0);
-        double edgeLength = parse(properties, "edgeLength",
-                DEFAULTS.edgeLength(), 20.0, 400.0);
-        return new Settings(steps, duration, distance, nodeGap, edgeLength);
+        double nodeGap = parse(properties, "nodeGap", DEFAULTS.nodeGap(), 0.0, 200.0);
+        double edgeLength = parse(properties, "edgeLength", DEFAULTS.edgeLength(), 20.0, 400.0);
+        return new Settings(nodeGap, edgeLength);
     }
 
     private static double parse(Properties properties, String key,
@@ -96,16 +90,10 @@ public final class GraphAnimationConfig {
     private static void writeDefaults() throws IOException {
         Files.createDirectories(FILE.getParent());
         Files.writeString(FILE, """
-                # RecipeBalancer 启动动画配置 / graph startup animation
+                # RecipeBalancer 流程图布局配置 / graph layout
                 # 修改后约 1 秒内热读取，无需重启游戏。
-                # stepsPerSecond: 每秒求解步数
-                # durationSeconds: 总求解时长（秒）
-                # stepDistance: 单步最大位移（像素）
-                # nodeGap: 节点最小间距附加量（像素）
-                # edgeLength: 边/箭头自然长度（像素）
-                stepsPerSecond=128
-                durationSeconds=1.0
-                stepDistance=32.0
+                # nodeGap: 同列节点间距附加量（像素）
+                # edgeLength: 列间距基准（像素）
                 nodeGap=32
                 edgeLength=128
                 """, StandardCharsets.UTF_8);
