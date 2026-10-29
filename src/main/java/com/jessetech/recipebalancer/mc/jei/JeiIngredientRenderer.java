@@ -90,7 +90,9 @@ public final class JeiIngredientRenderer
         }
     }
 
-    @SuppressWarnings({"rawtypes", "unchecked"})
+    // 新 API 要改成 codec 序列化（会改变存档里的 ingredient key 编码），
+    // 现阶段保持 uid 查表，先把「待删除」告警压住。
+    @SuppressWarnings({"rawtypes", "unchecked", "removal"})
     private static Optional<ITypedIngredient<?>> resolveWithType(
             IIngredientManager manager, IIngredientType<?> type, String uniqueId) {
         return (Optional) manager.getTypedIngredientByUid((IIngredientType) type, uniqueId);

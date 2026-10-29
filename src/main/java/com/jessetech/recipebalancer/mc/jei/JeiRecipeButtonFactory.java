@@ -22,7 +22,6 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.Rect2i;
-import net.minecraft.network.chat.Component;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -143,6 +142,9 @@ public final class JeiRecipeButtonFactory implements IRecipeButtonControllerFact
          * 自己画高亮：JEI 的 {@code drawHighlight} 用的是配方局部坐标，直接调用会画到左上角，
          * 这里用布局原点把槽位 rect 换算成屏幕坐标，并做一次范围校验避免画飞。
          */
+        // getRect() 虽被标记待删除（官方建议改用 isMouseOver），但这里需要的是槽位几何位置，
+        // 没有等价的替代（getAreaIncludingBackground 拿不到每格独立坐标），故保留并压掉告警。
+        @SuppressWarnings("removal")
         private void drawSlotHighlight(GuiGraphics graphics, IRecipeSlotView slot) {
             if (!(slot instanceof IRecipeSlotDrawable drawable)) {
                 return;

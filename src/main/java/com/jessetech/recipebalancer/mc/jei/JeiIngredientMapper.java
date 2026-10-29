@@ -22,6 +22,9 @@ public final class JeiIngredientMapper {
     private JeiIngredientMapper() {
     }
 
+    // getUniqueId 虽被标记待删除，但它产出的 uid 就是存档里 ingredient key 的部分；
+    // 换成 getUid()/codec 会改变 key 编码，需要数据迁移，这里先保持行为并压掉告警。
+    @SuppressWarnings("removal")
     public static Mapped of(ITypedIngredient<?> typed) {
         if (typed == null) {
             return null;

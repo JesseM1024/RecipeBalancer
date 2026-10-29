@@ -60,6 +60,9 @@ public final class JeiPatternImporter {
      * 按 JEI 里的相对行列把输入写进编码区；合成配方保留空格，让形状和 JEI 一致；
      * 其它配方（或行列推不出来时）按顺序紧排。
      */
+    // getRect() 虽被标记待删除，但它是唯一能拿到「每格独立坐标」的接口
+    // （isMouseOver 只能判断悬停、getAreaIncludingBackground 拿不到分格位置），保留并压掉告警。
+    @SuppressWarnings("removal")
     private static void applyInputs(IRecipeLayoutDrawable<?> layout, RecipePattern pattern) {
         List<IRecipeSlotView> filled = new ArrayList<>();
         List<Rect2i> rects = new ArrayList<>();

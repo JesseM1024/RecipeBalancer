@@ -83,7 +83,9 @@ public final class JeiAutoRecipe implements AutoRecipeHooks.Hook {
         try {
             ItemStack stack = ItemKeyMapper.stack(key);
             if (!stack.isEmpty()) {
-                return runtime.getIngredientManager().createTypedIngredient(stack).orElse(null);
+                // 1 参重载已标记待删除，等价于 normalize=false
+                return runtime.getIngredientManager()
+                        .createTypedIngredient(stack, false).orElse(null);
             }
             return JeiIngredientRenderer.resolveTyped(key).orElse(null);
         } catch (RuntimeException e) {
