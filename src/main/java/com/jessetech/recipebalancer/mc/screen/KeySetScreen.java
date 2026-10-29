@@ -3,6 +3,7 @@ package com.jessetech.recipebalancer.mc.screen;
 import com.jessetech.recipebalancer.mc.i18n.Lang;
 import com.jessetech.recipebalancer.mc.itemmap.ItemKeyMapper;
 import com.jessetech.recipebalancer.mc.jei.JeiBookmarks;
+import com.jessetech.recipebalancer.mc.jei.JeiRuntimeHolder;
 import com.jessetech.recipebalancer.mc.jei.JeiScreenSupport;
 import com.jessetech.recipebalancer.mc.ui.AeStyle;
 import net.minecraft.ChatFormatting;
@@ -197,6 +198,15 @@ public final class KeySetScreen extends Screen implements JeiPanelScreen {
 
     /** 一键读 JEI 右侧书签。 */
     private void addBookmarks() {
+        // 先判 JEI 是否存在：未安装时只提示、不触发，也不能让 NoClassDefFoundError 冒出来
+        if (!JeiRuntimeHolder.installed()) {
+            status = Lang.t("JEI 未安装");
+            return;
+        }
+        if (!JeiRuntimeHolder.ready()) {
+            status = Lang.t("JEI 不可用");
+            return;
+        }
         Set<String> found;
         try {
             found = JeiBookmarks.readKeys();

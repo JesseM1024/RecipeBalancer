@@ -17,6 +17,7 @@ import com.jessetech.recipebalancer.mc.io.WorkspaceSession;
 import com.jessetech.recipebalancer.mc.itemmap.ItemKeyMapper;
 import com.jessetech.recipebalancer.mc.itemmap.ProductIndex;
 import com.jessetech.recipebalancer.mc.itemmap.ScenarioKeyNormalizer;
+import com.jessetech.recipebalancer.mc.jei.JeiRuntimeHolder;
 import com.jessetech.recipebalancer.mc.jei.JeiScreenSupport;
 import com.jessetech.recipebalancer.mc.ui.AeStyle;
 import com.jessetech.recipebalancer.mc.ui.IconButton;
@@ -1398,6 +1399,11 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
 
     /** 右键物质：单一配方自动新建并写入，多配方只打开 JEI 配方页。 */
     private void autoWriteFromJei(String key) {
+        // 未装 JEI 时直接提示并中止，不触发任何导入逻辑
+        if (!JeiRuntimeHolder.installed()) {
+            status = Lang.t("JEI 未安装");
+            return;
+        }
         AutoRecipeHooks.Hook hook = AutoRecipeHooks.get();
         if (hook == null) {
             status = Lang.t("JEI 不可用");
