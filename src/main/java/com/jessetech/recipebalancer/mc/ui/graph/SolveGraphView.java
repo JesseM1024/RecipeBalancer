@@ -102,6 +102,8 @@ public final class SolveGraphView {
     private GNode hoveredNode;
     /** 上一帧悬停的边，用于画黄灰警示描边。 */
     private GEdge hoveredEdgeRef;
+    /** 点击选中的节点：高亮常驻，与悬停高亮叠加，同时只允许一个。 */
+    private GNode selectedNode;
     /** 悬停描边的两种颜色（工业警示：黄 + 深灰）与动画速度。 */
     private static final int ANT_YELLOW = 0xFFFFD24A;
     private static final int ANT_GRAY = 0xFF4A4A4A;
@@ -575,7 +577,14 @@ public final class SolveGraphView {
         draggingNode = hit;
         dragOffsetX = worldX - hit.x;
         dragOffsetY = worldY - hit.y;
+        // 点击即选中：高亮常驻，直到点空白或另一个节点
+        selectedNode = hit;
         return true;
+    }
+
+    /** 点击图区空白处：取消选中。 */
+    public void clearSelection() {
+        selectedNode = null;
     }
 
     public boolean isNodeDragging() {
@@ -714,7 +723,7 @@ public final class SolveGraphView {
      * 类似工业警示带，随缩放自动保持屏幕上恒定的段长与粗细。
      */
     private void drawHoverOutline(GuiGraphics graphics) {
-        if (hoveredNode == null && hoveredEdgeRef == null) {
+        if (hoveredNode == null && hoveredEdgeRef == null && selectedNode == null) {
             return;
         }
         VertexConsumer consumer = graphics.bufferSource().getBuffer(RenderType.gui());
@@ -724,18 +733,12 @@ public final class SolveGraphView {
         double thickness = 1.8 / scale;
         // 静态描边：不做时间动画（按秒重置相位会产生肉眼可见的跳变）
         double phase = 0.0;
-        if (hoveredNode != null) {
-            double half = (hoveredNode.recipe ? RECIPE : MATERIAL) / 2.0 + 2.5 / scale;
-            double x = hoveredNode.x;
-            double y = hoveredNode.y;
-            dashedLine(consumer, matrix, x - half, y - half, x + half, y - half,
-                    dash, phase, thickness);
-            dashedLine(consumer, matrix, x + half, y - half, x + half, y + half,
-                    dash, phase, thickness);
-            dashedLine(consumer, matrix, x + half, y + half, x - half, y + half,
-                    dash, phase, thickness);
-            dashedLine(consumer, matrix, x - half, y + half, x - half, y - half,
-                    dash, phase, thickness);
+        // 选中与悬停可以同时存在；同一个节点只画一次
+        if (selectedNode != null) {
+            drawNodeAnts(consumer, matrix, selectedNode, dash, thickness, phase);
+        }
+        if (hoveredNode != null && hoveredNode != selectedNode) {
+            drawNodeAnts(consumer, matrix, hoveredNode, dash, thickness, phase);
         }
         if (hoveredEdgeRef != null) {
             double[] points = hoverPath(hoveredEdgeRef);
@@ -746,40 +749,67 @@ public final class SolveGraphView {
         }
     }
 
+    /** 沿节点外框画一圈黄灰警示虚线。 */
+    private void drawNodeAnts(VertexConsumer consumer, Matrix4f matrix, GNode node,
+                              double dash, double thickness, double phase) {
+        double scale = 6.0 / Math.max(1e-6, dash);
+        double half = (node.recipe ? RECIPE : MATERIAL) / 2.0 + 2.5 / scale;
+        double x = node.x;
+        double y = node.y;
+        dashedLine(consumer, matrix, x - half, y - half, x + half, y - half,
+                dash, phase, thickness);
+        dashedLine(consumer, matrix, x + half, y - half, x + half, y + half,
+                dash, phase, thickness);
+        dashedLine(consumer, matrix, x + half, y + half, x - half, y + half,
+                dash, phase, thickness);
+        dashedLine(consumer, matrix, x - half, y + half, x - half, y - half,
+                dash, phase, thickness);
+    }
+
     /**
      * 悬停字幕：把节点名称 / 边流量提到最上层（z=210，盖过图标与描边），
      * 底下垫一层约 50% 不透明度的白底，文字在密集连线里也读得清。
+     * 选中的节点也常驻一份字幕（与悬停互不覆盖）。
      */
     private void drawHoverCaption(GuiGraphics graphics, Font font) {
-        PoseStack pose = graphics.pose();
         if (hoveredNode != null) {
-            if (hoveredNode.label == null) {
-                hoveredNode.label = font.plainSubstrByWidth(hoveredNode.displayName, 84);
-            }
-            String text = hoveredNode.label;
-            int width = font.width(text);
-            double y = hoveredNode.y + (hoveredNode.recipe ? RECIPE : MATERIAL) / 2.0 + 3;
-            // 与普通标签一致的“最小字号”补偿
-            float textScale = (float) Math.max(1.0, MIN_LABEL_TEXT_SCALE / zoom);
-            pose.pushPose();
-            pose.translate(hoveredNode.x, y, 210);
-            pose.scale(textScale, textScale, 1.0f);
-            graphics.fill(-width / 2 - 2, -1, width / 2 + 2, 9, 0x80FFFFFF);
-            graphics.drawString(font, text, -width / 2, 0, AeStyle.TEXT, false);
-            pose.popPose();
-            return;
+            drawNodeCaption(graphics, font, hoveredNode);
+        } else if (hoveredEdgeRef != null) {
+            drawEdgeCaption(graphics, font, hoveredEdgeRef);
         }
-        if (hoveredEdgeRef != null) {
-            String text = hoveredEdgeRef.label;
-            int width = font.width(text);
-            double[] anchor = edgeLabelAnchor(hoveredEdgeRef, font);
-            pose.pushPose();
-            pose.translate(anchor[0], anchor[1], 210);
-            graphics.fill(-2, -1, width + 2, 9, 0x80FFFFFF);
-            graphics.drawString(font, text, 0, 0,
-                    darken(edgeColor(hoveredEdgeRef)), false);
-            pose.popPose();
+        if (selectedNode != null && selectedNode != hoveredNode) {
+            drawNodeCaption(graphics, font, selectedNode);
         }
+    }
+
+    private void drawNodeCaption(GuiGraphics graphics, Font font, GNode node) {
+        if (node.label == null) {
+            node.label = font.plainSubstrByWidth(node.displayName, 84);
+        }
+        String text = node.label;
+        int width = font.width(text);
+        double y = node.y + (node.recipe ? RECIPE : MATERIAL) / 2.0 + 3;
+        // 与普通标签一致的“最小字号”补偿
+        float textScale = (float) Math.max(1.0, MIN_LABEL_TEXT_SCALE / zoom);
+        PoseStack pose = graphics.pose();
+        pose.pushPose();
+        pose.translate(node.x, y, 210);
+        pose.scale(textScale, textScale, 1.0f);
+        graphics.fill(-width / 2 - 2, -1, width / 2 + 2, 9, 0x80FFFFFF);
+        graphics.drawString(font, text, -width / 2, 0, AeStyle.TEXT, false);
+        pose.popPose();
+    }
+
+    private void drawEdgeCaption(GuiGraphics graphics, Font font, GEdge edge) {
+        String text = edge.label;
+        int width = font.width(text);
+        double[] anchor = edgeLabelAnchor(edge, font);
+        PoseStack pose = graphics.pose();
+        pose.pushPose();
+        pose.translate(anchor[0], anchor[1], 210);
+        graphics.fill(-2, -1, width + 2, 9, 0x80FFFFFF);
+        graphics.drawString(font, text, 0, 0, darken(edgeColor(edge)), false);
+        pose.popPose();
     }
 
     /** 边的描边折线：先按弧线（回边/双向边）采样，再按总线三段，最后才是直线。 */
@@ -1065,19 +1095,18 @@ public final class SolveGraphView {
         }
         VertexConsumer consumer = graphics.bufferSource().getBuffer(RenderType.gui());
         Matrix4f matrix = graphics.pose().last().pose();
-        // 悬停某个节点时，只把它相关的边点亮，其它边压到很淡——线太多时靠这一下看清
-        GNode focus = hoveredNode;
+        // 选中/悬停某个节点时，只把它相关的边点亮，其它边压到很淡——线太多时靠这一下看清
         // 跨多列的「总线」边先画（压在下层），相邻列的本地流线后画（在上层），
         // 这样局部工艺链一眼可见，长距离输送不会盖住它们。
         for (GEdge edge : edges) {
             if (edgeVisible(edge, minX, maxX, minY, maxY) && isBusEdge(edge)) {
-                dimEdges = focus != null && edge.from != focus && edge.to != focus;
+                dimEdges = shouldDim(edge);
                 drawEdgeGeometry(consumer, matrix, edge);
             }
         }
         for (GEdge edge : edges) {
             if (edgeVisible(edge, minX, maxX, minY, maxY) && !isBusEdge(edge)) {
-                dimEdges = focus != null && edge.from != focus && edge.to != focus;
+                dimEdges = shouldDim(edge);
                 drawEdgeGeometry(consumer, matrix, edge);
             }
         }
@@ -1095,10 +1124,22 @@ public final class SolveGraphView {
                 // 悬停中的那条由顶层字幕负责绘制，避免同一个位置画两遍
                 continue;
             }
-            dimEdges = focus != null && edge.from != focus && edge.to != focus;
+            dimEdges = shouldDim(edge);
             drawEdgeLabel(graphics, font, edge);
         }
         dimEdges = false;
+    }
+
+    /** 有选中/悬停节点时，与它们都无关的边压淡显示。 */
+    private boolean shouldDim(GEdge edge) {
+        if (selectedNode == null && hoveredNode == null) {
+            return false;
+        }
+        return !touches(selectedNode, edge) && !touches(hoveredNode, edge);
+    }
+
+    private static boolean touches(GNode node, GEdge edge) {
+        return node != null && (edge.from == node || edge.to == node);
     }
 
     private static boolean edgeVisible(GEdge edge, double minX, double maxX,

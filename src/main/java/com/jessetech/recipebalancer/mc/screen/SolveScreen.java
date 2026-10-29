@@ -164,6 +164,8 @@ public final class SolveScreen extends Screen implements JeiPanelScreen {
                 graphNodeDragging = true;
                 graphDragging = false;
             } else {
+                // 点空白处取消选中，再进入平移
+                graph.clearSelection();
                 graphDragging = true;
                 graphNodeDragging = false;
                 lastGraphMouseX = mouseX;
