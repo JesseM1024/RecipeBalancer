@@ -9,6 +9,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
 
@@ -99,6 +100,32 @@ public final class TextReporter {
             lines.add("无");
         } else {
             for (String item : new TreeSet<>(solution.inferredRawMaterials())) {
+                lines.add("  " + item);
+            }
+        }
+
+        lines.add("");
+        lines.add(">>循环亏损物质（检测结果）");
+        lines.add("");
+        if (solution.deficitItems().isEmpty()) {
+            lines.add("无");
+        } else {
+            for (String item : new TreeSet<>(solution.deficitItems())) {
+                lines.add("  " + item);
+            }
+        }
+
+        lines.add("");
+        lines.add(">>亏损环涉及的物质");
+        lines.add("");
+        Set<String> cycleItems = new TreeSet<>();
+        for (Set<String> cycle : solution.deficitCycles()) {
+            cycleItems.addAll(cycle);
+        }
+        if (cycleItems.isEmpty()) {
+            lines.add("无");
+        } else {
+            for (String item : cycleItems) {
                 lines.add("  " + item);
             }
         }

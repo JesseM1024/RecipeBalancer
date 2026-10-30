@@ -88,8 +88,10 @@ dependencies {
     // 19.42.0.389+ 要求 [21.1.238,)，与 dev 锁定的 21.1.209 冲突。
     // 实机（NeoForge 21.1.246 + JEI 19.70）满足本模组 `[19.39.0,)` 的可选范围。
     // ------------------------------------------------------------------
-    compileOnly "mezz.jei:jei-${minecraft_version}-common-api:${jei_version}"
-    compileOnly "mezz.jei:jei-${minecraft_version}-neoforge-api:${jei_version}"
+    // 编译基线锁定在**最低支持版本** 19.8.4.110（jar 随仓库提供，见 libs/jei-api/）：
+    // 只允许直接引用该版本已有的 API；19.39+ 才有的能力走反射（mc/jei/JeiCompat*）。
+    compileOnly files('libs/jei-api/jei-1.21.1-common-api-19.8.4.110.jar')
+    // 开发环境运行期仍用可用的 JEI（其 mods.toml 只要求 NeoForge [21.0.118-beta,)）
     runtimeOnly "mezz.jei:jei-${minecraft_version}-neoforge:${jei_version}"
 
     // ------------------------------------------------------------------
@@ -201,6 +203,26 @@ var generateModMetadata = tasks.register('generateModMetadata', ProcessResources
 sourceSets.main.resources.srcDir generateModMetadata
 neoForge.ideSyncTask generateModMetadata
 
+// ---- JEI 版本兼容：主源码集锁定最低支持版本（19.8.4.110），新 API 单独源码集 ----
+def jeiApiOld = file('libs/jei-api/jei-1.21.1-common-api-19.8.4.110.jar')
+def jeiApiNew = file('libs/jei-api/jei-1.21.1-common-api-19.70.0.460.jar')
+
+sourceSets {
+    jeiNew {
+        java.srcDirs = ['src/jeiNew/java']
+        compileClasspath = sourceSets.main.output +
+                configurations.compileClasspath.filter { it != jeiApiOld } +
+                files(jeiApiNew)
+    }
+}
+
+tasks.named('jar', Jar) {
+    from sourceSets.jeiNew.output
+}
+
+tasks.matching { it.name == 'runClient' }.configureEach {
+    classpath += sourceSets.jeiNew.output
+}
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
 }

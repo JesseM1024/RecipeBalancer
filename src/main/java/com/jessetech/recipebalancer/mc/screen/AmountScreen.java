@@ -13,6 +13,8 @@ import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
+import java.util.List;
+
 /**
  * 通用“物品 + 用量”编辑屏。
  *
@@ -173,6 +175,16 @@ public final class AmountScreen extends Screen implements JeiPanelScreen {
         if (key.isEmpty()) {
             status = Lang.t("物品注册名不能为空");
             return;
+        }
+        // 精确命中注册名/显示名就换成标准 key；没有命中则按自定义物质原样保留
+        // （配方库里可能有注册表之外的物质），不做任何模糊匹配。
+        List<String> matches = ItemKeyMapper.findMatches(key, 4);
+        if (matches.size() > 1) {
+            status = Lang.t("匹配到多个物料，请改用完整注册名: %s", key);
+            return;
+        }
+        if (matches.size() == 1) {
+            key = matches.get(0);
         }
         double value = 1.0;
         if (amountEditable) {

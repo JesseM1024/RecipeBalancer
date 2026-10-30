@@ -73,7 +73,7 @@ public final class JeiAutoRecipe implements AutoRecipeHooks.Hook {
                     category = candidate;
                 }
             }
-        } catch (RuntimeException e) {
+        } catch (RuntimeException | LinkageError e) {
             return null;
         }
         return new Lookup(runtime, focus, count, category, recipe);
@@ -85,10 +85,10 @@ public final class JeiAutoRecipe implements AutoRecipeHooks.Hook {
             if (!stack.isEmpty()) {
                 // 1 参重载已标记待删除，等价于 normalize=false
                 return runtime.getIngredientManager()
-                        .createTypedIngredient(stack, false).orElse(null);
+                        .createTypedIngredient(stack).orElse(null);
             }
             return JeiIngredientRenderer.resolveTyped(key).orElse(null);
-        } catch (RuntimeException e) {
+        } catch (RuntimeException | LinkageError e) {
             return null;
         }
     }

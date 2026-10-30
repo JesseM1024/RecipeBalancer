@@ -93,6 +93,8 @@
     "已读取 %s 个书签，新增 %s 个":  "已读取 %s 个书签，新增 %s 个",
     "先选中一个条目":  "先选中一个条目",
     "找不到物品: %s":  "找不到物品: %s",
+    "匹配到多个物料，请改用完整注册名: %s":  "匹配到多个物料，请改用完整注册名: %s",
+    "已作为自定义物质添加: %s":  "已作为自定义物质添加: %s",
     "已在列表中: %s":  "已在列表中: %s",
     "已添加: %s":  "已添加: %s",
     "已移除: %s":  "已移除: %s",
@@ -213,5 +215,6 @@
   "recipebalancer.configuration.zoomMin": "缩放下限",
   "recipebalancer.configuration.zoomMin.tooltip": "自动适配视野与滚轮缩放的缩放下限。",
   "recipebalancer.configuration.zoomMax": "缩放上限",
-  "recipebalancer.configuration.zoomMax.tooltip": "自动适配视野与滚轮缩放的缩放上限。"
+  "recipebalancer.configuration.zoomMax.tooltip": "自动适配视野与滚轮缩放的缩放上限。",
+    "当前 JEI 版本过低（需要 19.39 及以上），无法使用配方页的「一键添加配方」按钮，也无法在编码界面悬停物质查询配方与用途。请升级 JEI。":  "当前 JEI 版本过低（需要 19.39 及以上），无法使用配方页的「一键添加配方」按钮，也无法在编码界面悬停物质查询配方与用途。请升级 JEI。"
 }

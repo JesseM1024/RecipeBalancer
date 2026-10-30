@@ -102,6 +102,10 @@ public final class KeySetScreen extends Screen implements JeiPanelScreen {
 
     /** 加入一个 key（重复则提示）。 */
     private void addKey(String key) {
+        addKey(key, false);
+    }
+
+    private void addKey(String key, boolean custom) {
         if (key == null || key.isBlank()) {
             return;
         }
@@ -115,7 +119,9 @@ public final class KeySetScreen extends Screen implements JeiPanelScreen {
         }
         entries.add(key);
         notifyChanged();
-        status = Lang.t("已添加: %s", ItemKeyMapper.displayName(key));
+        status = custom
+                ? Lang.t("已作为自定义物质添加: %s", key)
+                : Lang.t("已添加: %s", ItemKeyMapper.displayName(key));
     }
 
     private void removeAt(int slot) {
@@ -133,8 +139,8 @@ public final class KeySetScreen extends Screen implements JeiPanelScreen {
         String current = entries.get(slot);
         minecraft.setScreen(new AmountScreen(this, title, current, 1.0, false,
                 (newKey, ignored) -> {
-                    String resolved = resolve(newKey);
-                    if (resolved.isEmpty()) {
+                    String resolved = resolveUnique(newKey);
+                    if (resolved == null) {
                         return;
                     }
                     int existing = entries.indexOf(resolved);
@@ -157,17 +163,43 @@ public final class KeySetScreen extends Screen implements JeiPanelScreen {
         }
         minecraft.setScreen(new AmountScreen(this, title, "", 1.0, false,
                 (newKey, ignored) -> {
-                    String resolved = resolve(newKey);
-                    if (!resolved.isEmpty()) {
-                        addKey(resolved);
-                    }
+                    resolveAndAdd(newKey);
                 }));
     }
 
-    /** 允许输注册名，也允许输真名。 */
-    private static String resolve(String raw) {
-        String resolved = ItemKeyMapper.resolveKey(raw);
-        return resolved == null ? ItemKeyMapper.normalize(raw) : resolved;
+    /**
+     * 输入解析：精确命中注册名/显示名就用它；没有命中则**按自定义物质原样收下**
+     * （配方库里可能存在注册表之外的物质）；只有同名多义时才要求改用注册名。
+     */
+    private void resolveAndAdd(String raw) {
+        String resolved = resolveUnique(raw);
+        if (resolved == null) {
+            return;
+        }
+        addKey(resolved, !ItemKeyMapper.isKnown(resolved));
+    }
+
+    /** 解析输入：唯一精确命中返回该 key；无命中返回原文（自定义物质）；多义返回 null。 */
+    private String resolveUnique(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        List<String> matches = ItemKeyMapper.findMatches(raw, 4);
+        if (matches.isEmpty()) {
+            return ItemKeyMapper.normalize(raw);
+        }
+        if (matches.size() > 1) {
+            StringBuilder names = new StringBuilder();
+            for (int i = 0; i < Math.min(3, matches.size()); i++) {
+                if (i > 0) {
+                    names.append(" / ");
+                }
+                names.append(ItemKeyMapper.displayName(matches.get(i)));
+            }
+            status = Lang.t("匹配到多个物料，请改用完整注册名: %s", names);
+            return null;
+        }
+        return matches.get(0);
     }
 
     private void addFromInventory(int index) {

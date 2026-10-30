@@ -56,7 +56,7 @@ public final class JeiIngredientMapper {
             double amount = rawAmount > 0 ? rawAmount / 1000.0 : 1.0;
             String key = IngredientKey.encode(typed.getType().getUid(), uid, name);
             return new Mapped(key, amount, name);
-        } catch (RuntimeException e) {
+        } catch (RuntimeException | LinkageError e) {
             return null;
         }
     }
@@ -83,7 +83,7 @@ public final class JeiIngredientMapper {
                             .getIngredientHelper(typed.getType());
             String name = helper.getDisplayName(ingredient);
             return name == null || name.isBlank() ? null : name;
-        } catch (RuntimeException e) {
+        } catch (RuntimeException | LinkageError e) {
             return null;
         }
     }

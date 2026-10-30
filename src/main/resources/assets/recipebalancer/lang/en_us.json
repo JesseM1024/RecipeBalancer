@@ -95,6 +95,8 @@
   "已读取 %s 个书签，新增 %s 个": "Read %s bookmarks, %s new",
   "先选中一个条目": "Select an entry first",
   "找不到物品: %s": "Item not found: %s",
+  "匹配到多个物料，请改用完整注册名: %s": "Multiple matches, please use the full registry name: %s",
+  "已作为自定义物质添加: %s": "Added as a custom substance: %s",
   "已在列表中: %s": "Already in list: %s",
   "已添加: %s": "Added: %s",
   "已移除: %s": "Removed: %s",
@@ -112,6 +114,8 @@
   "汇总数据": "Summary",
   "无": "None",
   ">>自动检测外部原料": ">>Auto-detected external inputs",
+  ">>循环亏损物质（检测结果）": ">>Cyclic deficit items (detected)",
+  ">>亏损环涉及的物质": ">>Materials in deficit cycles",
   ">>自增殖配方启动库存": ">>Self-propagating recipe bootstrap",
   ">>完美循环启动投料（最小集合）": ">>Perfect-cycle bootstrap (minimal set)",
   ">>原料输入（/t）": ">>External input (/t)",
@@ -244,5 +248,6 @@
   "recipebalancer.configuration.zoomMin": "Minimum zoom",
   "recipebalancer.configuration.zoomMin.tooltip": "Lower zoom limit for auto-fit and mouse wheel zooming.",
   "recipebalancer.configuration.zoomMax": "Maximum zoom",
-  "recipebalancer.configuration.zoomMax.tooltip": "Upper zoom limit for auto-fit and mouse wheel zooming."
+  "recipebalancer.configuration.zoomMax.tooltip": "Upper zoom limit for auto-fit and mouse wheel zooming.",
+  "当前 JEI 版本过低（需要 19.39 及以上），无法使用配方页的「一键添加配方」按钮，也无法在编码界面悬停物质查询配方与用途。请升级 JEI。": "JEI is too old (19.39+ required): the one-click \"add recipe\" button on the recipe page and the recipe/usage lookup when hovering items in the encoding screen are unavailable. Please update JEI."
 }

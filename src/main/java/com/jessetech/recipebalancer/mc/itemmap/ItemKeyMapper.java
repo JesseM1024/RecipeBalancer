@@ -152,6 +152,14 @@ public final class ItemKeyMapper {
         return !stack(key).isEmpty();
     }
 
+    /** key 是否为已知物质（注册表物品或 JEI ingredient）；否则按自定义物质处理。 */
+    public static boolean isKnown(String key) {
+        if (key == null || key.isBlank()) {
+            return false;
+        }
+        return IngredientKey.isIngredientKey(key) || exists(key);
+    }
+
     public static String displayName(String key) {
         if (IngredientKey.isIngredientKey(key)) {
             return ingredientDisplayName(key);
@@ -191,34 +199,43 @@ public final class ItemKeyMapper {
      * @return 解析不到返回 null
      */
     public static String resolveKey(String raw) {
+        List<String> matches = findMatches(raw, 4);
+        return matches.size() == 1 ? matches.get(0) : null;
+    }
+
+    /**
+     * 严格解析用户输入，只接受**完全一致**的写法，不做任何模糊/前缀匹配：
+     * <ul>
+     *   <li>完整的 ingredient key（{@code ingredient|…}）；</li>
+     *   <li>完整的物品注册名，如 {@code minecraft:stone}、{@code ae2:debug_item_gen}；</li>
+     *   <li>完整的显示名，如「石头」「镁粉」。</li>
+     * </ul>
+     *
+     * @return 空列表表示没有精确匹配；多个表示同名物品（极少见），此时要求改用注册名
+     */
+    public static List<String> findMatches(String raw, int limit) {
         String value = raw == null ? "" : raw.trim();
         if (value.isEmpty()) {
-            return null;
+            return List.of();
         }
         if (IngredientKey.isIngredientKey(value)) {
-            return value;
+            return List.of(value);
         }
         String normalized = normalize(value);
-        if (exists(normalized)) {
-            return normalized;
+        if (!normalized.isEmpty() && exists(normalized)) {
+            return List.of(normalized);
         }
-        String lower = value.toLowerCase(Locale.ROOT);
-        String partial = null;
+        List<String> byName = new ArrayList<>();
         for (ResourceLocation id : BuiltInRegistries.ITEM.keySet()) {
-            String path = id.getPath();
-            if (path.equalsIgnoreCase(lower)) {
-                return id.toString();
-            }
             String name = new ItemStack(BuiltInRegistries.ITEM.get(id)).getHoverName().getString();
-            if (name.equalsIgnoreCase(value)) {
-                return id.toString();
-            }
-            if (partial == null && (name.toLowerCase(Locale.ROOT).contains(lower)
-                    || path.toLowerCase(Locale.ROOT).contains(lower))) {
-                partial = id.toString();
+            if (name.equalsIgnoreCase(value) || id.toString().equalsIgnoreCase(value)) {
+                byName.add(id.toString());
             }
         }
-        return partial;
+        if (byName.size() <= limit) {
+            return List.copyOf(byName);
+        }
+        return List.copyOf(byName.subList(0, limit));
     }
 
     /** 结果报告中的可读名称：物品名 + 药水效果（含时长）；非物品用显示名。 */

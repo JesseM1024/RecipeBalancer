@@ -36,10 +36,69 @@ import java.util.TreeSet;
  */
 public final class Balancer {
 
+    /** 反「跳过工序」的最大重解轮数（每轮禁掉一个被买断的中间产物）。 */
+    private static final int MAX_EXTERNAL_RETRIES = 4;
+
     private final LpSolver solver;
 
     public Balancer(LpSolver solver) {
         this.solver = solver;
+    }
+
+    /** item → 生产它的活跃配方索引。 */
+    private static Map<String, List<Integer>> producerIndex(List<Recipe> recipes,
+                                                            List<Integer> activeRecipes) {
+        Map<String, List<Integer>> producers = new LinkedHashMap<>();
+        for (int recipeIndex : activeRecipes) {
+            for (String product : recipes.get(recipeIndex).productList().keySet()) {
+                producers.computeIfAbsent(product, key -> new ArrayList<>()).add(recipeIndex);
+            }
+        }
+        return producers;
+    }
+
+    /**
+     * 被外部购买、但它的所有生产配方在解里都停摆的物料。
+     *
+     * <p>这类采购等于「整道工序被买断」：中间产物本该自己造，却直接买进来。
+     * 用户显式列进无限外部供应物质的物品不算（那是用户主动要求的）。
+     */
+    private static Set<String> bypassedExternals(Map<String, Double> externalInputs,
+                                                 Map<String, List<Integer>> producers,
+                                                 double[] rates,
+                                                 Set<String> userRaw) {
+        Set<String> bypassed = new LinkedHashSet<>();
+        for (String item : externalInputs.keySet()) {
+            if (userRaw.contains(item)) {
+                continue;
+            }
+            List<Integer> makers = producers.get(item);
+            if (makers == null || makers.isEmpty()) {
+                continue;
+            }
+            boolean anyRunning = false;
+            for (int recipeIndex : makers) {
+                if (rates[recipeIndex] > Constants.EPS_RATE) {
+                    anyRunning = true;
+                    break;
+                }
+            }
+            if (!anyRunning) {
+                bypassed.add(item);
+            }
+        }
+        return bypassed;
+    }
+
+    private static Map<String, Double> collectExternal(List<String> externalItems,
+                                                       double[] values) {
+        Map<String, Double> collected = new LinkedHashMap<>();
+        for (int index = 0; index < externalItems.size(); index++) {
+            if (values[index] > Constants.EPS_FLOW) {
+                collected.put(externalItems.get(index), values[index]);
+            }
+        }
+        return collected;
     }
 
     /** 默认后端（commons-math3）入口。 */
@@ -78,8 +137,9 @@ public final class Balancer {
         matrix = MaterialMatrix.build(recipes, items);
 
         // ---- 循环亏损检测（P0-B：全量配方，不感知 disabled）----
-        Set<String> deficits = CyclicDeficitDetector.detect(
+        CyclicDeficitDetector.Cycles cycles = CyclicDeficitDetector.detectCycles(
                 recipes, options.allowedExternalCycInputs(), solver);
+        Set<String> deficits = cycles.deficits();
 
         // ---- 外部输入白名单 = 用户原料 ∪ 自动原料 ∪ 循环亏损 − 目标产物 ----
         Set<String> allowedExternal = new LinkedHashSet<>();
@@ -98,57 +158,93 @@ public final class Balancer {
                 activeRecipes.add(index);
             }
         }
-        List<String> externalItems = new ArrayList<>(new TreeSet<>(allowedExternal));
-        int variableCount = activeRecipes.size() + externalItems.size();
-
-        double[] objective = new double[variableCount];
-        for (int column = 0; column < activeRecipes.size(); column++) {
-            Recipe recipe = recipes.get(activeRecipes.get(column));
-            objective[column] = options.objective() == Objective.MACHINE ? recipe.time() : 1.0;
-        }
-        for (int index = 0; index < externalItems.size(); index++) {
-            objective[activeRecipes.size() + index] = Constants.EXTERNAL_PENALTY;
-        }
-
-        Map<String, Integer> externalColumn = new LinkedHashMap<>();
-        for (int index = 0; index < externalItems.size(); index++) {
-            externalColumn.put(externalItems.get(index), index);
-        }
-
         double[][] a = matrix.matrix();
-        List<LpConstraint> constraints = new ArrayList<>(items.size());
         int externalOffset = activeRecipes.size();
-        for (int row = 0; row < items.size(); row++) {
-            double[] coefficients = new double[variableCount];
-            for (int column = 0; column < activeRecipes.size(); column++) {
-                coefficients[column] = -a[row][activeRecipes.get(column)];
-            }
-            Integer externalIndex = externalColumn.get(items.get(row));
-            if (externalIndex != null) {
-                coefficients[externalOffset + externalIndex] = -1.0;
-            }
-            constraints.add(new LpConstraint(coefficients, Relation.LE, s[row] - b[row]));
-        }
 
-        LpResult result = solver.minimize(objective, constraints);
-        if (!result.success()) {
-            return failure(inferredRaw, inferredSeed, result.message());
-        }
-
-        // ---- 解析：展开被删掉的禁用列 ----
+        // 反「跳过工序」机制：若某个外部输入让它的生产配方在解里完全停摆（等于整道工序被买断），
+        // 就禁止直接买它、改为允许买它的**原料**再重解，逼解把中间产物自己造出来。
+        // 注意：这是对 Python 参考实现的有意偏离（那边会为了少开机器而直接买中间产物）。
+        Map<String, List<Integer>> producers = producerIndex(recipes, activeRecipes);
+        Set<String> banned = new LinkedHashSet<>();
+        Set<String> extraAllowed = new LinkedHashSet<>();
         double[] rates = new double[recipes.size()];
-        for (int column = 0; column < activeRecipes.size(); column++) {
-            rates[activeRecipes.get(column)] = result.point()[column];
-        }
-        double[] externalValues = new double[externalItems.size()];
-        for (int index = 0; index < externalItems.size(); index++) {
-            externalValues[index] = result.point()[externalOffset + index];
-        }
-
+        List<String> externalItems = List.of();
+        double[] externalValues = new double[0];
         Map<String, Double> externalInputs = new LinkedHashMap<>();
-        for (int index = 0; index < externalItems.size(); index++) {
-            if (externalValues[index] > Constants.EPS_FLOW) {
-                externalInputs.put(externalItems.get(index), externalValues[index]);
+        boolean solved = false;
+        for (int attempt = 0; attempt <= MAX_EXTERNAL_RETRIES; attempt++) {
+            Set<String> candidates = new LinkedHashSet<>(allowedExternal);
+            candidates.addAll(extraAllowed);
+            candidates.removeAll(banned);
+            externalItems = new ArrayList<>(new TreeSet<>(candidates));
+            int variableCount = activeRecipes.size() + externalItems.size();
+
+            double[] objective = new double[variableCount];
+            for (int column = 0; column < activeRecipes.size(); column++) {
+                Recipe recipe = recipes.get(activeRecipes.get(column));
+                objective[column] = options.objective() == Objective.MACHINE ? recipe.time() : 1.0;
+            }
+            for (int index = 0; index < externalItems.size(); index++) {
+                objective[activeRecipes.size() + index] = Constants.EXTERNAL_PENALTY;
+            }
+
+            Map<String, Integer> externalColumn = new LinkedHashMap<>();
+            for (int index = 0; index < externalItems.size(); index++) {
+                externalColumn.put(externalItems.get(index), index);
+            }
+
+            List<LpConstraint> constraints = new ArrayList<>(items.size());
+            for (int row = 0; row < items.size(); row++) {
+                double[] coefficients = new double[variableCount];
+                for (int column = 0; column < activeRecipes.size(); column++) {
+                    coefficients[column] = -a[row][activeRecipes.get(column)];
+                }
+                Integer externalIndex = externalColumn.get(items.get(row));
+                if (externalIndex != null) {
+                    coefficients[externalOffset + externalIndex] = -1.0;
+                }
+                constraints.add(new LpConstraint(coefficients, Relation.LE, s[row] - b[row]));
+            }
+
+            LpResult result = solver.minimize(objective, constraints);
+            if (!result.success()) {
+                if (!solved) {
+                    return failure(inferredRaw, inferredSeed, cycles, result.message());
+                }
+                // 禁掉某些外部输入后不可行：沿用上一次可行的解
+                break;
+            }
+
+            // ---- 解析：展开被删掉的禁用列 ----
+            double[] candidateRates = new double[recipes.size()];
+            for (int column = 0; column < activeRecipes.size(); column++) {
+                candidateRates[activeRecipes.get(column)] = result.point()[column];
+            }
+            List<String> candidateItems = externalItems;
+            double[] candidateValues = new double[candidateItems.size()];
+            for (int index = 0; index < candidateItems.size(); index++) {
+                candidateValues[index] = result.point()[externalOffset + index];
+            }
+
+            rates = candidateRates;
+            externalItems = candidateItems;
+            externalValues = candidateValues;
+            externalInputs = collectExternal(candidateItems, candidateValues);
+            solved = true;
+
+            Set<String> bypassed = bypassedExternals(externalInputs, producers, rates, userRaw);
+            if (bypassed.isEmpty() || attempt == MAX_EXTERNAL_RETRIES) {
+                break;
+            }
+            for (String item : bypassed) {
+                banned.add(item);
+                List<Integer> maker = producers.get(item);
+                if (maker == null) {
+                    continue;
+                }
+                for (int recipeIndex : maker) {
+                    extraAllowed.addAll(recipes.get(recipeIndex).sourceList().keySet());
+                }
             }
         }
 
@@ -200,14 +296,16 @@ public final class Balancer {
 
         return new SolveResult(boxed(rates), netFlow, externalInputs, finalOutputs,
                 equipmentUsage, totalMachineCount, inferredRaw, inferredSeed, bootstrap,
-                true, "OK");
+                cycles.deficits(), cycles.cycles(), true, "OK");
     }
 
     private static SolveResult failure(Set<String> inferredRaw,
                                        Map<String, Double> inferredSeed,
+                                       CyclicDeficitDetector.Cycles cycles,
                                        String message) {
         return new SolveResult(List.of(), Map.of(), Map.of(), Map.of(), Map.of(), 0,
-                inferredRaw, inferredSeed, Map.of(), false, message);
+                inferredRaw, inferredSeed, Map.of(),
+                cycles.deficits(), cycles.cycles(), false, message);
     }
 
     /** 双精度并行数向上取整为长整形；超出范围时饱和，避免回绕。 */

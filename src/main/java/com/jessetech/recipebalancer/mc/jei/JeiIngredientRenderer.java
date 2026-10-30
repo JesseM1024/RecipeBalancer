@@ -44,7 +44,7 @@ public final class JeiIngredientRenderer
             renderRaw(renderer, graphics, ingredient.getIngredient(), x + 1, y + 1);
             ItemKeyMapper.renderAmountOverlay(graphics, font, amount, x, y);
             return true;
-        } catch (RuntimeException e) {
+        } catch (RuntimeException | LinkageError e) {
             return false;
         }
     }
@@ -66,7 +66,7 @@ public final class JeiIngredientRenderer
                     net.minecraft.ChatFormatting.DARK_GRAY));
             graphics.renderComponentTooltip(font, lines, mouseX, mouseY);
             return true;
-        } catch (RuntimeException e) {
+        } catch (RuntimeException | LinkageError e) {
             return false;
         }
     }
@@ -85,7 +85,7 @@ public final class JeiIngredientRenderer
                 return Optional.empty();
             }
             return resolveWithType(manager, type.get(), IngredientKey.uniqueId(key));
-        } catch (RuntimeException e) {
+        } catch (RuntimeException | LinkageError e) {
             return Optional.empty();
         }
     }

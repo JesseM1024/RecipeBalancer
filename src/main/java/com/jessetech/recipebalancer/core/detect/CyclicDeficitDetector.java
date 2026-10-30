@@ -34,9 +34,25 @@ public final class CyclicDeficitDetector {
     private CyclicDeficitDetector() {
     }
 
+    /**
+     * 检测结果。
+     *
+     * @param deficits 亏损物质（可外部补充）
+     * @param cycles   发生亏损的环（每个环的全部物质，按 SCC 去重）
+     */
+    public record Cycles(Set<String> deficits, List<Set<String>> cycles) {
+    }
+
     public static Set<String> detect(List<Recipe> recipes,
                                      Set<String> allowedExternalInputs,
                                      LpSolver solver) {
+        return detectCycles(recipes, allowedExternalInputs, solver).deficits();
+    }
+
+    /** 同时返回亏损物质与亏损所在的环（报告里给用户当参考）。 */
+    public static Cycles detectCycles(List<Recipe> recipes,
+                                      Set<String> allowedExternalInputs,
+                                      LpSolver solver) {
         Set<String> allowed = allowedExternalInputs == null ? Set.of() : allowedExternalInputs;
         boolean restricted = !allowed.isEmpty();
 
@@ -50,6 +66,7 @@ public final class CyclicDeficitDetector {
         }
 
         Set<String> deficits = new LinkedHashSet<>();
+        List<Set<String>> cycles = new ArrayList<>();
         for (Set<String> scc : graph.stronglyConnectedComponents()) {
             if (!isCycle(graph, scc)) {
                 continue;
@@ -90,9 +107,14 @@ public final class CyclicDeficitDetector {
                 continue;
             }
 
+            int before = deficits.size();
             detectInCycle(recipes, internalRecipes, cyclicItems, allowed, restricted, solver, deficits);
+            if (deficits.size() > before) {
+                // 只记录真的亏损的环，作为报告参考
+                cycles.add(Set.copyOf(scc));
+            }
         }
-        return deficits;
+        return new Cycles(Set.copyOf(deficits), List.copyOf(cycles));
     }
 
     private static void detectInCycle(List<Recipe> recipes,
