@@ -40,6 +40,7 @@ public final class SolveScreen extends Screen implements JeiPanelScreen {
     private int textY;
     private int textH;
     private Button toggleButton;
+    private Button layoutButton;
 
     public SolveScreen(Screen parent, String report, boolean success) {
         this(parent, report, null, List.of(), Map.of(), false, success);
@@ -85,6 +86,9 @@ public final class SolveScreen extends Screen implements JeiPanelScreen {
         if (graph != null) {
             toggleButton = addRenderableWidget(Button.builder(toggleLabel(), b -> toggleView())
                     .bounds(panelX + 112, panelY + panelH - 26, 100, 20).build());
+            layoutButton = addRenderableWidget(Button.builder(layoutLabel(), b -> toggleLayout())
+                    .bounds(panelX + 216, panelY + panelH - 26, 110, 20).build());
+            layoutButton.visible = graphMode;
         }
     }
 
@@ -92,10 +96,31 @@ public final class SolveScreen extends Screen implements JeiPanelScreen {
         return Lang.c(graphMode ? "文本输出" : "流程图");
     }
 
+    /** 布局按钮：显示当前模式，点一下在分层 / 弹性之间切换。 */
+    private Component layoutLabel() {
+        boolean force = graph != null
+                && graph.layoutMode() == SolveGraphView.LayoutMode.FORCE;
+        return Lang.c(force ? "布局: 弹性" : "布局: 分层");
+    }
+
+    private void toggleLayout() {
+        if (graph == null) {
+            return;
+        }
+        graph.toggleLayoutMode();
+        if (layoutButton != null) {
+            layoutButton.setMessage(layoutLabel());
+        }
+        graph.resetCamera(panelW - 8, textH);
+    }
+
     private void toggleView() {
         graphMode = !graphMode;
         if (toggleButton != null) {
             toggleButton.setMessage(toggleLabel());
+        }
+        if (layoutButton != null) {
+            layoutButton.visible = graphMode;
         }
         if (!graphMode) {
             scroll = 0;
@@ -164,13 +189,17 @@ public final class SolveScreen extends Screen implements JeiPanelScreen {
                 graphNodeDragging = true;
                 graphDragging = false;
             } else {
-                // 点空白处取消选中，再进入平移
-                graph.clearSelection();
+                // 左键点空白只平移，不取消选中（拖动画面时选中高亮保持）
                 graphDragging = true;
                 graphNodeDragging = false;
                 lastGraphMouseX = mouseX;
                 lastGraphMouseY = mouseY;
             }
+            return true;
+        }
+        if (graphMode && graph != null && button == 1 && inGraphArea(mouseX, mouseY)) {
+            // 右键点空白处取消选中；点节点则保留
+            graph.clearSelectionOnRightClick(mouseX, mouseY);
             return true;
         }
         return super.mouseClicked(mouseX, mouseY, button);

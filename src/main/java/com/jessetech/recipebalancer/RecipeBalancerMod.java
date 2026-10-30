@@ -1,12 +1,16 @@
 package com.jessetech.recipebalancer;
 
+import com.jessetech.recipebalancer.mc.config.GraphLayoutConfig;
 import com.jessetech.recipebalancer.mc.keybind.RbKeyMappings;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
+import net.neoforged.fml.config.ModConfig;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
+import net.neoforged.neoforge.client.gui.ConfigurationScreen;
+import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
 import net.neoforged.neoforge.common.NeoForge;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,6 +31,9 @@ public final class RecipeBalancerMod {
         // 显式给出事件类型：方法引用经 lambda 擦除后，泛型 addListener 在运行期可能推断不出事件类
         modBus.addListener(RegisterKeyMappingsEvent.class, RbKeyMappings::register);
         NeoForge.EVENT_BUS.addListener(ClientTickEvent.Post.class, RbKeyMappings::onClientTick);
+        // 配置：ModConfigSpec + NeoForge 自带编辑器（模组列表里的「Config」按钮）
+        container.registerConfig(ModConfig.Type.CLIENT, GraphLayoutConfig.SPEC);
+        container.registerExtensionPoint(IConfigScreenFactory.class, ConfigurationScreen::new);
         LOGGER.info("[RecipeBalancer] M2 初始化：快捷键 K 打开原生主界面");
         checkRuntimeDependencies();
     }

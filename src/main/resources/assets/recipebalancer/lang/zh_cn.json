@@ -1,4 +1,4 @@
-﻿{
+{
     "key.categories.recipebalancer":  "配方配平器",
     "key.recipebalancer.open":  "打开配方配平器",
     "RecipeBalancer · 配方编码终端":  "RecipeBalancer · 配方编码终端",
@@ -49,7 +49,7 @@
     "求解":  "求解",
     "写入":  "写入",
     "新建":  "新建",
-    "存取":  "存取",
+    "打开":  "打开",
     "保存":  "保存",
     "筛选":  "筛选",
     "载入":  "载入",
@@ -102,6 +102,8 @@
     "求解失败":  "求解失败",
     "文本输出":  "文本输出",
     "流程图":  "流程图",
+    "布局: 分层":  "布局: 分层",
+    "布局: 弹性":  "布局: 弹性",
     "滚轮滚动":  "滚轮滚动",
     "配方耗时":  "配方耗时",
     "耗时表达式":  "耗时表达式",
@@ -195,5 +197,21 @@
     "高亮的物品已有配方存在配方库中":  "高亮的物品已有配方存在配方库中",
     "没找到该物质的配方":  "没找到该物质的配方",
     "该物质有 %s 种配方，已在 JEI 中打开":  "该物质有 %s 种配方，已在 JEI 中打开",
-    "已自动写入 %s 的配方":  "已自动写入 %s 的配方"
+    "已自动写入 %s 的配方":  "已自动写入 %s 的配方",
+  "recipebalancer.configuration.nodeGap": "节点行距",
+  "recipebalancer.configuration.nodeGap.tooltip": "同一列相邻节点之间的额外竖向间距（像素），调大更松散。",
+  "recipebalancer.configuration.edgeLength": "列间距",
+  "recipebalancer.configuration.edgeLength.tooltip": "列与列之间的距离基准（像素），调大图更分散、连线更长。",
+  "recipebalancer.configuration.forceIdeal": "弹性布局边长系数",
+  "recipebalancer.configuration.forceIdeal.tooltip": "弹性布局的理想边长系数（相对列间距），调小节点更紧凑。",
+  "recipebalancer.configuration.edgeSaturation": "连线降饱和",
+  "recipebalancer.configuration.edgeSaturation.tooltip": "连线向灰色混合的强度：0 保持物质本色，1 完全灰。",
+  "recipebalancer.configuration.edgeOpacity": "连线不透明度",
+  "recipebalancer.configuration.edgeOpacity.tooltip": "普通连线的基础不透明度；总线主干与入靶段按比例同步变淡。",
+  "recipebalancer.configuration.dimOpacity": "高亮压暗程度",
+  "recipebalancer.configuration.dimOpacity.tooltip": "高亮某个节点时，其余连线被压低到的不透明度。",
+  "recipebalancer.configuration.zoomMin": "缩放下限",
+  "recipebalancer.configuration.zoomMin.tooltip": "自动适配视野与滚轮缩放的缩放下限。",
+  "recipebalancer.configuration.zoomMax": "缩放上限",
+  "recipebalancer.configuration.zoomMax.tooltip": "自动适配视野与滚轮缩放的缩放上限。"
 }

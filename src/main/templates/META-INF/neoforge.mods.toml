@@ -9,6 +9,7 @@ license="${mod_license}"
 modId="${mod_id}" #mandatory
 version="${mod_version}" #mandatory
 displayName="${mod_name}" #mandatory
+logoFile="icon.png" #模组列表图标（resources/icon.png）
 description='''
 产线配平自动计算器（纯客户端）。
 按下快捷键打开图形界面，可视化录入配方（物品可从背包/JEI 拖入，或从 JEI 配方直接写入），

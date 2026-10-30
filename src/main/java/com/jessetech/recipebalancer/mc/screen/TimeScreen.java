@@ -85,7 +85,8 @@ public final class TimeScreen extends Screen implements JeiPanelScreen {
             callback.accept(result);
             minecraft.setScreen(parent);
         } catch (RuntimeException e) {
-            status = e.getMessage();
+            // 内层消息也走语言文件（core 抛出的固定文案同时也是语言键）
+            status = Lang.t("表达式无效: %s", Lang.t(String.valueOf(e.getMessage())));
         }
     }
 
@@ -112,7 +113,7 @@ public final class TimeScreen extends Screen implements JeiPanelScreen {
             preview = "= " + TimeExpression.formatExactTicks(result)
                     + "  (" + TimeExpression.formatTicks(result) + ")";
         } catch (RuntimeException e) {
-            preview = Lang.t("表达式无效: %s", e.getMessage());
+            preview = Lang.t("表达式无效: %s", Lang.t(String.valueOf(e.getMessage())));
         }
         graphics.drawString(font, preview, panelX + 8, panelY + 52, AeStyle.MUTED, false);
         graphics.drawString(font, Lang.t("各配方可独立选单位；内部统一按 t 保存"),

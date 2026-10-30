@@ -281,7 +281,7 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
         });
         addRenderableWidget(libraryFilterBox);
 
-        addRenderableWidget(Button.builder(Lang.c("存取"), b -> openWorkspaceList())
+        addRenderableWidget(Button.builder(Lang.c("打开"), b -> openWorkspaceList())
                 .bounds(openX, topY + 1, buttonW, 14).build());
         addRenderableWidget(Button.builder(Lang.c("保存"), b -> storeWorkspace())
                 .bounds(saveX, topY + 1, buttonW, 14).build());
@@ -1556,7 +1556,7 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
             return true;
         } catch (RuntimeException e) {
             if (showStatus) {
-                status = Lang.t("写入失败: %s", e.getMessage());
+                status = Lang.t("写入失败: %s", Lang.t(String.valueOf(e.getMessage())));
             }
             return false;
         }

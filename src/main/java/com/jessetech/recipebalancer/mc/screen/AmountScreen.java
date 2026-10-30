@@ -179,7 +179,7 @@ public final class AmountScreen extends Screen implements JeiPanelScreen {
             try {
                 value = TimeExpression.evaluate(amountBox.getValue().trim());
             } catch (RuntimeException e) {
-                status = Lang.t("表达式无效: %s", e.getMessage());
+                status = Lang.t("表达式无效: %s", Lang.t(String.valueOf(e.getMessage())));
                 return;
             }
             if (!(value > 0) || !Double.isFinite(value)) {

@@ -20,6 +20,7 @@ import org.joml.Matrix4f;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -96,6 +97,10 @@ public final class SolveGraphView {
     private GNode draggingNode;
     private double dragOffsetX;
     private double dragOffsetY;
+    /** 弹性拖拽：受影响的邻居及其跟随权重，以及上一帧的锚点坐标。 */
+    private final Map<GNode, Double> elasticWeights = new HashMap<>();
+    private double lastDragX;
+    private double lastDragY;
     /** 本帧这条边是否压淡（悬停某节点时，无关的边降到很淡）。 */
     private boolean dimEdges;
     /** 上一帧悬停的节点（由 renderTooltip 更新），用于给边做聚焦压暗。 */
@@ -104,13 +109,45 @@ public final class SolveGraphView {
     private GEdge hoveredEdgeRef;
     /** 点击选中的节点：高亮常驻，与悬停高亮叠加，同时只允许一个。 */
     private GNode selectedNode;
+    /** 当前布局模式与两种模式的坐标缓存（切回来时直接读，不重算）。 */
+    private LayoutMode layoutMode = LayoutMode.LAYERED;
+    private final Map<GNode, double[]> layeredPositions = new HashMap<>();
+    private final Map<GNode, double[]> forcePositions = new HashMap<>();
     /** 悬停描边的两种颜色（工业警示：黄 + 深灰）与动画速度。 */
     private static final int ANT_YELLOW = 0xFFFFD24A;
     private static final int ANT_GRAY = 0xFF4A4A4A;
 
+    /** 连线样式与缩放范围（配置界面可调，每帧刷新一次）。 */
+    private double edgeSaturation = 0.5;
+    private double edgeOpacity = 1.0;
+    private double dimOpacity = 0.1;
+    private double forceIdealFactor = 0.3;
+    private double minEdgeLength = 96.0;
+    private double zoomMin = 0.1;
+    private double zoomMax = 3.0;
+
     /** 压暗无关边：只改透明度，形状和位置不变。 */
     private int shade(int color) {
-        return dimEdges ? (color & 0x00FFFFFF) | 0x28000000 : color;
+        return dimEdges ? fade(color, (int) Math.round(255 * dimOpacity)) : color;
+    }
+
+    /** 每帧读一次配置快照，配置界面保存后立即生效。 */
+    private void refreshStyle() {
+        GraphLayoutConfig.Settings settings = GraphLayoutConfig.current();
+        nodeGap = settings.nodeGap();
+        edgeNaturalLength = settings.edgeLength();
+        edgeSaturation = settings.edgeSaturation();
+        edgeOpacity = settings.edgeOpacity();
+        dimOpacity = settings.dimOpacity();
+        forceIdealFactor = settings.forceIdeal();
+        minEdgeLength = settings.minEdgeLength();
+        zoomMin = settings.zoomMin();
+        zoomMax = settings.zoomMax();
+    }
+
+    /** 普通连线的基础不透明度。 */
+    private int baseAlpha() {
+        return (int) Math.round(255 * edgeOpacity);
     }
 
     /** 该边所属物质的颜色（同一物质恒定）。 */
@@ -124,16 +161,20 @@ public final class SolveGraphView {
         return (color & 0x00FFFFFF) | ((alpha & 0xFF) << 24);
     }
 
-    /** 降低饱和度：向同亮度灰混合，颜色更沉，长线不至于太抢眼。 */
-    private static int desaturate(int color) {
+    /** 降低饱和度：向同亮度灰混合，强度来自配置（0 = 原色，1 = 纯灰）。 */
+    private int desaturate(int color) {
+        double keep = 1.0 - Math.max(0.0, Math.min(1.0, edgeSaturation));
+        if (keep >= 0.999) {
+            return color;
+        }
         int r = (color >> 16) & 0xFF;
         int g = (color >> 8) & 0xFF;
         int b = color & 0xFF;
         int gray = (int) (r * 0.299 + g * 0.587 + b * 0.114);
         return 0xFF000000
-                | ((int) (r * 0.62 + gray * 0.38) << 16)
-                | ((int) (g * 0.62 + gray * 0.38) << 8)
-                | (int) (b * 0.62 + gray * 0.38);
+                | ((int) (r * keep + gray * edgeSaturation) << 16)
+                | ((int) (g * keep + gray * edgeSaturation) << 8)
+                | (int) (b * keep + gray * edgeSaturation);
     }
 
     /** 压暗成深色，给流量文字用，保证在浅灰底上清晰。 */
@@ -231,7 +272,7 @@ public final class SolveGraphView {
         this.recipes = recipes;
         this.targets = targets == null ? Map.of() : new LinkedHashMap<>(targets);
         this.inventoryEnabled = inventoryEnabled;
-        GraphLayoutConfig.Settings settings = GraphLayoutConfig.get();
+        GraphLayoutConfig.Settings settings = GraphLayoutConfig.current();
         this.nodeGap = settings.nodeGap();
         this.edgeNaturalLength = settings.edgeLength();
         this.nameLanguage = Lang.languageCode();
@@ -340,6 +381,14 @@ public final class SolveGraphView {
         for (int i = 0; i < nodes.size(); i++) {
             nodes.get(i).index = i;
         }
+        layoutLayered();
+        layoutMode = LayoutMode.LAYERED;
+        rememberPositions();
+        refreshBounds();
+    }
+
+    /** 仅计算分层布局的坐标（可在切换布局时复用）。 */
+    private void layoutLayered() {
         Map<GNode, List<GEdge>> outgoing = new HashMap<>();
         for (GEdge edge : edges) {
             outgoing.computeIfAbsent(edge.from, key -> new ArrayList<>()).add(edge);
@@ -349,8 +398,10 @@ public final class SolveGraphView {
         List<List<GNode>> layers = groupByLayer(layerOf);
         orderLayers(layers);
         placeLayers(layers);
-        assignBusPorts();
+    }
 
+    /** 重算内容包围盒，并让下一帧重新适配视野。 */
+    private void refreshBounds() {
         minX = Double.MAX_VALUE;
         minY = Double.MAX_VALUE;
         double maxX = -Double.MAX_VALUE;
@@ -364,7 +415,162 @@ public final class SolveGraphView {
         }
         contentW = Math.max(1.0, maxX - minX);
         contentH = Math.max(1.0, maxY - minY);
+        assignBusPorts();
         cameraReady = false;
+    }
+
+    /** 布局模式：默认分层（列=工艺深度），可切换回弹性（力导向）视图。 */
+    public enum LayoutMode {
+        LAYERED, FORCE
+    }
+
+    public LayoutMode layoutMode() {
+        return layoutMode;
+    }
+
+    /**
+     * 切换布局模式：切到弹性时若从未算过才现算一次，之后来回切换都直接读缓存，
+     * 拖拽过的位置也会被记住。
+     */
+    public void toggleLayoutMode() {
+        if (nodes.isEmpty()) {
+            return;
+        }
+        rememberPositions();
+        layoutMode = layoutMode == LayoutMode.LAYERED ? LayoutMode.FORCE : LayoutMode.LAYERED;
+        Map<GNode, double[]> cache = layoutMode == LayoutMode.FORCE
+                ? forcePositions : layeredPositions;
+        if (cache.isEmpty()) {
+            if (layoutMode == LayoutMode.FORCE) {
+                layoutForce();
+            } else {
+                layoutLayered();
+            }
+        } else {
+            applyPositions(cache);
+        }
+        // 缓存里的坐标可能被拖拽过：恢复后再修一次重叠（最小边长只约束拖拽）
+        separateOverlaps(12);
+        refreshBounds();
+    }
+
+    /** 把当前坐标存进当前模式的缓存（拖拽后的位置也一并保住）。 */
+    private void rememberPositions() {
+        Map<GNode, double[]> cache = layoutMode == LayoutMode.LAYERED
+                ? layeredPositions : forcePositions;
+        cache.clear();
+        for (GNode node : nodes) {
+            cache.put(node, new double[]{node.x, node.y});
+        }
+    }
+
+    private void applyPositions(Map<GNode, double[]> cache) {
+        for (GNode node : nodes) {
+            double[] at = cache.get(node);
+            if (at != null) {
+                node.x = at[0];
+                node.y = at[1];
+            }
+        }
+    }
+
+    /**
+     * 弹性（力导向）布局：先把节点铺在一个圆盘上，再做「斥力 + 弹簧」迭代。
+     * 只在首次从分层切到弹性时执行一次，结果进缓存。
+     */
+    private void layoutForce() {
+        int n = nodes.size();
+        // 初始圆盘收紧：只给迭代一个起点，不再决定最终尺度
+        double radius = Math.max(110.0, Math.sqrt(n) * 34.0);
+        for (int i = 0; i < n; i++) {
+            double angle = Math.PI * 2.0 * i / n;
+            nodes.get(i).x = Math.cos(angle) * radius;
+            nodes.get(i).y = Math.sin(angle) * radius;
+        }
+        // 初始化只按 forceIdeal 决定尺度；minEdgeLength 只用于拖拽约束，不参与初始布局
+        double ideal = Math.max(40.0, edgeNaturalLength * forceIdealFactor);
+        double[] pushX = new double[n];
+        double[] pushY = new double[n];
+        int iterations = n > 200 ? 140 : 220;
+        for (int iter = 0; iter < iterations; iter++) {
+            Arrays.fill(pushX, 0.0);
+            Arrays.fill(pushY, 0.0);
+            for (int i = 0; i < n; i++) {
+                GNode a = nodes.get(i);
+                for (int j = i + 1; j < n; j++) {
+                    GNode b = nodes.get(j);
+                    double vx = a.x - b.x;
+                    double vy = a.y - b.y;
+                    double dist = Math.max(0.01, Math.hypot(vx, vy));
+                    double force = ideal * ideal / dist;
+                    double ux = vx / dist;
+                    double uy = vy / dist;
+                    pushX[i] += ux * force;
+                    pushY[i] += uy * force;
+                    pushX[j] -= ux * force;
+                    pushY[j] -= uy * force;
+                }
+            }
+            for (GEdge edge : edges) {
+                GNode a = edge.from;
+                GNode b = edge.to;
+                double vx = a.x - b.x;
+                double vy = a.y - b.y;
+                double dist = Math.max(0.01, Math.hypot(vx, vy));
+                double force = dist * dist / ideal;
+                double ux = vx / dist;
+                double uy = vy / dist;
+                pushX[a.index] -= ux * force;
+                pushY[a.index] -= uy * force;
+                pushX[b.index] += ux * force;
+                pushY[b.index] += uy * force;
+            }
+            // 位移限幅（退火），避免节点被弹出视野
+            double limit = Math.max(2.0, ideal * 0.35 * (1.0 - iter / (double) iterations));
+            for (int i = 0; i < n; i++) {
+                double len = Math.hypot(pushX[i], pushY[i]);
+                if (len < 1e-6) {
+                    continue;
+                }
+                double step = Math.min(limit, len);
+                GNode node = nodes.get(i);
+                node.x += pushX[i] / len * step;
+                node.y += pushY[i] / len * step;
+            }
+        }
+        // 收敛后再推掉残余重叠：只修间距，不改整体形状
+        separateOverlaps(24);
+    }
+
+    /** 消除节点重叠：按「外接半径 + 间距」互推，斜向贴角也不会叠在一起。 */
+    private void separateOverlaps(int iterations) {
+        for (int iter = 0; iter < iterations; iter++) {
+            boolean moved = false;
+            for (int i = 0; i < nodes.size(); i++) {
+                GNode a = nodes.get(i);
+                for (int j = i + 1; j < nodes.size(); j++) {
+                    GNode b = nodes.get(j);
+                    double vx = b.x - a.x;
+                    double vy = b.y - a.y;
+                    double dist = Math.max(0.01, Math.hypot(vx, vy));
+                    double min = spacingRadius(a) + spacingRadius(b) + 6.0;
+                    if (dist >= min) {
+                        continue;
+                    }
+                    double push = (min - dist) * 0.3;
+                    double ux = vx / dist;
+                    double uy = vy / dist;
+                    a.x -= ux * push;
+                    a.y -= uy * push;
+                    b.x += ux * push;
+                    b.y += uy * push;
+                    moved = true;
+                }
+            }
+            if (!moved) {
+                break;
+            }
+        }
     }
 
     /** 迭代 DFS 找回边（指向当前栈上节点的边）；回边不参与分层。 */
@@ -560,31 +766,50 @@ public final class SolveGraphView {
         if (lastAreaW <= 0) {
             return false;
         }
-        double worldX = (screenX - lastAreaX - panX) / zoom;
-        double worldY = (screenY - lastAreaY - panY) / zoom;
-        GNode hit = null;
-        for (int i = nodes.size() - 1; i >= 0; i--) {
-            GNode node = nodes.get(i);
-            double half = (node.recipe ? RECIPE : MATERIAL) / 2.0 + 3;
-            if (Math.abs(worldX - node.x) <= half && Math.abs(worldY - node.y) <= half) {
-                hit = node;
-                break;
-            }
-        }
+        GNode hit = nodeAt(screenX, screenY);
         if (hit == null) {
             return false;
         }
+        double worldX = (screenX - lastAreaX - panX) / zoom;
+        double worldY = (screenY - lastAreaY - panY) / zoom;
         draggingNode = hit;
         dragOffsetX = worldX - hit.x;
         dragOffsetY = worldY - hit.y;
-        // 点击即选中：高亮常驻，直到点空白或另一个节点
+        lastDragX = hit.x;
+        lastDragY = hit.y;
+        // 弹性布局下拖动会带着邻居一起走；分层布局保持静态
+        if (layoutMode == LayoutMode.FORCE) {
+            collectElasticNeighbors(hit);
+        } else {
+            elasticWeights.clear();
+        }
+        // 左键点中新节点即选中（替换旧的）；拖空白处不会取消选中
         selectedNode = hit;
         return true;
     }
 
-    /** 点击图区空白处：取消选中。 */
-    public void clearSelection() {
-        selectedNode = null;
+    /** 右键：点空白处才取消选中；点在节点上保留选中。 */
+    public void clearSelectionOnRightClick(double screenX, double screenY) {
+        if (nodeAt(screenX, screenY) == null) {
+            selectedNode = null;
+        }
+    }
+
+    /** 屏幕坐标下的节点命中（没有则返回 null）。 */
+    private GNode nodeAt(double screenX, double screenY) {
+        if (lastAreaW <= 0) {
+            return null;
+        }
+        double worldX = (screenX - lastAreaX - panX) / zoom;
+        double worldY = (screenY - lastAreaY - panY) / zoom;
+        for (int i = nodes.size() - 1; i >= 0; i--) {
+            GNode node = nodes.get(i);
+            double half = (node.recipe ? RECIPE : MATERIAL) / 2.0 + 3;
+            if (Math.abs(worldX - node.x) <= half && Math.abs(worldY - node.y) <= half) {
+                return node;
+            }
+        }
+        return null;
     }
 
     public boolean isNodeDragging() {
@@ -597,13 +822,200 @@ public final class SolveGraphView {
         }
         draggingNode.x = (screenX - lastAreaX - panX) / zoom - dragOffsetX;
         draggingNode.y = (screenY - lastAreaY - panY) / zoom - dragOffsetY;
+        // 两种布局都限制拖拽：不能把节点拖到别人身上，也不允许连着两点贴太近
+        resolveDragConstraints(3);
+        if (layoutMode == LayoutMode.FORCE && !elasticWeights.isEmpty()) {
+            // 邻居按权重跟随位移，再松弛两步，拖动时是「牵着走」的弹性手感
+            double dx = draggingNode.x - lastDragX;
+            double dy = draggingNode.y - lastDragY;
+            if (Math.abs(dx) + Math.abs(dy) > 0.01) {
+                pullNeighbours(dx, dy);
+                relaxElastic(2);
+            }
+            lastDragX = draggingNode.x;
+            lastDragY = draggingNode.y;
+        }
     }
 
     public void endNodeDrag() {
-        // 分层布局是静态的：松手后不再做局部回弹，节点停在放下的位置
+        if (layoutMode == LayoutMode.FORCE && !elasticWeights.isEmpty()) {
+            // 松手后多松弛几轮，邻居自然回到平衡位置（分层布局保持静态，不回弹）
+            relaxElastic(10);
+        }
+        // 两种布局都在落点再做一次约束，避免压在别的节点上
+        resolveDragConstraints(12);
+        elasticWeights.clear();
         draggingNode = null;
         // 位置变了，总线边的端口重新分配，避免箭头又挤到一起
         assignBusPorts();
+    }
+
+    /** 收集被拖节点 2 跳内的邻居：1 跳跟随 55%，2 跳 25%。 */
+    private void collectElasticNeighbors(GNode anchor) {
+        elasticWeights.clear();
+        Map<GNode, List<GNode>> links = adjacency();
+        Map<GNode, Integer> depth = new HashMap<>();
+        Deque<GNode> queue = new ArrayDeque<>();
+        depth.put(anchor, 0);
+        queue.add(anchor);
+        while (!queue.isEmpty()) {
+            GNode node = queue.poll();
+            int current = depth.get(node);
+            if (current >= 2) {
+                continue;
+            }
+            for (GNode other : links.getOrDefault(node, List.of())) {
+                if (depth.containsKey(other)) {
+                    continue;
+                }
+                depth.put(other, current + 1);
+                queue.add(other);
+            }
+        }
+        for (Map.Entry<GNode, Integer> entry : depth.entrySet()) {
+            if (entry.getKey() == anchor) {
+                continue;
+            }
+            elasticWeights.put(entry.getKey(), entry.getValue() == 1 ? 0.55 : 0.25);
+        }
+    }
+
+    private Map<GNode, List<GNode>> adjacency() {
+        Map<GNode, List<GNode>> links = new HashMap<>();
+        for (GEdge edge : edges) {
+            links.computeIfAbsent(edge.from, key -> new ArrayList<>()).add(edge.to);
+            links.computeIfAbsent(edge.to, key -> new ArrayList<>()).add(edge.from);
+        }
+        return links;
+    }
+
+    /** 邻居跟随被拖节点的位移（按跳数衰减）。 */
+    private void pullNeighbours(double dx, double dy) {
+        for (Map.Entry<GNode, Double> entry : elasticWeights.entrySet()) {
+            double weight = entry.getValue();
+            GNode node = entry.getKey();
+            node.x += dx * weight;
+            node.y += dy * weight;
+        }
+    }
+
+    /** 弹性松弛：邻居被弹簧拉向相连节点，同时与其它节点互斥，避免重叠。 */
+    private void relaxElastic(int iterations) {
+        if (elasticWeights.isEmpty()) {
+            return;
+        }
+        // 与 layoutForce 使用同一个理想边长，拖拽手感与整体尺度一致
+        double ideal = Math.max(minEdgeLength, edgeNaturalLength * forceIdealFactor);
+        Map<GNode, List<GNode>> links = adjacency();
+        for (int iter = 0; iter < iterations; iter++) {
+            for (Map.Entry<GNode, Double> entry : elasticWeights.entrySet()) {
+                GNode node = entry.getKey();
+                double weight = entry.getValue();
+                double fx = 0;
+                double fy = 0;
+                for (GNode other : links.getOrDefault(node, List.of())) {
+                    double vx = other.x - node.x;
+                    double vy = other.y - node.y;
+                    double dist = Math.max(1.0, Math.hypot(vx, vy));
+                    double force = (dist - ideal) * 0.28;
+                    fx += vx / dist * force;
+                    fy += vy / dist * force;
+                }
+                for (GNode other : nodes) {
+                    if (other == node) {
+                        continue;
+                    }
+                    double vx = node.x - other.x;
+                    double vy = node.y - other.y;
+                    double dist = Math.max(1.0, Math.hypot(vx, vy));
+                    double min = spacingRadius(node) + spacingRadius(other) + 6.0;
+                    if (dist >= min) {
+                        continue;
+                    }
+                    double force = (min - dist) * 0.6;
+                    fx += vx / dist * force;
+                    fy += vy / dist * force;
+                }
+                double len = Math.hypot(fx, fy);
+                if (len < 1e-6) {
+                    continue;
+                }
+                double step = Math.min(2.0 + 4.0 * weight, len);
+                node.x += fx / len * step;
+                node.y += fy / len * step;
+            }
+        }
+    }
+
+    /** 布局用的外接半径：方形/八边形节点按对角半径算，避免斜向贴角。 */
+    private static double spacingRadius(GNode node) {
+        return (node.recipe ? RECIPE : MATERIAL) / 2.0 * 1.42;
+    }
+
+    /**
+     * 拖拽时的约束：被拖节点不能压到别的节点上，与它相连的节点也不能近于最小边长。
+     *
+     * <p>重叠时优先把被拖节点推出（它会稍微落后于光标，手感上像被挡住），
+     * 相连边长不足时两端各让一半，被拖节点只让 35%，避免和鼠标「打架」。
+     */
+    private void resolveDragConstraints(int iterations) {
+        GNode anchor = draggingNode;
+        if (anchor == null || nodes.size() < 2) {
+            return;
+        }
+        for (int iter = 0; iter < iterations; iter++) {
+            boolean moved = false;
+            for (GNode other : nodes) {
+                if (other == anchor) {
+                    continue;
+                }
+                double min = spacingRadius(anchor) + spacingRadius(other) + 6.0;
+                double vx = anchor.x - other.x;
+                double vy = anchor.y - other.y;
+                double dist = Math.hypot(vx, vy);
+                if (dist >= min) {
+                    continue;
+                }
+                double ux = dist > 1e-6 ? vx / dist : 1.0;
+                double uy = dist > 1e-6 ? vy / dist : 0.0;
+                double push = min - dist;
+                anchor.x += ux * push;
+                anchor.y += uy * push;
+                moved = true;
+            }
+            for (GEdge edge : edges) {
+                GNode other;
+                if (edge.from == anchor) {
+                    other = edge.to;
+                } else if (edge.to == anchor) {
+                    other = edge.from;
+                } else {
+                    continue;
+                }
+                if (other == anchor) {
+                    continue;
+                }
+                double min = Math.max(minEdgeLength,
+                        spacingRadius(anchor) + spacingRadius(other) + 6.0);
+                double vx = other.x - anchor.x;
+                double vy = other.y - anchor.y;
+                double dist = Math.hypot(vx, vy);
+                if (dist >= min) {
+                    continue;
+                }
+                double ux = dist > 1e-6 ? vx / dist : 1.0;
+                double uy = dist > 1e-6 ? vy / dist : 0.0;
+                double push = (min - dist) * 0.5;
+                other.x += ux * push;
+                other.y += uy * push;
+                anchor.x -= ux * push * 0.35;
+                anchor.y -= uy * push * 0.35;
+                moved = true;
+            }
+            if (!moved) {
+                break;
+            }
+        }
     }
 
 
@@ -625,9 +1037,9 @@ public final class SolveGraphView {
         }
         cameraAreaW = areaW;
         cameraAreaH = areaH;
-        // 分层布局通常很宽，允许缩到更小以便一眼看全整条产线
-        zoom = Math.max(0.12, Math.min(1.2,
-                Math.min((areaW - 24) / contentW, (areaH - 24) / contentH)));
+        // 自动适配视野，上下限来自配置（zoomMin / zoomMax）
+        double fit = Math.min((areaW - 24) / contentW, (areaH - 24) / contentH);
+        zoom = Math.max(zoomMin, Math.min(zoomMax, fit));
         panX = areaW / 2.0 - (minX + contentW / 2.0) * zoom;
         panY = areaH / 2.0 - (minY + contentH / 2.0) * zoom;
         cameraReady = true;
@@ -640,7 +1052,7 @@ public final class SolveGraphView {
 
     public void zoomAt(double mouseX, double mouseY, double factor) {
         double old = zoom;
-        double next = Math.max(0.25, Math.min(3.0, zoom * factor));
+        double next = Math.max(zoomMin, Math.min(zoomMax, zoom * factor));
         if (Math.abs(next - old) < 1e-6) {
             return;
         }
@@ -657,6 +1069,7 @@ public final class SolveGraphView {
         lastAreaY = areaY;
         lastAreaW = areaW;
         lastAreaH = areaH;
+        refreshStyle();
         refreshNamesIfNeeded();
         if (!cameraReady || cameraAreaW != areaW || cameraAreaH != areaH) {
             resetCamera(areaW, areaH);
@@ -1157,6 +1570,10 @@ public final class SolveGraphView {
      * 避免满屏斜线穿过整个产线。
      */
     private boolean isBusEdge(GEdge edge) {
+        // 只有分层布局才走总线；弹性布局保持原来的直连/弧线视图
+        if (layoutMode != LayoutMode.LAYERED) {
+            return false;
+        }
         // 回边一律画弧线（循环回流），不参与总线路由，否则绘制与高亮会对不上
         if (edge.from == edge.to || edge.back) {
             return false;
@@ -1192,12 +1609,12 @@ public final class SolveGraphView {
             drawStraightEdge(consumer, matrix, edge);
             return;
         }
-        // 总线边整体画细一点：它们互相重叠，粗了会糊成一片
-        int thickness = 1 + Math.min(1, (int) Math.sqrt(Math.max(0.0, edge.flow)));
+        // 总线边也随流量加粗，但上限比普通连线低（长线容易互相重叠，太粗会糊成一片）
+        int thickness = 1 + Math.min(4, (int) (Math.sqrt(Math.max(0.0, edge.flow)) * 2));
         int color = desaturate(edgeColor(edge));
         // 主干 55% 透明度，入靶段与箭头 75%，视觉上层层递进
-        int trunk = shade(fade(color, 140));
-        int tip = shade(fade(color, 191));
+        int trunk = shade(fade(color, (int) Math.round(140 * edgeOpacity)));
+        int tip = shade(fade(color, (int) Math.round(191 * edgeOpacity)));
         addLine(consumer, matrix, path[0], path[1], path[2], path[3], thickness, trunk);
         addLine(consumer, matrix, path[2], path[3], path[4], path[5], thickness, trunk);
         addLine(consumer, matrix, path[4], path[5], path[6], path[7], thickness, tip);
@@ -1273,7 +1690,7 @@ public final class SolveGraphView {
         double y2 = ey - uy * toRadius;
 
         int thickness = 1 + Math.min(4, (int) Math.sqrt(Math.max(0.0, edge.flow)) * 2);
-        int color = shade(desaturate(edgeColor(edge)));
+        int color = shade(fade(desaturate(edgeColor(edge)), baseAlpha()));
         addLine(consumer, matrix, x1, y1, x2, y2, thickness, color);
         addArrow(consumer, matrix, x2, y2, ux, uy, thickness, color);
     }
@@ -1281,7 +1698,7 @@ public final class SolveGraphView {
     private void drawCurvedEdge(VertexConsumer consumer, Matrix4f matrix,
                                 GEdge edge, EdgeCurve curve) {
         int thickness = 1 + Math.min(4, (int) Math.sqrt(Math.max(0.0, edge.flow)) * 2);
-        int color = shade(desaturate(edgeColor(edge)));
+        int color = shade(fade(desaturate(edgeColor(edge)), baseAlpha()));
         int segments = 14;
         double prevX = curve.x1;
         double prevY = curve.y1;
@@ -1364,7 +1781,7 @@ public final class SolveGraphView {
 
     private void drawEdgeLabel(GuiGraphics graphics, Font font, GEdge edge) {
         // 流量文字用该物质的本色（压深一档），和箭头同色，方便顺着线找来源
-        int color = dimEdges ? 0x66808080 : darken(edgeColor(edge));
+        int color = dimEdges ? fade(0xFF808080, (int) Math.round(255 * dimOpacity)) : darken(edgeColor(edge));
         double[] anchor = edgeLabelAnchor(edge, font);
         // 用 pose 平移到锚点再画 (0,0)：与悬停字幕的定位方式完全一致，
         // 否则一个取整、一个用浮点平移，会错开半像素出现"重影"
