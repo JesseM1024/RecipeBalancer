@@ -4,12 +4,7 @@ MC 1.21.1 + NeoForge 21.1.209 **纯客户端**模组：产线配平自动计算�
 按下快捷键打开游戏内原生图形界面（输入自动保存到 `config/recipebalancer/scenarios/autosave.json`，
 **没填完目标产物也会保存**，下次打开自动恢复），可视化录入配方（物品可从背包 / JEI 标记，或从 JEI
 配方一键写入），用线性规划求稳态配方速率与机器并行数，**支持循环配方**
-（SCC 亏损检测 + 完美循环最小启动投料）；流程图用 `GuiGraphics` 绘制，可导出自包含 HTML。
-
-> 项目当前 **M5 进行中**：求解结果页已支持「文本输出 / 流程图」切换；
-> 流程图按配方依赖 SCC 分层，配方节点 + 物流边可滚动查看。
-> 核心求解 + AE 样板编码终端 + JEI ghost/配方加号已完成，81 项测试全绿。
-> 上游参考：本机 Python 项目《配方树自动配平》（算法语义以此为准）。
+（SCC 亏损检测 + 完美循环最小启动投料）；流程图用 `GuiGraphics` 绘制。
 
 ## 流程图启动动画配置
 
@@ -44,20 +39,6 @@ edgeLength=128
 | [docs/GOALS.md](docs/GOALS.md) | 目标、验收标准、里程碑 |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | **架构与接口文档**（分层、渲染选型、移植映射、协议、风险） |
 | [docs/PROGRESS.md](docs/PROGRESS.md) | 逐轮改动记录 |
-
-## 开发环境
-
-| 项 | 值 |
-|---|---|
-| MC / 加载器 | 1.21.1 / NeoForge 21.1.209 |
-| Java | 21（`org.gradle.java.home` 已锁定，勿用系统默认 JDK 25） |
-| Gradle | 9.2.1 wrapper（腾讯镜像直连；发行版已缓存于 `~/.gradle/wrapper/dists`） |
-| 构建 | `./gradlew build` |
-| 纯 JVM 测试 | `./gradlew test`（金标准对拍 / 不变量 / 单元，不启动游戏；结束后自动把 jar 复制到 `test_instance_dir/mods`） |
-| 运行客户端 | `./gradlew runClient`（dev 环境自带 JEI 19.39.0.372 runtimeOnly） |
-
-构建骨架复制自 `D:\dev\logiscope`（版本组合一致，全量复用 `~/.gradle` 依赖缓存），
-但**两项目完全独立**，无任何构建引用。
 
 ## 界面操作
 
