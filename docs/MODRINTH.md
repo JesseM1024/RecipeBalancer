@@ -26,21 +26,11 @@ Results are presented as a report — operating rate and machine count per recip
 
 ## Compatibility
 
-| Minecraft | Loader |
-|---|---|
-| 1.21.1 | NeoForge 21.1.x |
-
-JEI 19.39 or later is optional.
+JEI is optional but suggested. This will speed up your pattern encoding process.
 
 ## Installation
 
 Place the jar in the `mods` directory. No dependencies or initial configuration are required.
-
-## License
-
-MIT. Source and issue tracker: https://github.com/JesseM1024/RecipeBalancer
-
-Includes Apache Commons Math 3.6.1 (Apache-2.0).
 
 ---
 
@@ -54,4 +44,5 @@ RecipeBalancer 是面向模组化 Minecraft 产线的客户端规划工具。给
 
 配方以原料、产物、时长、设备四项录入；物料可从背包选取，装有 JEI 时亦可自其物品列表或配方页导入，时长与设备种类始终由用户填写。目标以单位时间产量给出。结果以文本报告与流程图呈现：后者按依赖关系分层，节点颜色表示其在产线中的角色，连线宽度表示物料流量，可导出为独立 HTML 文件。
 
-限制：仅适用稳态，不涉及缓冲、预热与瞬态；不读取其它模组的配方库，JEI 是唯一的自动录入通道，且只提供物料；不解析物料名称，只使用配方结构；纯客户端运行，无服务端组件、无网络通信、不修改世界状态；计算耗时随配方数量增长。适用于 Minecraft 1.21.1 与 NeoForge 21.1.x，JEI 19.39 及以上为可选。MIT 许可。
+限制：仅适用稳态，不涉及缓冲、预热与瞬态；不读取其它模组的配方库，JEI 是唯一的自动录入通道，且只提供物料；不解析物料名称，只使用配方结构；纯客户端运行，无服务端组件、无网络通信、不修改世界状态；计算耗时随配方数量增长。
+
