@@ -216,5 +216,5 @@
   "recipebalancer.configuration.zoomMin.tooltip": "自动适配视野与滚轮缩放的缩放下限。",
   "recipebalancer.configuration.zoomMax": "缩放上限",
   "recipebalancer.configuration.zoomMax.tooltip": "自动适配视野与滚轮缩放的缩放上限。",
-    "当前 JEI 版本过低（需要 19.39 及以上），无法使用配方页的「一键添加配方」按钮，也无法在编码界面悬停物质查询配方与用途。请升级 JEI。":  "当前 JEI 版本过低（需要 19.39 及以上），无法使用配方页的「一键添加配方」按钮，也无法在编码界面悬停物质查询配方与用途。请升级 JEI。"
+  "点击后打开配方编码终端":  "点击后打开配方编码终端"
 }

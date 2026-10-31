@@ -249,5 +249,5 @@
   "recipebalancer.configuration.zoomMin.tooltip": "Lower zoom limit for auto-fit and mouse wheel zooming.",
   "recipebalancer.configuration.zoomMax": "Maximum zoom",
   "recipebalancer.configuration.zoomMax.tooltip": "Upper zoom limit for auto-fit and mouse wheel zooming.",
-  "当前 JEI 版本过低（需要 19.39 及以上），无法使用配方页的「一键添加配方」按钮，也无法在编码界面悬停物质查询配方与用途。请升级 JEI。": "JEI is too old (19.39+ required): the one-click \"add recipe\" button on the recipe page and the recipe/usage lookup when hovering items in the encoding screen are unavailable. Please update JEI."
+  "点击后打开配方编码终端": "Click to open the pattern encoding terminal"
 }
