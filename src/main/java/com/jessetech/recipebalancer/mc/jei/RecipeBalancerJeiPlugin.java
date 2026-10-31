@@ -13,7 +13,6 @@ import com.jessetech.recipebalancer.mc.screen.SolveScreen;
 import com.jessetech.recipebalancer.mc.screen.TimeScreen;
 import mezz.jei.api.IModPlugin;
 import mezz.jei.api.JeiPlugin;
-import mezz.jei.api.gui.handlers.IGlobalGuiHandler;
 import mezz.jei.api.gui.handlers.IScreenHandler;
 import mezz.jei.api.recipe.RecipeType;
 import mezz.jei.api.recipe.category.extensions.IRecipeCategoryDecorator;
@@ -50,8 +49,6 @@ public final class RecipeBalancerJeiPlugin implements IModPlugin {
             "com.jessetech.recipebalancer.mc.jei.JeiAdvanced";
     private static final String NEW_SCREEN_HANDLER =
             "com.jessetech.recipebalancer.mc.jei.JeiBalancerScreenHandler";
-    private static final String NEW_GLOBAL_CLICK_HANDLER =
-            "com.jessetech.recipebalancer.mc.jei.JeiGlobalClickHandler";
 
     private static final ResourceLocation UID =
             ResourceLocation.fromNamespaceAndPath("recipebalancer", "jei_plugin");
@@ -142,11 +139,12 @@ public final class RecipeBalancerJeiPlugin implements IModPlugin {
     }
 
     /**
-     * {@code IScreenHandler} 是否已经带「鼠标下配料」方法。
+     * {@code IScreenHandler} 是否已经带「鼠标下配料」方法（19.39.0 起才有）。
      *
      * <p>不能按「{@code JeiBalancerScreenHandler} 能否加载」判断：那个类只依赖
-     * {@code IClickableIngredientFactory}，在 19.25 上照样能加载，但该版本
-     * {@code IScreenHandler} 还没有这个方法，重写的是死代码。
+     * {@code IClickableIngredientFactory}（19.23 就存在），在 19.21/19.25 上照样能加载，
+     * 但这些版本的 {@code IScreenHandler} 还没有该方法，重写的是死代码。
+     * 所以这里检查接口本身，缺席就走全局处理器。
      */
     private static boolean screenHandlerSupportsClick() {
         try {
@@ -160,20 +158,14 @@ public final class RecipeBalancerJeiPlugin implements IModPlugin {
     }
 
     /**
-     * 老版本补一个全局处理器。
+     * 19.39 之前的悬停查询：注册全局处理器。
      *
-     * <p>优先用 jeiNew 里覆盖「带 factory 重载」的实现（19.2x 起 {@code ScreenHelper}
-     * 只调这个重载）；更老的版本加载不了它，再退回无工厂的 {@link JeiLegacyClickHandler}。
+     * <p>只需实现无工厂重载 {@link JeiLegacyClickHandler#getClickableIngredientUnderMouse(double, double)}：
+     * 19.8.4–19.22 只有它；19.23 新加的工厂重载默认就是转调它；19.39 起改走 {@code IScreenHandler}。
+     * 早期版本曾按「能否加载工厂重载实现」来决定注册哪一份，结果 19.21 这类
+     * 「工厂类已存在、但 {@code ScreenHelper} 仍调旧重载」的版本两条路都没接上。
      */
     private static boolean registerGlobalClickHandler(IGuiHandlerRegistration registration) {
-        try {
-            Class<?> type = Class.forName(NEW_GLOBAL_CLICK_HANDLER);
-            registration.addGlobalGuiHandler(
-                    (IGlobalGuiHandler) type.getConstructor().newInstance());
-            return true;
-        } catch (Throwable ignored) {
-            // 该版本还没有 IClickableIngredientFactory
-        }
         try {
             registration.addGlobalGuiHandler(new JeiLegacyClickHandler());
             return true;

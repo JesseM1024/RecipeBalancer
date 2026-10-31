@@ -21,6 +21,26 @@
 - 移除进入世界时关于 JEI 版本过低的聊天栏提示。
 - 版本号 0.1.3 → 0.1.4。
 
+## JEI 兼容性
+
+两条通道各有一套 API，分界点逐版本核对过源码：
+
+| JEI 版本 | 配方页按钮 | 悬停 R/U/A |
+|---|---|---|
+| 19.8.4 – 19.38.x | `IRecipeCategoryDecorator` 自绘 | `IGlobalGuiHandler#getClickableIngredientUnderMouse(double, double)` |
+| 19.39.0 – 最新 | `IRecipeButtonControllerFactory` | `IScreenHandler#getClickableIngredientUnderMouse(IClickableIngredientFactory, …)` |
+
+关键节点：
+
+- 19.23.0：`IGlobalGuiHandler` 新增工厂重载，**默认实现直接转调旧重载**；19.24 起 `ScreenHelper` 改调工厂重载，
+  所以只实现旧重载在 19.8.4 – 19.38 全程有效。
+- 19.39.0：`IScreenHandler` 新增悬停配料方法，`ScreenHelper` 改为优先问屏幕处理器；同时引入配方页按钮工厂。
+
+已知坑（0.1.4 开发中踩过）：`Class.forName` 对方法签名里的缺失类型是**懒解析**，
+在 19.21 上加载「使用 `IClickableIngredientFactory` 的处理器类」不会抛错，
+于是会被误判为可用，而该版本 `ScreenHelper` 调的是旧重载 —— R/U/A 因此静默失效。
+现在按接口方法是否存在来判定，且只注册旧重载实现。
+
 ## 安装
 
 `recipebalancer-0.1.4-1.21.1.jar` 放入 `mods`。需要 Minecraft 1.21.1 + NeoForge 21.1.x，
