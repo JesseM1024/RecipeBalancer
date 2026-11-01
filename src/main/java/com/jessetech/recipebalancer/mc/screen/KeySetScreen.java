@@ -10,6 +10,7 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.renderer.Rect2i;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
@@ -122,6 +123,21 @@ public final class KeySetScreen extends Screen implements JeiPanelScreen {
         status = custom
                 ? Lang.t("已作为自定义物质添加: %s", key)
                 : Lang.t("已添加: %s", ItemKeyMapper.displayName(key));
+    }
+
+    /**
+     * JEI 拖拽命中区域：整个物料网格（含空格）。
+     *
+     * <p>清单是有序的「种类集合」，没有空格占位的概念，所以拖到网格任意位置都等价于
+     * 追加到清单末尾。
+     */
+    public Rect2i jeiGridArea() {
+        return new Rect2i(panelX + 8, gridY, COLS * SLOT, ROWS * SLOT);
+    }
+
+    /** JEI 拖拽落点：把配料 key 追加进清单（重复/超限仍走 {@link #addKey} 的统一提示）。 */
+    public void dropIngredient(String key) {
+        addKey(key);
     }
 
     private void removeAt(int slot) {
