@@ -14,10 +14,12 @@
 
 需要 **Java 17**。
 
-## Modrinth / CurseForge 更新描述
+## Modrinth / CurseForge 更新描述（纯英文）
 
-- 新增 JEI 集成（可选）：拖拽录入、书签导入、配方页「编码此配方」按钮、悬停 R/U/A、自动撰写
-- JEI 15.0 ~ 15.74 全区间可用（运行期能力探测，缺接口自动降级）
-- 物料清单屏幕支持从 JEI 拖入物品
-- 配方页高亮配方库已有配方的物质
-- 修复方块图标明暗翻转
+```
+- Added optional JEI integration: drag ingredients into slots, import bookmarks, "Encode this recipe" button on JEI recipe pages, R/U/A lookups on hover, auto-fill from a recipe
+- Supports JEI 15.0 - 15.74 (runtime capability detection; missing APIs degrade gracefully)
+- JEI drag & drop is now supported on the material list screens (infinite supply / cyclic deficit)
+- Ingredients that already have a recipe in the library are highlighted on JEI recipe pages
+- Fixed inverted shading on block item icons
+```
