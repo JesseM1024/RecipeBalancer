@@ -17,7 +17,6 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.renderer.Rect2i;
-import org.joml.Matrix4f;
 
 import java.util.List;
 
@@ -76,9 +75,9 @@ final class RbRecipeButtonController implements IIconButtonController {
     /**
      * 悬停按钮时，把配方库里已有配方的槽位标蓝（与老版本装饰器路径同一套配色）。
      *
-     * <p>JEI 在画完槽位物品之后才调用 {@code drawExtras}，所以这里可以使用同一套「延后提交」
-     * 机制：把矩形换算到屏幕坐标排进队列，由 {@code ScreenEvent.Render.Post} 统一绘制，
-     * 两种路径的视觉效果与层级因此完全一致。
+     * <p>坐标必须用 {@code layout.getRect()} 做基准：JEI 给的槽位矩形是**配方局部坐标**，
+     * 这里的位姿并没有平移到配方区（实测平移量为 0），直接用局部坐标会画到左上角。
+     * {@code drawExtras} 在槽位物品之后调用，所以在这里直接画就已经在物品上方。
      */
     @Override
     public void drawExtras(GuiGraphics graphics, Rect2i area, int mouseX, int mouseY,
@@ -92,16 +91,16 @@ final class RbRecipeButtonController implements IIconButtonController {
             highlighted = JeiCraftableSlots.find(layout.getRecipeSlotsView(), ProductIndex.current());
             highlightAt = now;
         }
-        Matrix4f matrix = graphics.pose().last().pose();
-        int originX = (int) matrix.m30();
-        int originY = (int) matrix.m31();
+        Rect2i layoutRect = layout.getRect();
         for (IRecipeSlotView slot : highlighted) {
             if (!(slot instanceof IRecipeSlotDrawable drawable)) {
                 continue;
             }
-            Rect2i rect = drawable.getRect();
-            JeiHighlightOverlay.queue(new Rect2i(originX + rect.getX(), originY + rect.getY(),
-                    rect.getWidth(), rect.getHeight()));
+            Rect2i slotRect = drawable.getRect();
+            JeiHighlightOverlay.drawHighlight(graphics, new Rect2i(
+                    layoutRect.getX() + slotRect.getX(),
+                    layoutRect.getY() + slotRect.getY(),
+                    slotRect.getWidth(), slotRect.getHeight()));
         }
     }
 
