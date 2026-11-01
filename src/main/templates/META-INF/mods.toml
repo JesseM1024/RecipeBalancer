@@ -17,16 +17,16 @@ description='''
 按下快捷键打开图形界面，可视化录入配方，用线性规划求解各配方稳态速率与机器并行数，
 支持循环配方与启动投料计算。
 
-本 1.20.1 版本暂不提供 JEI 快捷功能（JEI 配方页按钮、书签导入、拖拽取物品等），
-其余录入与求解功能完整可用，详见游戏内提示。
+可选集成 JEI（15.0+）：物品可从 JEI 拖入、一键导入书签；配方页「编码此配方」按钮
+需要较新的 JEI（本地实测 15.3 起可用）。未安装 JEI 时其余功能完整可用。
 
 A client-side production line balancer.
 Press the hotkey to open the GUI and enter recipes, then solve steady-state recipe rates
 and machine parallels via linear programming, with cyclic recipe and bootstrap inventory support.
 
-This 1.20.1 build temporarily ships without the JEI shortcuts (recipe-page buttons,
-bookmark import, drag-and-drop ingredient picking); all other editing and solving
-features are fully available.
+Optional JEI integration (15.0+): drag ingredients from JEI and import bookmarks; the
+"encode this recipe" button on JEI recipe pages needs a newer JEI (verified from 15.3).
+Everything else works without JEI installed.
 '''
 
 # 依赖只在客户端校验（side="CLIENT"）：服务端不会因缺少本模组而报错。
@@ -47,5 +47,14 @@ features are fully available.
     modId="minecraft"
     mandatory=true
     versionRange="${minecraft_version_range}"
+    ordering="NONE"
+    side="CLIENT"
+
+# JEI 为可选依赖：未安装时 JEI 相关功能整体降级（能力探测短路），其余功能不受影响。
+# 范围以编译基线 15.3.0.8 起步；更高版本（含 15.74）经实机验证后由能力探测自动启用新特性。
+[[dependencies.${mod_id}]]
+    modId="jei"
+    mandatory=false
+    versionRange="${jei_version_range}"
     ordering="NONE"
     side="CLIENT"

@@ -70,12 +70,19 @@ obfuscation {
 
 dependencies {
     // ------------------------------------------------------------------
-    // JEI —— 1.20.1 分支【已停用】。
-    // 原因：JEI 只有 1.20.1 Forge 版，API 与本分支基线（1.21.1 的 JEI 19.x）不同；
-    // main 线的 JEI 集成（mc/jei 包 + jeiNew 源码集）无法直接编译，
-    // 本分支先整块关闭：界面上的 JEI 入口保留但提示「暂不可用」。
-    // 恢复时从 main 分支取回 mc/jei/* 与 src/jeiNew/*，按 1.20.1 的 JEI API 改写。
+    // JEI（1.20.1 只有 Forge 侧有；可选依赖）。
+    //
+    // 编译基线故意选最老的 15.3.0.8：只允许使用该版本就存在的 API，
+    // 这样同一份代码在 15.3 ~ 15.74 全区间可加载。更高版本才有的能力
+    // （IClickableIngredientFactory / IRecipeButtonControllerFactory 等）
+    // 一律走 mezz.jei.mc.JeiCapabilities 的运行期探测，不在编译期引用。
+    //
+    // compileOnly：JEI 的类不进入产物 jar，未装 JEI 时由能力探测短路。
     // ------------------------------------------------------------------
+    compileOnly files("libs/jei-api/jei-1.20.1-forge-${jei_baseline_version}.jar")
+    // 说明：dev 的 runClient 不能用来验证 JEI 集成。实测把 JEI 放进 localRuntime 后，
+    // JEI 自身的 config 注册在 userdev 环境会抛异常（JEI 只支持正式环境），
+    // 因此带 JEI 的验证统一放到实机实例（1.20.1-Forge）。
 
     // ------------------------------------------------------------------
     // LP 求解器：Apache Commons Math（纯 Java simplex）。
@@ -102,6 +109,35 @@ dependencies {
 }
 
 // ---------------------------------------------------------------------------
+// jeiModern 源码集：只放「较新 JEI 才有」的实现（官方配方页按钮 API；本地样本 15.21 无 / 15.48 有，精确界限未验证）。
+//
+// 为什么单独一个源码集：老版本 JEI 没有 IRecipeButtonControllerFactory /
+// IIconButtonController，这些类若编译进主源码集会让整个插件编译不过；
+// 放进独立源码集后用最新版 JEI 编译，运行时由 JeiCapabilities 探测决定是否加载
+// （老版本上这些类永远不会被 Class.forName 到）。
+// ---------------------------------------------------------------------------
+configurations {
+    jeiModernCompile
+}
+
+dependencies {
+    jeiModernCompile files("libs/jei-api/jei-1.20.1-forge-${jei_verify_version}.jar")
+}
+
+sourceSets {
+    jeiModern {
+        java.srcDir 'src/jeiModern/java'
+        // 平台依赖沿用主源码集，但把「编译基线 JEI」剔除，换成最新版 JEI
+        compileClasspath = sourceSets.main.output + configurations.jeiModernCompile +
+                configurations.compileClasspath.filter { !it.name.startsWith('jei-1.20.1-forge-') }
+    }
+}
+
+// 注意：不能把 jeiModern 的输出挂进 sourceSets.main.output —— 那会让
+// compileJeiModernJava（依赖 main.output）与 classes（依赖所有 output）互相依赖。
+// 这些类只需要进产物 jar，所以直接在 jar 任务里追加即可。
+
+// ---------------------------------------------------------------------------
 // 把 shaded 库的 class 直接并入模组产物；排除 META-INF 避免签名/清单冲突。
 //
 // legacy(1.20.1) 线的额外要求：dev 运行时 FML 的 game layer 只认 legacyClasspath
@@ -124,6 +160,9 @@ tasks.named('jar') {
     // 否则 Gradle 可能判定 jar 已是最新，产出缺类的包。
     dependsOn unpackShaded
     from shadedClassesDir
+    // jeiModern（官方配方页按钮 API）只进产物 jar，老版本 JEI 上不会被加载
+    dependsOn 'compileJeiModernJava'
+    from sourceSets.jeiModern.output
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
 
@@ -209,6 +248,7 @@ var generateModMetadata = tasks.register('generateModMetadata', ProcessResources
             neo_version            : neo_version,
             neo_version_range      : neo_version_range,
             loader_version_range   : loader_version_range,
+            jei_version_range      : jei_version_range,
             mod_id                 : mod_id,
             mod_name               : mod_name,
             mod_license            : mod_license,

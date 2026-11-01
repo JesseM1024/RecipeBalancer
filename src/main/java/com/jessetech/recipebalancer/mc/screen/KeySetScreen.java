@@ -230,9 +230,9 @@ public final class KeySetScreen extends Screen implements JeiPanelScreen {
 
     /** 一键读 JEI 右侧书签。 */
     private void addBookmarks() {
-        // 1.20.1 分支停用了 JEI 集成：未启用时只提示、不触发，也不能让 NoClassDefFoundError 冒出来
+        // 先判 JEI 是否安装：未安装时只提示、不触发，也不能让 NoClassDefFoundError 冒出来
         if (!JeiRuntimeHolder.installed()) {
-            status = Lang.t("JEI快捷功能暂不可用");
+            status = Lang.t("JEI 未安装");
             return;
         }
         if (!JeiRuntimeHolder.ready()) {

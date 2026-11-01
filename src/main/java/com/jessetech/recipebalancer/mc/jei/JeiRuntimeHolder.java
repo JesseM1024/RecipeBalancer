@@ -1,25 +1,34 @@
 package com.jessetech.recipebalancer.mc.jei;
 
 /**
- * JEI 运行时状态查询（1.20.1 分支：JEI 集成已停用）。
+ * 持有 JEI 的 {@code IJeiRuntime}（用 {@link Object} 存，避免未装 JEI 时加载到 JEI 类）。
  *
- * <p>本分支不依赖 JEI：{@link #installed()} 与 {@link #ready()} 恒为 {@code false}，
- * 界面据此把所有 JEI 入口降级为「暂不可用」提示。
- *
- * <p>恢复 JEI 时从 main 分支取回本类的完整实现（持有 {@code IJeiRuntime} 引用）。
+ * <p>由 {@link RecipeBalancerJeiPlugin} 在 {@code onRuntimeAvailable} 写入；
+ * 只有 {@code mc.jei} 包内「JEI 已安装才会加载」的类才允许把它转成 {@code IJeiRuntime}。
+ * 界面/主类等常驻代码只能通过 {@link #installed()} / {@link #ready()} 判断状态。
  */
 public final class JeiRuntimeHolder {
+
+    private static volatile Object runtime;
 
     private JeiRuntimeHolder() {
     }
 
-    /** JEI 是否已安装 —— 1.20.1 分支恒为 false（JEI 快捷功能停用）。 */
-    public static boolean installed() {
-        return false;
+    static void set(Object value) {
+        runtime = value;
     }
 
-    /** JEI 是否可用（已安装且插件已拿到 runtime）—— 1.20.1 分支恒为 false。 */
+    static Object get() {
+        return runtime;
+    }
+
+    /** JEI 是否已安装（不代表 runtime 已就绪）。 */
+    public static boolean installed() {
+        return JeiCapabilities.installed();
+    }
+
+    /** JEI 是否可用：已安装且插件已拿到 runtime。 */
     public static boolean ready() {
-        return false;
+        return runtime != null;
     }
 }

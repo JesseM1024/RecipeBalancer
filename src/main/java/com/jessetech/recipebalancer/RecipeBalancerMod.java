@@ -2,6 +2,7 @@ package com.jessetech.recipebalancer;
 
 import com.jessetech.recipebalancer.mc.config.GraphLayoutConfig;
 import com.jessetech.recipebalancer.mc.i18n.Lang;
+import com.jessetech.recipebalancer.mc.jei.JeiCapabilities;
 import com.jessetech.recipebalancer.mc.keybind.RbKeyMappings;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.entity.player.Player;
@@ -51,13 +52,14 @@ public final class RecipeBalancerMod {
         MinecraftForge.EVENT_BUS.addListener(RecipeBalancerMod::onPlayerLoggingIn);
         // 配置：ForgeConfigSpec + 平台自带编辑器（模组列表里的「Config」按钮）
         ModLoadingContext.get().registerConfig(ModConfig.Type.CLIENT, GraphLayoutConfig.SPEC);
-        LOGGER.info("[RecipeBalancer] 0.1.5a-1.20.1 初始化：快捷键 K 打开主界面（JEI 快捷功能暂不可用）");
+        LOGGER.info("[RecipeBalancer] 初始化：快捷键 K 打开主界面；{}",
+                JeiCapabilities.describe());
         checkRuntimeDependencies();
     }
 
-    /** 进入世界：记下待发送提示（此时聊天栏组件可能还没建好，延到下一个 tick 发）。 */
+    /** 进入世界：未装 JEI 时记下待发送提示（此时聊天栏可能还没建好，延到下一个 tick 发）。 */
     private static void onPlayerLoggingIn(ClientPlayerNetworkEvent.LoggingIn event) {
-        pendingJeiNotice = true;
+        pendingJeiNotice = !JeiCapabilities.installed();
     }
 
     /** 每 tick：先把提示补发出去，再交给快捷键处理。 */
@@ -70,8 +72,10 @@ public final class RecipeBalancerMod {
             return; // 世界还没真正进来，等下一 tick
         }
         pendingJeiNotice = false;
-        LOGGER.info("[RecipeBalancer] 进入世界：提示 JEI 快捷功能暂不可用");
-        player.displayClientMessage(Lang.c("JEI快捷功能暂不可用"), false);
+        LOGGER.info("[RecipeBalancer] 进入世界：未安装 JEI，提示快捷功能不可用");
+        // 聊天栏带模组名前缀，便于辨认来源；正文沿用同一条翻译 key
+        player.displayClientMessage(
+                Lang.c("[RecipeBalancer] %s", Lang.t("JEI 未安装，快捷功能不可用")), false);
     }
 
     /** 启动自检：求解库是否真的在运行期 classpath 上（比点「求解」时才发现更早）。 */

@@ -578,7 +578,11 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
             pose.scale(item.scale(), item.scale(), 1.0f);
         }
         pose.translate(8.0f, 8.0f, 150.0f);
-        pose.scale(16.0f, -16.0f, 16.0f);
+        // 与 GuiGraphics.renderItem 完全一致：Y 翻转只用 mulPoseMatrix（只改位姿矩阵），
+        // 不能写成 scale(16,-16,16) —— 那会把法线矩阵的 X/Z 也取反（PoseStack.scale 会同步
+        // 更新法线矩阵），方块的明暗面因此错位，表现为「下亮上暗」。
+        pose.mulPoseMatrix(new Matrix4f().scaling(1.0f, -1.0f, 1.0f));
+        pose.scale(16.0f, 16.0f, 16.0f);
         renderer.render(item.stack(), ItemDisplayContext.GUI, false, pose,
                 graphics.bufferSource(), 15728880, OverlayTexture.NO_OVERLAY, item.model());
         pose.popPose();
@@ -1402,9 +1406,9 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
 
     /** 右键物质：单一配方自动新建并写入，多配方只打开 JEI 配方页。 */
     private void autoWriteFromJei(String key) {
-        // 1.20.1 分支停用了 JEI 集成：直接提示并中止，不触发任何导入逻辑
+        // 未装 JEI 时直接提示并中止，不触发任何导入逻辑
         if (!JeiRuntimeHolder.installed()) {
-            status = Lang.t("JEI快捷功能暂不可用");
+            status = Lang.t("JEI 未安装");
             return;
         }
         AutoRecipeHooks.Hook hook = AutoRecipeHooks.get();

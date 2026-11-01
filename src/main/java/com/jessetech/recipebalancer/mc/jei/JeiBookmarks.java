@@ -4,18 +4,22 @@ import java.util.LinkedHashSet;
 import java.util.Set;
 
 /**
- * 读取 JEI 书签（1.20.1 分支：恒为空表）。
+ * 读取 JEI 右侧书签里的全部 ingredient（界面层入口）。
  *
- * <p>界面「从书签导入」按钮在空表时会提示书签为空；JEI 停用的具体原因由
- * {@link JeiRuntimeHolder#installed()} 判断后另行提示。恢复 JEI 时从 main 分支取回完整实现。
+ * <p>本类<b>不引用任何 {@code mezz.jei.*} 类型</b>：真正的反射实现放在
+ * {@link JeiBookmarkReader}，只有 JEI 就绪时才会被加载。这样未装 JEI 的实例
+ * 调用本书签入口也不会触发 {@code NoClassDefFoundError}。
  */
 public final class JeiBookmarks {
 
     private JeiBookmarks() {
     }
 
-    /** @return 去重后的 ingredient key；JEI 停用时为空表。 */
+    /** @return 去重后的 ingredient key（item 为注册名，非物品为 ingredient key）。 */
     public static Set<String> readKeys() {
-        return new LinkedHashSet<>();
+        if (!JeiRuntimeHolder.ready()) {
+            return new LinkedHashSet<>();
+        }
+        return JeiBookmarkReader.read();
     }
 }
