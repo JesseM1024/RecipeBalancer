@@ -1,29 +1,29 @@
 package com.jessetech.recipebalancer.mc.config;
 
-import net.neoforged.neoforge.common.ModConfigSpec;
+import net.minecraftforge.common.ForgeConfigSpec;
 
 /**
- * 流程图配置（NeoForge {@code ModConfigSpec}，文件 {@code config/recipebalancer-client.toml}）。
+ * 流程图配置（1.20.1 世代 {@code ForgeConfigSpec}，文件 {@code config/recipebalancer-client.toml}）。
  *
- * <p>模组列表里的「Config」按钮由 NeoForge 自带编辑器打开（见 {@code RecipeBalancerMod}
- * 注册的 {@code IConfigScreenFactory -> ConfigurationScreen}），保存后立即生效。
+ * <p>模组列表里的「Config」按钮使用平台自带的配置编辑界面；本类每次
+ * {@link #current()} 都重新读取数值，因此保存后即时生效。
  */
 public final class GraphLayoutConfig {
 
-    public static final ModConfigSpec SPEC;
+    public static final ForgeConfigSpec SPEC;
 
-    public static final ModConfigSpec.DoubleValue NODE_GAP;
-    public static final ModConfigSpec.DoubleValue EDGE_LENGTH;
-    public static final ModConfigSpec.DoubleValue FORCE_IDEAL;
-    public static final ModConfigSpec.DoubleValue MIN_EDGE_LENGTH;
-    public static final ModConfigSpec.DoubleValue EDGE_SATURATION;
-    public static final ModConfigSpec.DoubleValue EDGE_OPACITY;
-    public static final ModConfigSpec.DoubleValue DIM_OPACITY;
-    public static final ModConfigSpec.DoubleValue ZOOM_MIN;
-    public static final ModConfigSpec.DoubleValue ZOOM_MAX;
+    public static final ForgeConfigSpec.DoubleValue NODE_GAP;
+    public static final ForgeConfigSpec.DoubleValue EDGE_LENGTH;
+    public static final ForgeConfigSpec.DoubleValue FORCE_IDEAL;
+    public static final ForgeConfigSpec.DoubleValue MIN_EDGE_LENGTH;
+    public static final ForgeConfigSpec.DoubleValue EDGE_SATURATION;
+    public static final ForgeConfigSpec.DoubleValue EDGE_OPACITY;
+    public static final ForgeConfigSpec.DoubleValue DIM_OPACITY;
+    public static final ForgeConfigSpec.DoubleValue ZOOM_MIN;
+    public static final ForgeConfigSpec.DoubleValue ZOOM_MAX;
 
     static {
-        ModConfigSpec.Builder builder = new ModConfigSpec.Builder();
+        ForgeConfigSpec.Builder builder = new ForgeConfigSpec.Builder();
         NODE_GAP = builder
                 .comment("同列相邻节点之间的额外行距（像素，分层布局用）。调大更松散。",
                         "Extra vertical gap between nodes of the same column, in pixels (layered layout).")

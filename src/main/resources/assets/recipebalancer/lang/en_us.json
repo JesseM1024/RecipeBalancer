@@ -91,6 +91,7 @@
   "空格：左键/中键自定义物质": "Empty slot: LMB/MMB to customize",
   "JEI 未安装": "JEI not installed",
   "JEI 不可用": "JEI unavailable",
+  "JEI快捷功能暂不可用": "JEI shortcuts are temporarily unavailable",
   "JEI 书签为空": "No JEI bookmarks",
   "已读取 %s 个书签，新增 %s 个": "Read %s bookmarks, %s new",
   "先选中一个条目": "Select an entry first",

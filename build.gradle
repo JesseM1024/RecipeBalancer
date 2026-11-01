@@ -1,6 +1,8 @@
 plugins {
     id 'java-library'
-    id 'net.neoforged.moddev' version '2.0.147'
+    // 1.20.1 分支：用官方 legacy 插件编译，1.20.1 世代的 Forge / NeoForge 由它支持
+    // （主插件 net.neoforged.moddev 面向 1.20.2+，本分支不使用）。
+    id 'net.neoforged.moddev.legacyforge' version '2.0.147'
     id 'idea'
 }
 
@@ -11,8 +13,8 @@ base {
     archivesName = mod_id
 }
 
-// 1.21.1 对应 Java 21
-java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+// 1.20.1 对应 Java 17（main 线 1.21.1 是 21）
+java.toolchain.languageVersion = JavaLanguageVersion.of(17)
 
 sourceSets.main.resources {
     srcDir('src/generated/resources')
@@ -21,38 +23,16 @@ sourceSets.main.resources {
 }
 
 repositories {
-    // MDG 已自动带上 Minecraft / NeoForge 仓库。
-    // JEI 官方 maven（blamejared）。
-    //
-    // ★ exclusiveContent：mezz.jei 组只能从 blamejared 解析 ★
-    // 没有它时 Gradle 会把 mezz.jei 的 POM 请求发给所有仓库（含 neoforged 仓库）；
-    // 当 neoforged 仓库网络异常（502/超时）时会连带 JEI 解析失败。
-    // 钉死来源后既省请求，也消除这个不确定性。
-    exclusiveContent {
-        forRepository {
-            maven {
-                name = 'BlameJared'
-                url = 'https://maven.blamejared.com/'
-            }
-        }
-        filter {
-            // JEI 1.21.1 的 groupId 是 mezz.jei（不是老文档的 mezz），2026-10-25 逐目录核实。
-            // JEI 19.70 起依赖 mezz_config（net.mezzdev.config），同样只发布在 blamejared。
-            includeGroup 'mezz.jei'
-            includeGroup 'net.mezzdev.config'
-        }
-    }
-    // Maven Central：保持普通声明，不过滤。
-    // 【教训 2026-10-25】曾试图用 exclusiveContent 把 org.apache / org.junit 等
-    // 第三方组钉死到 central——但 exclusiveContent 是「双向独占」：被包进 exclusiveContent
-    // 的仓库从此只提供 filter 列出的组，导致 neoform 管线依赖（org.ow2.asm 等）
-    // 被 central 拒收、被 neoforged 仓库的白名单挡住 → "Could not find"。
-    // 第三方组请走默认解析顺序：neoforged 仓库 404 → 跳过 → central 200。
+    // MDG legacy 插件已自动带上 Minecraft / Forge / NeoForge 仓库。
+    // Maven Central：commons-math3 / gson / junit。
     mavenCentral()
 }
 
-neoForge {
-    version = project.neo_version
+legacyForge {
+    // NeoForge 1.20.1 线：用 enable { } 指定平台版本
+    enable {
+        neoForgeVersion = project.neo_version
+    }
 
     // 本项目是【纯客户端】模组（@Mod(dist = Dist.CLIENT)），
     // 因此只声明 client 运行配置 —— 服务端/数据生成配置对本项目无意义。
@@ -61,6 +41,9 @@ neoForge {
             client()
         }
         configureEach {
+            // 各版本线独立 run 目录，切分支互不串味：
+            // 本分支（1.20.1）用 1_20_1_neo/，main（1.21.1）仍用默认 run/。
+            gameDirectory = project.file('1_20_1_neo')
             systemProperty 'forge.logging.markers', 'REGISTRIES'
             logLevel = org.slf4j.event.Level.DEBUG
         }
@@ -79,41 +62,32 @@ configurations {
     shaded
 }
 
+// legacy 线专用：1.20.1 生产环境是 SRG 映射，本地依赖的 mod jar 需要
+// 从 SRG 重映射到官方映射后才能参与编译/运行（本项目管理内无 mod 依赖，属预防性配置）。
+obfuscation {
+    createRemappingConfiguration(configurations.localRuntime)
+}
+
 dependencies {
     // ------------------------------------------------------------------
-    // JEI —— 软依赖：编译期对 API 编译，运行期装上即可用其取配方/拖物品。
-    // 不装 JEI 时本模组必须照常工作（渲染/求解不依赖 JEI）。
-    // groupId = mezz.jei（blamejared 2026-10-25 核实）。
-    // 开发环境用 19.39.0.372：其 mods.toml 只要求 NeoForge [21.0.118-beta,)；
-    // 19.42.0.389+ 要求 [21.1.238,)，与 dev 锁定的 21.1.209 冲突。
-    // 实机（NeoForge 21.1.246 + JEI 19.70）满足本模组 `[19.39.0,)` 的可选范围。
+    // JEI —— 1.20.1 分支【已停用】。
+    // 原因：JEI 只有 1.20.1 Forge 版，API 与本分支基线（1.21.1 的 JEI 19.x）不同；
+    // main 线的 JEI 集成（mc/jei 包 + jeiNew 源码集）无法直接编译，
+    // 本分支先整块关闭：界面上的 JEI 入口保留但提示「暂不可用」。
+    // 恢复时从 main 分支取回 mc/jei/* 与 src/jeiNew/*，按 1.20.1 的 JEI API 改写。
     // ------------------------------------------------------------------
-    // 编译基线锁定在**最低支持版本** 19.8.4.110（jar 随仓库提供，见 libs/jei-api/）：
-    // 只允许直接引用该版本已有的 API；19.39+ 才有的能力走反射（mc/jei/JeiCompat*）。
-    compileOnly files('libs/jei-api/jei-1.21.1-common-api-19.8.4.110.jar')
-    // 开发环境运行期仍用可用的 JEI（其 mods.toml 只要求 NeoForge [21.0.118-beta,)）
-    runtimeOnly "mezz.jei:jei-${minecraft_version}-neoforge:${jei_version}"
 
     // ------------------------------------------------------------------
     // LP 求解器：Apache Commons Math（纯 Java simplex）。
     // implementation：dev 运行期 classpath；
     // shaded：构建时把类**直接解包进模组 jar**（不依赖 JarJar/嵌套 jar）。
-    // 2026-10-25 实机与 dev 都出现过 NoClassDefFoundError，JarJar 方案在
-    // Connector/IDE 运行下不可靠，改为直接内嵌，用“仅 jar + JShell”验证。
     // ------------------------------------------------------------------
     implementation 'org.apache.commons:commons-math3:3.6.1'
     shaded 'org.apache.commons:commons-math3:3.6.1'
 
     // ------------------------------------------------------------------
-    // JCEF（备选·暂缓，2026-10-25 R2）：渲染主线已改为原生 GuiGraphics。
-    // 恢复条件见 docs/ARCHITECTURE.md §二。坐标备查：
-    //   implementation 'me.friwi:jcefmaven:152.0.6'   （natives ≈100MB / 平台）
-    // 零下载分发三形态：classpath 平台伴生 jar / 整合包 overrides 预置 / 在线回退。
-    // ------------------------------------------------------------------
-
-    // ------------------------------------------------------------------
     // Gson：core/io 场景 JSON 序列化（契约 C1 允许的依赖）。
-    // compileOnly：运行期由 NeoForge 自带 Gson 提供，避免 JarJar 版本冲突（R-06）；
+    // compileOnly：运行期由 Minecraft/平台自带 Gson 提供，避免版本冲突；
     // testImplementation：纯 JVM 测试不启动游戏，必须自己带到 classpath。
     // ------------------------------------------------------------------
     compileOnly "com.google.code.gson:gson:${gson_version}"
@@ -127,12 +101,30 @@ dependencies {
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
-// 把 shaded 库的 class 直接并入模组 jar；排除 META-INF 避免签名/清单冲突。
+// ---------------------------------------------------------------------------
+// 把 shaded 库的 class 直接并入模组产物；排除 META-INF 避免签名/清单冲突。
+//
+// legacy(1.20.1) 线的额外要求：dev 运行时 FML 的 game layer 只认 legacyClasspath
+// （MDG 生成的 clientLegacyClasspath.txt），Gradle 的 implementation 依赖虽然躺在
+// JVM 的 -cp 里，但模组类加载器看不到 —— 实测 mod 构造期 Class.forName 抛
+// ClassNotFoundException。所以把 shaded 类解包进一个**额外的 sourceSet 输出目录**，
+// 让它跟着 mod 文件夹一起进 dev 运行时，同时也自然成为 jar 的一部分。
+// ---------------------------------------------------------------------------
+def shadedClassesDir = layout.buildDirectory.dir('shaded-classes')
+var unpackShaded = tasks.register('unpackShadedClasses', Copy) {
+    from({ configurations.shaded.collect { zipTree(it) } })
+    into shadedClassesDir
+    exclude 'META-INF/**'
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+sourceSets.main.output.dir(shadedClassesDir, builtBy: unpackShaded)
+
 tasks.named('jar') {
-    from({ configurations.shaded.collect { zipTree(it) } }) {
-        exclude 'META-INF/**'
-        duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-    }
+    // 解包任务是 sourceSet 输出的一部分，但显式依赖 + 显式 from 更可靠：
+    // 否则 Gradle 可能判定 jar 已是最新，产出缺类的包。
+    dependsOn unpackShaded
+    from shadedClassesDir
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
 
 // 纯 JVM 测试：不依赖 runClient / MDG 的 dev 运行时。
@@ -148,26 +140,51 @@ tasks.named('test') {
 }
 
 // ---------------------------------------------------------------------------
-// 实机测试部署：`gradlew test` 结束后把 jar 复制到 HMCL 实例的 mods/。
-// 实例路径来自 gradle.properties 的 test_instance_dir；目录不存在时跳过
-//（CI / 没有该实例的环境不会失败）。复制前先删掉旧的 recipebalancer-*.jar。
+// 实机测试部署：`gradlew test` / `build` 结束后把 jar 复制到 HMCL 实例的 mods/。
+// 实例路径来自 gradle.properties 的 test_instance_dirs（分号或逗号分隔多个实例）；
+// 不存在的实例直接跳过（CI / 没有该实例的环境不会失败）。
+// 复制前先删掉实例里其它版本的 recipebalancer-*.jar，避免多版本混装。
+//
+// legacy 线注意：build/libs 里的产物由 :reobfJar 覆盖写回（SRG 重混淆），
+// 所以这里必须显式依赖 reobfJar，否则 Gradle 会报隐式依赖错误、也可能拷到未重混淆的 jar。
 // ---------------------------------------------------------------------------
-tasks.register('deployToTestInstance', Copy) {
-    dependsOn tasks.named('jar')
-    onlyIf {
-        def instance = project.findProperty('test_instance_dir')
-        instance != null && !instance.toString().isBlank() && project.file(instance).isDirectory()
-    }
-    from layout.buildDirectory.file("libs/${mod_id}-${mod_version}.jar")
-    into { project.file("${project.findProperty('test_instance_dir')}/mods") }
-    doFirst {
-        def modsDir = project.file("${project.findProperty('test_instance_dir')}/mods")
-        def current = "${mod_id}-${mod_version}.jar"
-        // 只清理其它版本的旧 jar；当前版本交给 Copy 覆盖，避免复制失败后实例里一个都不剩
-        modsDir.listFiles()?.findAll {
-            it.name.startsWith("${mod_id}-") && it.name.endsWith(".jar") && it.name != current
-        }?.each { it.delete() }
-        logger.lifecycle("[RecipeBalancer] 已部署到实机实例: ${modsDir}")
+tasks.register('deployToTestInstance') {
+    group = 'build'
+    description = '把构建出的 jar 部署到 1.20.1 测试实例（NeoForge / Forge）'
+    dependsOn tasks.named('reobfJar')
+
+    var jarProvider = layout.buildDirectory.file("libs/${mod_id}-${mod_version}.jar")
+    var instances = (project.findProperty('test_instance_dirs') ?: '')
+            .toString().split(/[;,]/).collect { it.trim() }.findAll { !it.isEmpty() }
+    inputs.file(jarProvider)
+
+    doLast {
+        var jar = jarProvider.get().asFile
+        if (!jar.isFile()) {
+            throw new GradleException("未找到构建产物: ${jar}")
+        }
+        var deployed = 0
+        instances.each { String instance ->
+            var instanceDir = project.file(instance)
+            if (!instanceDir.isDirectory()) {
+                logger.lifecycle("[RecipeBalancer] 跳过（实例不存在）: ${instance}")
+                return
+            }
+            var modsDir = project.file("${instance}/mods")
+            modsDir.mkdirs()
+            modsDir.listFiles()?.findAll {
+                it.name.startsWith("${mod_id}-") && it.name.endsWith(".jar") && it.name != jar.name
+            }?.each { it.delete() }
+            project.copy {
+                from jar
+                into modsDir
+            }
+            deployed++
+            logger.lifecycle("[RecipeBalancer] 已部署到实例: ${modsDir}")
+        }
+        if (deployed == 0) {
+            logger.lifecycle("[RecipeBalancer] 未部署：请检查 gradle.properties 的 test_instance_dirs")
+        }
     }
 }
 
@@ -177,10 +194,11 @@ tasks.register('deployToTestInstance', Copy) {
 // ★ filteringCharset = 'UTF-8' 是必须的 ★
 // ProcessResources 做占位符替换(expand)时默认用「平台默认编码」，
 // 中文 Windows 上是 GBK，会把 UTF-8 模板里的中文转坏（字节被替换成 '?'），
-// 产出非法 UTF-8 文件 → FML 解析 neoforge.mods.toml 时抛
+// 产出非法 UTF-8 文件 → FML 解析 mods.toml 时抛
 //   MalformedInputException: Input length = 2
 // → 游戏报 "File ... is not a valid mod file"
-// 这个坑在 logiscope 项目里已经踩过一次，这里直接规避。
+//
+// 1.20.1 世代元数据文件名是 META-INF/mods.toml（neoforge.mods.toml 是 1.20.4+ 的名字）。
 // ---------------------------------------------------------------------------
 var generateModMetadata = tasks.register('generateModMetadata', ProcessResources) {
     filteringCharset = 'UTF-8'
@@ -189,6 +207,7 @@ var generateModMetadata = tasks.register('generateModMetadata', ProcessResources
             minecraft_version      : minecraft_version,
             minecraft_version_range: minecraft_version_range,
             neo_version            : neo_version,
+            neo_version_range      : neo_version_range,
             loader_version_range   : loader_version_range,
             mod_id                 : mod_id,
             mod_name               : mod_name,
@@ -201,28 +220,8 @@ var generateModMetadata = tasks.register('generateModMetadata', ProcessResources
     into 'build/generated/sources/modMetadata'
 }
 sourceSets.main.resources.srcDir generateModMetadata
-neoForge.ideSyncTask generateModMetadata
+legacyForge.ideSyncTask generateModMetadata
 
-// ---- JEI 版本兼容：主源码集锁定最低支持版本（19.8.4.110），新 API 单独源码集 ----
-def jeiApiOld = file('libs/jei-api/jei-1.21.1-common-api-19.8.4.110.jar')
-def jeiApiNew = file('libs/jei-api/jei-1.21.1-common-api-19.70.0.460.jar')
-
-sourceSets {
-    jeiNew {
-        java.srcDirs = ['src/jeiNew/java']
-        compileClasspath = sourceSets.main.output +
-                configurations.compileClasspath.filter { it != jeiApiOld } +
-                files(jeiApiNew)
-    }
-}
-
-tasks.named('jar', Jar) {
-    from sourceSets.jeiNew.output
-}
-
-tasks.matching { it.name == 'runClient' }.configureEach {
-    classpath += sourceSets.jeiNew.output
-}
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
 }

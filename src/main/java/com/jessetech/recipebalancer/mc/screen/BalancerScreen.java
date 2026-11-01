@@ -371,8 +371,9 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
     // 渲染
     // ------------------------------------------------------------------
 
-    @Override
-    public void renderBackground(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+    // 1.20.1 的 Screen.renderBackground 不带鼠标坐标，而这里的高亮要用鼠标位置：
+    // 改成私有方法，在 render() 开头（super.render 之前）调用，保证铺底顺序不变。
+    private void drawBackground(GuiGraphics graphics, int mouseX, int mouseY) {
         graphics.fill(0, 0, width, height, 0xE0101010);
         AeStyle.panel(graphics, panelX, panelY, panelW, panelH);
         AeStyle.header(graphics, panelX, panelY, panelW, 16);
@@ -500,10 +501,10 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
             int x2 = slotChrome[i + 2];
             int y2 = slotChrome[i + 3];
             int color = slotChrome[i + 4];
-            consumer.addVertex(matrix, x1, y1, 0.0f).setColor(color);
-            consumer.addVertex(matrix, x1, y2, 0.0f).setColor(color);
-            consumer.addVertex(matrix, x2, y2, 0.0f).setColor(color);
-            consumer.addVertex(matrix, x2, y1, 0.0f).setColor(color);
+            consumer.vertex(matrix, x1, y1, 0.0f).color(color).endVertex();
+            consumer.vertex(matrix, x1, y2, 0.0f).color(color).endVertex();
+            consumer.vertex(matrix, x2, y2, 0.0f).color(color).endVertex();
+            consumer.vertex(matrix, x2, y1, 0.0f).color(color).endVertex();
         }
     }
 
@@ -936,6 +937,8 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         updateOptionStates();
+        // 1.20.1 的 Screen.render 不会自动调 renderBackground，这里手动铺底
+        drawBackground(graphics, mouseX, mouseY);
         super.render(graphics, mouseX, mouseY, partialTick);
 
         if (!carriedKey.isEmpty()) {
@@ -1399,9 +1402,9 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
 
     /** 右键物质：单一配方自动新建并写入，多配方只打开 JEI 配方页。 */
     private void autoWriteFromJei(String key) {
-        // 未装 JEI 时直接提示并中止，不触发任何导入逻辑
+        // 1.20.1 分支停用了 JEI 集成：直接提示并中止，不触发任何导入逻辑
         if (!JeiRuntimeHolder.installed()) {
-            status = Lang.t("JEI 未安装");
+            status = Lang.t("JEI快捷功能暂不可用");
             return;
         }
         AutoRecipeHooks.Hook hook = AutoRecipeHooks.get();
@@ -1504,7 +1507,7 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
     }
 
     @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+    public boolean mouseScrolled(double mouseX, double mouseY, double scrollY) {
         if (mouseX >= panelX && mouseY >= targetY
                 && mouseY < targetY + targetRows * SLOT) {
             targetScrollRow = Math.max(0, Math.min(
@@ -1523,7 +1526,7 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
                     encodingScrollRow + (scrollY < 0 ? 1 : -1), maxEncodingScroll()));
             return true;
         }
-        return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+        return super.mouseScrolled(mouseX, mouseY, scrollY);
     }
 
     // ------------------------------------------------------------------

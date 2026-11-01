@@ -71,7 +71,7 @@ public final class FactorScreen extends Screen implements JeiPanelScreen {
     }
 
     @Override
-    public void renderBackground(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+    public void renderBackground(GuiGraphics graphics) {
         graphics.fill(0, 0, width, height, 0xB0101010);
         AeStyle.panel(graphics, panelX, panelY, PANEL_W, PANEL_H);
         AeStyle.header(graphics, panelX, panelY, PANEL_W, 20);
@@ -79,6 +79,13 @@ public final class FactorScreen extends Screen implements JeiPanelScreen {
         String hint = status.isEmpty() ? Lang.t("支持 + - * / 和括号") : status;
         graphics.drawString(font, hint, panelX + 8, panelY + 52,
                 status.isEmpty() ? AeStyle.MUTED : AeStyle.ACCENT, false);
+    }
+
+    @Override
+    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        // 1.20.1 的 Screen.render 不会自动调 renderBackground，这里手动铺底
+        renderBackground(graphics);
+        super.render(graphics, mouseX, mouseY, partialTick);
     }
 
     @Override

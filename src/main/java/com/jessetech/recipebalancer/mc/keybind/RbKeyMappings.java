@@ -4,8 +4,8 @@ import com.jessetech.recipebalancer.mc.screen.BalancerScreen;
 import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
-import net.neoforged.neoforge.client.event.ClientTickEvent;
-import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
+import net.minecraftforge.client.event.RegisterKeyMappingsEvent;
+import net.minecraftforge.event.TickEvent;
 import org.lwjgl.glfw.GLFW;
 
 /** 快捷键注册与打开界面（K 键，可在「按键绑定」里改）。 */
@@ -24,8 +24,11 @@ public final class RbKeyMappings {
         event.register(OPEN);
     }
 
-    /** 游戏总线：进入世界后按键打开界面。 */
-    public static void onClientTick(ClientTickEvent.Post event) {
+    /** 游戏总线：进入世界后按键打开界面（1.20.1 世代是带 phase 的 ClientTickEvent）。 */
+    public static void onClientTick(TickEvent.ClientTickEvent event) {
+        if (event.phase != TickEvent.Phase.END) {
+            return;
+        }
         Minecraft minecraft = Minecraft.getInstance();
         boolean clicked = false;
         while (OPEN.consumeClick()) {

@@ -230,9 +230,9 @@ public final class KeySetScreen extends Screen implements JeiPanelScreen {
 
     /** 一键读 JEI 右侧书签。 */
     private void addBookmarks() {
-        // 先判 JEI 是否存在：未安装时只提示、不触发，也不能让 NoClassDefFoundError 冒出来
+        // 1.20.1 分支停用了 JEI 集成：未启用时只提示、不触发，也不能让 NoClassDefFoundError 冒出来
         if (!JeiRuntimeHolder.installed()) {
-            status = Lang.t("JEI 未安装");
+            status = Lang.t("JEI快捷功能暂不可用");
             return;
         }
         if (!JeiRuntimeHolder.ready()) {
@@ -303,7 +303,7 @@ public final class KeySetScreen extends Screen implements JeiPanelScreen {
     }
 
     @Override
-    public void renderBackground(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+    public void renderBackground(GuiGraphics graphics) {
         graphics.fill(0, 0, width, height, 0xB0101010);
         AeStyle.panel(graphics, panelX, panelY, PANEL_W, PANEL_H);
         AeStyle.header(graphics, panelX, panelY, PANEL_W, 20);
@@ -317,6 +317,8 @@ public final class KeySetScreen extends Screen implements JeiPanelScreen {
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        // 1.20.1 的 Screen.render 不会自动调 renderBackground，这里手动铺底
+        renderBackground(graphics);
         super.render(graphics, mouseX, mouseY, partialTick);
 
         scrollRow = Math.max(0, Math.min(scrollRow, maxScroll()));
@@ -395,14 +397,14 @@ public final class KeySetScreen extends Screen implements JeiPanelScreen {
     }
 
     @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+    public boolean mouseScrolled(double mouseX, double mouseY, double scrollY) {
         if (mouseX >= panelX && mouseX < panelX + PANEL_W
                 && mouseY >= gridY && mouseY < gridY + ROWS * SLOT) {
             scrollRow = Math.max(0, Math.min(
                     scrollRow + (scrollY < 0 ? 1 : -1), maxScroll()));
             return true;
         }
-        return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+        return super.mouseScrolled(mouseX, mouseY, scrollY);
     }
 
     @Override

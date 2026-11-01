@@ -130,7 +130,7 @@ public final class SolveScreen extends Screen implements JeiPanelScreen {
     }
 
     @Override
-    public void renderBackground(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+    public void renderBackground(GuiGraphics graphics) {
         graphics.fill(0, 0, width, height, 0xD0101010);
         AeStyle.panel(graphics, panelX, panelY, panelW, panelH);
         AeStyle.header(graphics, panelX, panelY, panelW, 20);
@@ -141,6 +141,8 @@ public final class SolveScreen extends Screen implements JeiPanelScreen {
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        // 1.20.1 的 Screen.render 不会自动调 renderBackground，这里手动铺底
+        renderBackground(graphics);
         super.render(graphics, mouseX, mouseY, partialTick);
 
         AeStyle.subPanel(graphics, panelX + 4, textY, panelW - 8, textH);
@@ -236,7 +238,7 @@ public final class SolveScreen extends Screen implements JeiPanelScreen {
     }
 
     @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+    public boolean mouseScrolled(double mouseX, double mouseY, double scrollY) {
         if (graphMode && graph != null) {
             if (inGraphArea(mouseX, mouseY)) {
                 graph.zoomAt(mouseX - (panelX + 4), mouseY - textY,

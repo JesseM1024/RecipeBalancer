@@ -9,14 +9,12 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.core.RegistryAccess;
-import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.RegistryOps;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.alchemy.PotionContents;
+import net.minecraft.world.item.PotionItem;
+import net.minecraft.world.item.TooltipFlag;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -79,7 +77,7 @@ public final class ItemKeyMapper {
     }
 
     /**
-     * 普通物品只存 registry id；带组件（药水、附魔、自定义名等）时
+     * 普通物品只存 registry id；带 NBT（药水、附魔、自定义名等）时
      * 用 `stack|<base64(ItemStack JSON)>` 保存完整 ItemStack。
      */
     public static String of(ItemStack stack) {
@@ -91,17 +89,21 @@ public final class ItemKeyMapper {
             return "";
         }
         ItemStack single = stack.copyWithCount(1);
-        if (single.isComponentsPatchEmpty()) {
+        // 1.20.1 是 NBT 时代：没有组件，载荷全在 tag 上
+        if (!single.hasTag()) {
             return id.toString();
         }
         try {
-            RegistryOps<JsonElement> ops = RegistryOps.create(JsonOps.INSTANCE, registryAccess());
-            JsonElement json = ItemStack.CODEC.encodeStart(ops, single).getOrThrow();
+            JsonElement json = ItemStack.CODEC.encodeStart(JsonOps.INSTANCE, single)
+                    .result().orElse(null);
+            if (json == null) {
+                return id.toString();
+            }
             String encoded = Base64.getUrlEncoder().withoutPadding()
                     .encodeToString(json.toString().getBytes(StandardCharsets.UTF_8));
             return STACK_PREFIX + encoded;
         } catch (RuntimeException e) {
-            // 极端环境（无 registry access）退化到 registry id，至少不崩
+            // 极端环境（数据异常）退化到 registry id，至少不崩
             return id.toString();
         }
     }
@@ -123,18 +125,11 @@ public final class ItemKeyMapper {
             String jsonText = new String(Base64.getUrlDecoder()
                     .decode(key.substring(STACK_PREFIX.length())), StandardCharsets.UTF_8);
             JsonElement json = JsonParser.parseString(jsonText);
-            RegistryOps<JsonElement> ops = RegistryOps.create(JsonOps.INSTANCE, registryAccess());
-            return ItemStack.CODEC.parse(ops, json).result()
+            return ItemStack.CODEC.parse(JsonOps.INSTANCE, json).result()
                     .map(stack -> stack.copyWithCount(1)).orElse(ItemStack.EMPTY);
         } catch (RuntimeException e) {
             return ItemStack.EMPTY;
         }
-    }
-
-    private static RegistryAccess registryAccess() {
-        Minecraft minecraft = Minecraft.getInstance();
-        return minecraft != null && minecraft.level != null
-                ? minecraft.level.registryAccess() : RegistryAccess.EMPTY;
     }
 
     private static String baseItemId(String key) {
@@ -248,19 +243,15 @@ public final class ItemKeyMapper {
             return registryName(key);
         }
         String name = stack.getHoverName().getString();
-        PotionContents contents = stack.get(DataComponents.POTION_CONTENTS);
-        if (contents == null || !contents.hasEffects()) {
+        // 1.20.1 没有 PotionContents 组件：药水类物品走 PotionItem 判定，
+        // 效果行直接取物品自身的 tooltip（Lingering 会按 0.25 时长因子、Splash 按原版规则显示）
+        if (!(stack.getItem() instanceof PotionItem)) {
             return name;
         }
-        // 直接用物品自身的 tooltip：Lingering 会按 0.25 时长因子、Splash 按原版规则显示
         Minecraft minecraft = Minecraft.getInstance();
-        net.minecraft.world.item.Item.TooltipContext context =
-                minecraft != null && minecraft.level != null
-                        ? net.minecraft.world.item.Item.TooltipContext.of(minecraft.level)
-                        : net.minecraft.world.item.Item.TooltipContext.EMPTY;
-        List<Component> tooltip = stack.getTooltipLines(context,
+        List<Component> tooltip = stack.getTooltipLines(
                 minecraft == null ? null : minecraft.player,
-                net.minecraft.world.item.TooltipFlag.NORMAL);
+                TooltipFlag.Default.NORMAL);
         List<String> effects = new ArrayList<>();
         for (int i = 1; i < tooltip.size(); i++) {
             String line = tooltip.get(i).getString();

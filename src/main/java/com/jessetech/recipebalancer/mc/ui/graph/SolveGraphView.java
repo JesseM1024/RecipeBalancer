@@ -1849,7 +1849,7 @@ public final class SolveGraphView {
 
     private static void vertex(VertexConsumer consumer, Matrix4f matrix,
                                double x, double y, int color) {
-        consumer.addVertex(matrix, (float) x, (float) y, 0.0f).setColor(color);
+        consumer.vertex(matrix, (float) x, (float) y, 0.0f).color(color).endVertex();
     }
 
     private void drawNode(GuiGraphics graphics, Font font, GNode node,

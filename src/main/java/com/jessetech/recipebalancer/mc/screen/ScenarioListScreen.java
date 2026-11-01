@@ -163,7 +163,7 @@ public final class ScenarioListScreen extends Screen implements JeiPanelScreen {
     }
 
     @Override
-    public void renderBackground(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+    public void renderBackground(GuiGraphics graphics) {
         graphics.fill(0, 0, width, height, 0xB0101010);
         AeStyle.panel(graphics, panelX, panelY, PANEL_W, PANEL_H);
         AeStyle.header(graphics, panelX, panelY, PANEL_W, 20);
@@ -172,6 +172,8 @@ public final class ScenarioListScreen extends Screen implements JeiPanelScreen {
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        // 1.20.1 的 Screen.render 不会自动调 renderBackground，这里手动铺底
+        renderBackground(graphics);
         super.render(graphics, mouseX, mouseY, partialTick);
 
         AeStyle.subPanel(graphics, panelX + 4, listY, PANEL_W - 8, listH);
@@ -230,12 +232,12 @@ public final class ScenarioListScreen extends Screen implements JeiPanelScreen {
     }
 
     @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+    public boolean mouseScrolled(double mouseX, double mouseY, double scrollY) {
         if (mouseX >= panelX && mouseY >= listY && mouseY < listY + listH) {
             scroll -= scrollY * ROW_H * 2;
             return true;
         }
-        return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+        return super.mouseScrolled(mouseX, mouseY, scrollY);
     }
 
     @Override

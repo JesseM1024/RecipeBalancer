@@ -9,6 +9,8 @@ draft/
 # 开发运行实例（存档、日志、配置，体积很大）
 run/
 run-data/
+# 1.20.1 分支的独立 dev 运行目录（见 build.gradle 的 gameDirectory）
+1_20_1_neo/
 
 # IDE
 .idea/
