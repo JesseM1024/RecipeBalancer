@@ -3,6 +3,7 @@ package com.jessetech.recipebalancer.mc.jei;
 import com.jessetech.recipebalancer.RecipeBalancerMod;
 import com.jessetech.recipebalancer.core.model.RecipePattern;
 import com.jessetech.recipebalancer.mc.i18n.Lang;
+import com.jessetech.recipebalancer.mc.itemmap.ProductIndex;
 import com.jessetech.recipebalancer.mc.screen.BalancerScreen;
 
 import mezz.jei.api.gui.builder.ITooltipBuilder;
@@ -65,6 +66,12 @@ public final class JeiLegacyRecipeButton implements IRecipeCategoryDecorator<Obj
     /** 针对被悬停配方，上一帧左键是否按下。 */
     private boolean hoveredWasDown;
 
+    /** 高亮结果缓存（500ms），避免每帧重算；按配方对象区分。 */
+    private static final long HIGHLIGHT_REFRESH_MS = 500L;
+    private Object highlightRecipe;
+    private long highlightAt;
+    private List<IRecipeSlotView> highlighted = List.of();
+
     private JeiLegacyRecipeButton() {
     }
 
@@ -78,6 +85,10 @@ public final class JeiLegacyRecipeButton implements IRecipeCategoryDecorator<Obj
             }
             Rect2i rect = place(category, slots);
             boolean hover = contains(rect, mouseX, mouseY);
+            if (hover) {
+                // 先把配方库能自产的物质标蓝，按钮本身画在高亮之上
+                drawCraftableHighlights(graphics, recipe, slots, category);
+            }
             JeiButtonSkin.draw(graphics, rect.getX(), rect.getY(), hover);
             if (!hover) {
                 clearHover(recipe);
@@ -100,6 +111,45 @@ public final class JeiLegacyRecipeButton implements IRecipeCategoryDecorator<Obj
         } catch (RuntimeException e) {
             // 单帧绘制异常不能把 JEI 的配方页带崩
         }
+    }
+
+    /** 悬停按钮时，把配方库能自产的物质标蓝（与高版本同一套判定规则与配色）。 */
+    private void drawCraftableHighlights(GuiGraphics graphics, Object recipe, IRecipeSlotsView slots,
+                                         IRecipeCategory<?> category) {
+        long now = System.currentTimeMillis();
+        if (highlightRecipe != recipe || now - highlightAt >= HIGHLIGHT_REFRESH_MS) {
+            highlighted = JeiCraftableSlots.find(slots, ProductIndex.current());
+            highlightRecipe = recipe;
+            highlightAt = now;
+        }
+        int width = category.getWidth();
+        int height = category.getHeight();
+        for (IRecipeSlotView slot : highlighted) {
+            Rect2i rect = slotRect(slot, width, height);
+            if (rect != null) {
+                JeiCraftableSlots.drawHighlight(graphics, rect);
+            }
+        }
+    }
+
+    /**
+     * 槽位矩形。
+     *
+     * <p>装饰器绘制时 pose 已平移到配方原点，而 {@code IRecipeSlotDrawable#getRect()} 正是
+     * 这一坐标系下的位置，可以直接用；完全落在配方外的跳过，避免高亮糊到配方区之外。
+     */
+    // getRect() 被标记待删除，但它是唯一能拿到每格几何位置的接口（与 JeiPatternImporter 同样处理）。
+    @SuppressWarnings("removal")
+    private static Rect2i slotRect(IRecipeSlotView slot, int width, int height) {
+        if (!(slot instanceof IRecipeSlotDrawable drawable)) {
+            return null;
+        }
+        Rect2i rect = drawable.getRect();
+        if (rect.getX() + rect.getWidth() <= 0 || rect.getY() + rect.getHeight() <= 0
+                || rect.getX() >= width || rect.getY() >= height) {
+            return null;
+        }
+        return rect;
     }
 
     /** 鼠标离开该配方（或该配方不再有产物）时，释放属于它的悬停状态。 */

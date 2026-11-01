@@ -15,7 +15,6 @@ import mezz.jei.api.gui.drawable.IDrawable;
 import mezz.jei.api.gui.ingredient.IRecipeSlotDrawable;
 import mezz.jei.api.gui.ingredient.IRecipeSlotView;
 import mezz.jei.api.gui.inputs.IJeiUserInput;
-import mezz.jei.api.ingredients.ITypedIngredient;
 import mezz.jei.api.recipe.RecipeIngredientRole;
 import mezz.jei.api.recipe.advanced.IRecipeButtonControllerFactory;
 import net.minecraft.client.Minecraft;
@@ -23,7 +22,6 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.Rect2i;
 
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -73,9 +71,9 @@ public final class JeiRecipeButtonFactory implements IRecipeButtonControllerFact
 
     private static final class Controller<T> implements IIconButtonController {
 
-        /** 深蓝、低不透明度的“已有配方”高亮。 */
-        private static final int HIGHLIGHT_FILL = 0x40004688;
-        private static final int HIGHLIGHT_BORDER = 0x9F004E96;
+        /** 深蓝、低不透明度的“已有配方”高亮（与低版本装饰器共用）。 */
+        private static final int HIGHLIGHT_FILL = JeiCraftableSlots.HIGHLIGHT_FILL;
+        private static final int HIGHLIGHT_BORDER = JeiCraftableSlots.HIGHLIGHT_BORDER;
         /** 我们编码区的原料列数，决定 JEI 槽位行列如何映射。 */
         private static final int INPUT_COLS = 3;
 
@@ -158,33 +156,15 @@ public final class JeiRecipeButtonFactory implements IRecipeButtonControllerFact
             graphics.fillGradient(RenderType.guiOverlay(), x1, y1, x2, y2, color, color, 0);
         }
 
-        /** 该槽位是否至少有一种候选物质能由配方库自产（结果缓存 500ms，避免每帧重算）。 */
+        /** 配方库能自产的槽位（与低版本装饰器共用同一套判定；结果缓存 500ms，避免每帧重算）。 */
         private List<IRecipeSlotView> craftableSlots() {
             long now = System.currentTimeMillis();
             if (now - highlightAt < 500) {
                 return highlighted;
             }
             highlightAt = now;
-            ProductIndex index = ProductIndex.current();
-            List<IRecipeSlotView> result = new ArrayList<>();
-            for (IRecipeSlotView slot : layout.getRecipeSlotsView().getSlotViews()) {
-                if (slot.isEmpty()) {
-                    continue;
-                }
-                RecipeIngredientRole role = slot.getRole();
-                if (role != RecipeIngredientRole.INPUT && role != RecipeIngredientRole.OUTPUT) {
-                    continue;
-                }
-                for (ITypedIngredient<?> ingredient : slot.getAllIngredients().toList()) {
-                    JeiIngredientMapper.Mapped mapped = JeiIngredientMapper.of(ingredient);
-                    if (mapped != null && index.produces(mapped.key())) {
-                        result.add(slot);
-                        break;
-                    }
-                }
-            }
-            highlighted = result;
-            return result;
+            highlighted = JeiCraftableSlots.find(layout.getRecipeSlotsView(), ProductIndex.current());
+            return highlighted;
         }
 
         @Override
