@@ -115,6 +115,8 @@ public final class RecipeBalancerJeiPlugin implements IModPlugin {
         }
         try {
             registration.addGhostIngredientHandler(BalancerScreen.class, new JeiGhostHandler());
+            // 物料清单编辑屏（无限外部供应 / 循环亏损补充）：拖进网格即追加
+            registration.addGhostIngredientHandler(KeySetScreen.class, new JeiKeySetGhostHandler());
         } catch (Throwable t) {
             RecipeBalancerMod.LOGGER.warn(
                     "[RecipeBalancer] JEI 拖拽录入不可用: {}", t.toString());
