@@ -5,25 +5,17 @@ import mezz.jei.api.gui.ingredient.IRecipeSlotView;
 import mezz.jei.api.gui.ingredient.IRecipeSlotsView;
 import mezz.jei.api.ingredients.ITypedIngredient;
 import mezz.jei.api.recipe.RecipeIngredientRole;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.renderer.Rect2i;
-import net.minecraft.client.renderer.RenderType;
 
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 「配方库里已有配方的物质」在 JEI 配方页上的高亮。
+ * 找出「配方库里已经有配方」的槽位。
  *
- * <p>配色与判定口径与 main 分支完全一致：深蓝填充 + 更亮一点的描边，
- * 用 {@code RenderType.guiOverlay()} 画在物品图标之上（不吃深度），
- * 并且只高亮原料/产物槽位里「配方库能自产」的物质。
+ * <p>判定口径与 main 分支一致：只看原料与产物槽位，用 {@link ProductIndex#produces(String)} 判断。
+ * 配色与绘制在 {@link JeiHighlightOverlay}（与 main 同一组颜色与 overlay 渲染方式）。
  */
 public final class JeiCraftableSlots {
-
-    /** 深蓝、低不透明度的「已有配方」高亮。 */
-    public static final int HIGHLIGHT_FILL = 0x40004688;
-    public static final int HIGHLIGHT_BORDER = 0x9F004E96;
 
     private JeiCraftableSlots() {
     }
@@ -64,23 +56,5 @@ public final class JeiCraftableSlots {
             // 某些自定义配料解析不了，当作不可自产
         }
         return false;
-    }
-
-    /** 在槽位矩形上叠一层蓝色高亮；rect 必须与当前绘制坐标系同一空间。 */
-    public static void drawHighlight(GuiGraphics graphics, Rect2i rect) {
-        int x = rect.getX();
-        int y = rect.getY();
-        int x2 = x + rect.getWidth();
-        int y2 = y + rect.getHeight();
-        overlayFill(graphics, x, y, x2, y2, HIGHLIGHT_FILL);
-        overlayFill(graphics, x, y, x2, y + 1, HIGHLIGHT_BORDER);
-        overlayFill(graphics, x, y2 - 1, x2, y2, HIGHLIGHT_BORDER);
-        overlayFill(graphics, x, y, x + 1, y2, HIGHLIGHT_BORDER);
-        overlayFill(graphics, x2 - 1, y, x2, y2, HIGHLIGHT_BORDER);
-    }
-
-    /** guiOverlay：不吃深度，保证盖在物品图标之上（和 JEI 自带高亮一致）。 */
-    private static void overlayFill(GuiGraphics graphics, int x1, int y1, int x2, int y2, int color) {
-        graphics.fillGradient(RenderType.guiOverlay(), x1, y1, x2, y2, color, color, 0);
     }
 }

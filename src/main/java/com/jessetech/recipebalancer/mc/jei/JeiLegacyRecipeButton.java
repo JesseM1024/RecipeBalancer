@@ -16,6 +16,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.renderer.Rect2i;
 import net.minecraft.network.chat.Component;
+import org.joml.Matrix4f;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
@@ -154,10 +155,15 @@ public final class JeiLegacyRecipeButton implements IRecipeCategoryDecorator<Obj
         }
         int width = category.getWidth();
         int height = category.getHeight();
+        // 装饰器在槽位物品之前绘制：这里只排进队列，交给 ScreenEvent.Render.Post 画在最上层
+        Matrix4f matrix = graphics.pose().last().pose();
+        int originX = (int) matrix.m30();
+        int originY = (int) matrix.m31();
         for (IRecipeSlotView slot : highlighted) {
             Rect2i rect = slotRect(slot, width, height);
             if (rect != null) {
-                JeiCraftableSlots.drawHighlight(graphics, rect);
+                JeiHighlightOverlay.queue(new Rect2i(originX + rect.getX(), originY + rect.getY(),
+                        rect.getWidth(), rect.getHeight()));
             }
         }
     }

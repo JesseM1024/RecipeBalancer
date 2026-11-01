@@ -3,6 +3,7 @@ package com.jessetech.recipebalancer;
 import com.jessetech.recipebalancer.mc.config.GraphLayoutConfig;
 import com.jessetech.recipebalancer.mc.i18n.Lang;
 import com.jessetech.recipebalancer.mc.jei.JeiCapabilities;
+import com.jessetech.recipebalancer.mc.jei.JeiHighlightOverlay;
 import com.jessetech.recipebalancer.mc.keybind.RbKeyMappings;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.entity.player.Player;
@@ -50,6 +51,8 @@ public final class RecipeBalancerMod {
         MinecraftForge.EVENT_BUS.addListener(RbKeyMappings::onClientTick);
         MinecraftForge.EVENT_BUS.addListener(RecipeBalancerMod::onClientTick);
         MinecraftForge.EVENT_BUS.addListener(RecipeBalancerMod::onPlayerLoggingIn);
+        // JEI 配方页「配方库已有」高亮：延后到屏幕渲染结束再画，避免被物品图标压住
+        MinecraftForge.EVENT_BUS.addListener(JeiHighlightOverlay::onRenderPost);
         // 配置：ForgeConfigSpec + 平台自带编辑器（模组列表里的「Config」按钮）
         ModLoadingContext.get().registerConfig(ModConfig.Type.CLIENT, GraphLayoutConfig.SPEC);
         LOGGER.info("[RecipeBalancer] 初始化：快捷键 K 打开主界面；{}",
