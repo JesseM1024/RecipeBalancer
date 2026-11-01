@@ -9,7 +9,9 @@
 
 需要 **Java 21**。
 
-## Modrinth / CurseForge 更新描述
+## Modrinth / CurseForge 更新描述（纯英文）
 
-- 配方集界面新增「打开文件夹」按钮，可直接打开配方集所在目录
-- 物料清单屏幕支持从 JEI 拖入物品
+```
+- Added an "Open folder" button on the recipe set screen that opens the workspace directory directly
+- JEI drag & drop is now supported on the material list screens (infinite supply / cyclic deficit)
+```
