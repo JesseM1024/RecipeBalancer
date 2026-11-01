@@ -8,11 +8,14 @@ import com.jessetech.recipebalancer.mc.io.WorkspaceSession;
 import com.jessetech.recipebalancer.mc.itemmap.ScenarioKeyNormalizer;
 import com.jessetech.recipebalancer.mc.jei.JeiScreenSupport;
 import com.jessetech.recipebalancer.mc.ui.AeStyle;
+import net.minecraft.Util;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -84,6 +87,9 @@ public final class ScenarioListScreen extends Screen implements JeiPanelScreen {
                 .bounds(panelX + 212, panelY + PANEL_H - 53, 44, 20).build());
         addRenderableWidget(Button.builder(Lang.c("返回"), b -> minecraft.setScreen(parent))
                 .bounds(panelX + 8, panelY + PANEL_H - 27, 80, 20).build());
+        // 底行中间：打开工作区文件夹（用于在文件管理器里直接复制/粘贴配方集 json）
+        addRenderableWidget(Button.builder(Lang.c("打开文件夹"), b -> openFolder())
+                .bounds(panelX + 92, panelY + PANEL_H - 27, 80, 20).build());
         // 右下角：读取选中项（与右键载入等价，方便不做右键操作）
         addRenderableWidget(Button.builder(Lang.c("读取"), b -> loadSelected())
                 .bounds(panelX + PANEL_W - 8 - 80, panelY + PANEL_H - 27, 80, 20).build());
@@ -138,6 +144,18 @@ public final class ScenarioListScreen extends Screen implements JeiPanelScreen {
             status = Lang.t("已删除: %s", name);
         } catch (RuntimeException e) {
             status = Lang.t("删除失败: %s", e.getMessage());
+        }
+    }
+
+    /** 打开配方集文件夹（工作区 json 所在目录），交给系统文件管理器。 */
+    private void openFolder() {
+        Path directory = store.directory();
+        try {
+            Files.createDirectories(directory);
+            Util.getPlatform().openPath(directory);
+            status = Lang.t("已打开配方集文件夹");
+        } catch (Exception e) {
+            status = Lang.t("打开文件夹失败: %s", e.getMessage());
         }
     }
 
