@@ -81,7 +81,7 @@ public final class ScenarioListScreen extends Screen implements JeiPanelScreen {
         nameBox.setValue(currentName.isBlank() ? WorkspaceSession.DEFAULT_NAME : currentName);
         addRenderableWidget(nameBox);
 
-        addRenderableWidget(Button.builder(Lang.c("另存"), b -> saveCurrent())
+        addRenderableWidget(Button.builder(Lang.c("存储为"), b -> saveCurrent())
                 .bounds(panelX + 164, panelY + PANEL_H - 53, 44, 20).build());
         addRenderableWidget(Button.builder(Lang.c("删除"), b -> deleteSelected())
                 .bounds(panelX + 212, panelY + PANEL_H - 53, 44, 20).build());
