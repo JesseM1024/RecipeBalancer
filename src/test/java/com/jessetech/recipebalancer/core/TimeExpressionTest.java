@@ -63,10 +63,13 @@ class TimeExpressionTest {
         assertEquals("0.00000000001", TimeExpression.formatEditableNumber(0.00000000001));
         assertEquals("0.00000000001 t", TimeExpression.formatExactTicks(0.00000000001));
 
-        // 一级紧凑显示：μ/m/k/M/G/T
+        // 一级紧凑显示：μ/k/M/G/T；不足 1 直接写小数，不再有毫（m）前缀
         assertEquals("30k", TimeExpression.formatCompact(30000));
         assertEquals("100k", TimeExpression.formatCompact(100000));
         assertEquals("1M", TimeExpression.formatCompact(1000000));
+        assertEquals("0.5", TimeExpression.formatCompact(0.5));
+        assertEquals("0.005", TimeExpression.formatCompact(0.005));
+        assertEquals("0.001", TimeExpression.formatCompact(0.001));
         assertEquals("500μ", TimeExpression.formatCompact(0.0005));
         assertEquals("1n", TimeExpression.formatCompact(1e-9));
         assertEquals("1p", TimeExpression.formatCompact(1e-12));

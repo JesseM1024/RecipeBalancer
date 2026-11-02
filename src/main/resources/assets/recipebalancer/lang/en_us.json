@@ -111,6 +111,8 @@
   "流程图": "Graph",
   "布局: 分层": "Layout: Layered",
   "布局: 弹性": "Layout: Force",
+  "名称: 显示名": "Names: Display",
+  "名称: 注册名": "Names: IDs",
                 
   "配方运行方案（流量单位 /t）": "Recipe Plan (flow unit /t)",
   "配方运行方案": "Recipe Plan",

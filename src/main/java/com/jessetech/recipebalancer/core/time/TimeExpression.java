@@ -80,7 +80,8 @@ public final class TimeExpression {
     }
 
     /**
-     * 一级菜单紧凑显示：μ / m / k / M / G / T，避免大数字溢出格子。
+     * 一级菜单紧凑显示：μ / k / M / G / T，避免大数字溢出格子。
+     * 不足 1 的量直接写小数（如 0.005），不再用毫（m）前缀；再小一个数量级才用 μ。
      * 点进编辑框仍用 {@link #formatEditableNumber(double)} 看精确值。
      */
     public static String formatCompact(double value) {
@@ -113,7 +114,8 @@ public final class TimeExpression {
             return formatNumber(value);
         }
         if (abs >= 1e-3) {
-            return compact(value * 1e3) + "m";
+            // 取消毫（m）前缀：0.005 直接写小数，再小一个数量级才落到 μ
+            return formatNumber(value);
         }
         if (abs >= 1e-6) {
             return compact(value * 1e6) + "μ";

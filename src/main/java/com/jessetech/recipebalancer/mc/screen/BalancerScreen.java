@@ -79,6 +79,12 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
     private static final int MAX_TARGETS = 32;
     private static final int INV_COLS = 9;
     private static final int INV_ROWS = 4;
+    /** 面板里除可变行（目标/配方库/编码）之外的固定高度：标题、标签、背包、状态栏等。 */
+    private static final int FIXED_CHROME = 166;
+    /** 编码区至少保留的可视行数；放不下时降一级 GUI 缩放，而不是继续压缩。 */
+    private static final int MIN_ENCODING_ROWS = 3;
+    /** 最小布局高度：固定框 + 3 行编码 + 1 行配方库 + 1 行目标。 */
+    private static final int MIN_PANEL_H = FIXED_CHROME + (MIN_ENCODING_ROWS + 1 + 1) * SLOT;
     private int targetRows = 1;
     private int libRows = 1;
     private int visibleRows = 1;
@@ -132,6 +138,10 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
     private int panelY = 4;
     private int panelW = 172;
     private int panelH = 200;
+    /** 自动缩小前的 GUI 缩放选项原值（-1 = 本界面没改过）。 */
+    private int savedGuiScale = -1;
+    /** 还原缩放时抑制自动缩小，避免 resize 回调里又被缩回去。 */
+    private boolean skipAutoScale;
     private int topY;
     private int contentX;
     private int targetLabelY;
@@ -182,6 +192,10 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
 
     @Override
     protected void init() {
+        // 先把 GUI 缩放调到合适：放大窗口能还原就还原，放不下最小布局就降一级
+        if (restoreGuiScaleIfFits() || shrinkGuiScaleIfNeeded()) {
+            return;
+        }
         // 面板只包住内容；左右两列图标按钮贴在面板外侧，不占面板底色
         int sideW = SLOT;
         int sideGap = SIDE_GAP;
@@ -199,8 +213,7 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
 
         // 固定区域：工作区名/目标/配方库/配方库筛选行/编码/背包/状态
         // 编码最多 4 行；剩余高度全部给配方库
-        int fixed = 166;
-        int available = Math.max(3 * SLOT, panelH - fixed);
+        int available = Math.max(MIN_ENCODING_ROWS * SLOT, panelH - FIXED_CHROME);
         targetRows = 2;
         visibleRows = 4;
         libRows = 1;
@@ -336,6 +349,70 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
 
         // resize 后 Minecraft 不会补发 Init.Post，JEI 会一直用旧属性；手动通知
         JeiScreenSupport.notifyGuiInit(this);
+    }
+
+    /**
+     * 窗口变大后，若进入本次界面之前的缩放已经放得下最小布局，就把 GUI 缩放还原，
+     * 否则最大化窗口后会一直卡在小缩放上（面板被拉得又高又空）。
+     *
+     * @return true 表示已还原并重新 init
+     */
+    private boolean restoreGuiScaleIfFits() {
+        if (savedGuiScale < 0 || skipAutoScale || minecraft == null) {
+            return false;
+        }
+        // 用 Window 自己的公式估算目标缩放下的 GUI 高度
+        int target = minecraft.getWindow().calculateScale(savedGuiScale,
+                minecraft.isEnforceUnicode());
+        int targetHeight = (int) Math.ceil(minecraft.getWindow().getHeight() / (double) target);
+        if (targetHeight - 8 < MIN_PANEL_H) {
+            return false;
+        }
+        restoreGuiScale();
+        return true;
+    }
+
+    /**
+     * MC 的 GUI 缩放只在窗口尺寸变化时才算一次，切换/拖拽窗口时容易慢半拍，
+     * 面板于是顶到背包上。这里每次 init 自己判断：放不下「3 行编码 + 1 行配方库 + 1 行目标」
+     * 就把 GUI 缩放降一级，由 {@link Minecraft#resizeDisplay()} 带着新尺寸重新 init。
+     *
+     * @return true 表示已触发缩放，本次 init 不必再建控件
+     */
+    private boolean shrinkGuiScaleIfNeeded() {
+        if (skipAutoScale || minecraft == null) {
+            return false;
+        }
+        if (height - 8 >= MIN_PANEL_H) {
+            return false;
+        }
+        int scale = (int) minecraft.getWindow().getGuiScale();
+        if (scale <= 1) {
+            // 已经是最小缩放：交回原有的压缩兜底（编码行可以再少）
+            return false;
+        }
+        if (savedGuiScale < 0) {
+            savedGuiScale = minecraft.options.guiScale().get();
+        }
+        minecraft.options.guiScale().set(scale - 1);
+        minecraft.resizeDisplay();
+        return true;
+    }
+
+    /** 退出界面时还原 GUI 缩放，避免窗口恢复后一直被锁在小缩放上。 */
+    private void restoreGuiScale() {
+        if (savedGuiScale < 0 || minecraft == null) {
+            return;
+        }
+        int value = savedGuiScale;
+        savedGuiScale = -1;
+        minecraft.options.guiScale().set(value);
+        skipAutoScale = true;
+        try {
+            minecraft.resizeDisplay();
+        } finally {
+            skipAutoScale = false;
+        }
     }
 
     private static ScenarioDraft loadAutosave() {
@@ -883,7 +960,7 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
         graphics.drawString(font, Lang.t("耗时"), equipmentX + SLOT + 2, timeY + 5,
                 AeStyle.MUTED, false);
 
-        // 一级耗时也用紧凑后缀（μ/m/k/M/G/T/P/E），并抬高 z 防止被槽位盖住
+        // 一级耗时也用紧凑后缀（μ/k/M/G/T/P/E），并抬高 z 防止被槽位盖住
         String time = TimeExpression.formatCompact(pattern.timeTicks()) + "t";
         int textWidth = font.width(time);
         PoseStack pose = graphics.pose();
@@ -929,7 +1006,7 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
         if (Math.abs(amount - 1.0) < 1e-9) {
             return "";
         }
-        // 一级只显示紧凑值（μ/m/k/M/G/T）；精确值在二级编辑框
+        // 一级只显示紧凑值（μ/k/M/G/T）；精确值在二级编辑框
         return TimeExpression.formatCompact(amount);
     }
 
@@ -1696,6 +1773,8 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
         if (nameBox != null) {
             onWorkspaceNamed(WorkspaceSession.nameOf(nameBox.getValue()));
         }
+        // 回到世界时把自动缩放还原，避免影响后续游玩
+        restoreGuiScale();
         if (minecraft != null) {
             minecraft.setScreen(null);
         }
