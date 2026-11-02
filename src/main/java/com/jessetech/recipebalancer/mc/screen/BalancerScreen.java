@@ -453,7 +453,9 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
     private void drawBackground(GuiGraphics graphics, int mouseX, int mouseY) {
         graphics.fill(0, 0, width, height, 0xE0101010);
         AeStyle.panel(graphics, panelX, panelY, panelW, panelH);
-        AeStyle.header(graphics, panelX, panelY, panelW, 16);
+        // header 的底边就是工作区行的分界线：高度取 22 让线落在名称框/按钮下方、
+        //「目标」标签上方，否则会被名称框和三个按钮压住看不出是分界。
+        AeStyle.header(graphics, panelX, panelY, panelW, 22);
 
         // 配方库底板 + 全部槽位底图：一次批量提交，只有图标/文字走逐格绘制
         libraryScroll = Math.max(0, Math.min(libraryScroll,
