@@ -634,17 +634,19 @@ public final class BalancerScreen extends RbScreen {
                 }
                 if (!recipe.equType().isBlank()) {
                     ItemStack equipment = ItemKeyMapper.stack(recipe.equType());
-                    // 设备标记统一按 translate(x+10,y+10) + scale(0.5) 的变换画在右下角
-                    PoseStack pose = graphics.pose();
-                    pose.pushPose();
-                    pose.translate(x + 10, y + 10, 0);
-                    pose.scale(0.5f, 0.5f, 1.0f);
+                    // 设备标记统一按 translate(x+10,y+10) + scale(0.5) 的变换画在右下角。
+                    // 物品图标必须用 Draw 的缩放重载：1.18.2 的 renderGuiItem 只认模型视图矩阵，
+                    // 改 PoseStack 不会生效（否则图标会跑到左上角）。
                     if (equipment.isEmpty()) {
+                        PoseStack pose = graphics.pose();
+                        pose.pushPose();
+                        pose.translate(x + 10, y + 10, 0);
+                        pose.scale(0.5f, 0.5f, 1.0f);
                         ItemKeyMapper.renderIcon(graphics, font, recipe.equType(), 0, 0, null);
+                        pose.popPose();
                     } else {
-                        graphics.renderItem(equipment, 1, 1);
+                        graphics.renderItem(equipment, x + 10, y + 10, 0.5f);
                     }
-                    pose.popPose();
                 }
             }
         }
@@ -922,8 +924,8 @@ public final class BalancerScreen extends RbScreen {
     public void render(PoseStack pose, int mouseX, int mouseY, float partialTick) {
         Draw graphics = new Draw(pose, this);
         // 顺序：背景+内容 → 控件（名称框/按钮）→ 手持物品 → tooltip。
-        // 1.18.2 的 super.render() 会在画控件前调 renderBackground（本类为空实现），
-        // 因此背景与内容必须自己先画，否则会被控件底下那层盖掉。
+        // 本界面的内容需要鼠标坐标判断悬停，所以 renderBackground 留空，
+        // 背景与内容都在这里按顺序自己画（RbScreen 会先调一次空的 renderBackground）。
         drawBackdrop(graphics, mouseX, mouseY);
         updateOptionStates();
         super.render(pose, mouseX, mouseY, partialTick);

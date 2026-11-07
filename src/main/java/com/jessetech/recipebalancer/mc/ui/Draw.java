@@ -73,11 +73,20 @@ public final class Draw {
     }
 
     public void drawString(Font font, String text, int x, int y, int color) {
-        font.drawShadow(pose, text, x, y, color, true);
+        font.drawShadow(pose, text, x, y, color);
     }
 
+    /**
+     * ★ 陷阱 ★ 1.18.2 的 {@code Font#drawShadow(..., boolean)} 那个 boolean 是
+     * <b>透明（see-through）</b>，不是「是否画阴影」——阴影是硬编码在 drawShadow 里的。
+     * 要关闭阴影只能用 {@code Font#draw(...)}（1.19+ 才把它改成 dropShadow 参数）。
+     */
     public void drawString(Font font, String text, int x, int y, int color, boolean shadow) {
-        font.drawShadow(pose, text, x, y, color, shadow);
+        if (shadow) {
+            font.drawShadow(pose, text, x, y, color);
+        } else {
+            font.draw(pose, text, x, y, color);
+        }
     }
 
     public void drawString(Font font, Component text, int x, int y, int color) {
@@ -104,6 +113,32 @@ public final class Draw {
 
     public void renderItem(ItemStack stack, int x, int y) {
         Minecraft.getInstance().getItemRenderer().renderGuiItem(stack, x, y);
+    }
+
+    /**
+     * 带缩放的物品图标（如配方库里 0.5 倍的设备标记）。
+     *
+     * <p>★ 陷阱 ★ 1.18.2 的 {@code ItemRenderer#renderGuiItem} 只认
+     * {@link RenderSystem#getModelViewStack()}，完全忽略传进去的 PoseStack ——
+     * 用 pose 做 translate/scale 不会生效（图标会画在左上角）。
+     * 因此这里直接在模型视图栈上做变换。
+     */
+    public void renderItem(ItemStack stack, int x, int y, float scale) {
+        if (scale == 1.0f) {
+            renderItem(stack, x, y);
+            return;
+        }
+        PoseStack modelView = RenderSystem.getModelViewStack();
+        modelView.pushPose();
+        modelView.translate(x, y, 0);
+        modelView.scale(scale, scale, 1.0f);
+        RenderSystem.applyModelViewMatrix();
+        try {
+            Minecraft.getInstance().getItemRenderer().renderGuiItem(stack, 0, 0);
+        } finally {
+            modelView.popPose();
+            RenderSystem.applyModelViewMatrix();
+        }
     }
 
     public void renderItemDecorations(Font font, ItemStack stack, int x, int y) {
