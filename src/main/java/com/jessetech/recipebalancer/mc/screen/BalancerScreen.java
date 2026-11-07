@@ -17,34 +17,23 @@ import com.jessetech.recipebalancer.mc.io.WorkspaceSession;
 import com.jessetech.recipebalancer.mc.itemmap.ItemKeyMapper;
 import com.jessetech.recipebalancer.mc.itemmap.ProductIndex;
 import com.jessetech.recipebalancer.mc.itemmap.ScenarioKeyNormalizer;
-import com.jessetech.recipebalancer.mc.jei.JeiRuntimeHolder;
-import com.jessetech.recipebalancer.mc.jei.JeiScreenSupport;
 import com.jessetech.recipebalancer.mc.ui.AeStyle;
+import com.jessetech.recipebalancer.mc.ui.Buttons;
+import com.jessetech.recipebalancer.mc.ui.Chat;
+import com.jessetech.recipebalancer.mc.ui.Draw;
 import com.jessetech.recipebalancer.mc.ui.IconButton;
 import com.jessetech.recipebalancer.mc.ui.PixelIcon;
-import com.mojang.blaze3d.platform.Lighting;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.VertexConsumer;
+import com.mojang.math.Matrix4f;
+import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
-import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.renderer.RenderType;
-import net.minecraft.client.renderer.entity.ItemRenderer;
-import net.minecraft.client.renderer.texture.OverlayTexture;
-import net.minecraft.client.resources.model.BakedModel;
-import net.minecraft.client.resources.sounds.SimpleSoundInstance;
-import net.minecraft.sounds.SoundEvents;
-import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.world.entity.player.Inventory;
-import net.minecraft.world.item.ItemDisplayContext;
 import net.minecraft.world.item.ItemStack;
-
-import org.joml.Matrix4f;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -59,7 +48,7 @@ import java.util.Map;
  * 左键从背包拿起物品、点格子放置/删除；中键改用量或自定义物品；右键配方库两次删除。
  * 求解进入二级结果页，避免挤占一级界面。
  */
-public final class BalancerScreen extends Screen implements JeiPanelScreen {
+public final class BalancerScreen extends RbScreen {
 
     private static final int SLOT = 18;
     /** 左右两列图标按钮：18×18 方形，与面板外缘留 2px 缝。 */
@@ -101,8 +90,7 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
     private static final ScenarioStore STORE = WorkspaceSession.store();
 
     private final ScenarioDraft draft = loadAutosave();
-    private final RecipePattern pattern;
-    private final boolean fromJei;
+    private final RecipePattern pattern = new RecipePattern();
     private int editingIndex = -1;
     private String carriedKey = "";
     private String status = Lang.t("左键取物品→点格子放置；中键改量；右键配方库两次删除");
@@ -110,19 +98,13 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
     private String scenarioName = WorkspaceSession.currentName();
 
     /**
-     * 延后绘制的物品图标。
+     * 槽位底图（边框/内区/高光）预计算：5 个 int 一个矩形，布局/滚动变化时重建。
      *
-     * <p>原版 {@code GuiGraphics.renderItem} 每画一件物品就 {@code flush()} 一次，
-     * 配方库满屏时一帧要 flush 200+ 次；这里先把物品排队，同一帧内容画完后
-     * 按「平面 / 立体光照」分组一次性提交，渲染结果与原版逐件绘制完全一致。
+     * <p>物品图标在本线直接走 1.18.2 的 {@code ItemRenderer#renderGuiItem}
+     * （它自己负责光照/纹理/深度状态与提交）；1.21.1 线上那套「延后合批 + 分组 flush」
+     * 依赖 1.20 才有的 {@code GuiGraphics#renderItem} 语义，此处不做复刻，
+     * 以免漏掉 1.18.2 的状态设置导致图标被其它 GUI 贴图污染。
      */
-    private record PendingItem(ItemStack stack, BakedModel model, boolean flat,
-                               float x, float y, float z, float scale) {
-    }
-
-    private final List<PendingItem> pendingItems = new ArrayList<>();
-
-    /** 槽位底图（边框/内区/高光）预计算：5 个 int 一个矩形，布局/滚动变化时重建。 */
     private int[] slotChrome = new int[0];
     private int slotChromeLibScroll = -1;
     private int slotChromeLibTotal = -1;
@@ -133,7 +115,6 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
     private int lastRightClickIndex = -1;
     private long lastRightClickTime;
 
-    // 默认值让 JEI 在首次 Screen init 之前查询属性也能得到合法尺寸
     private int panelX = 4;
     private int panelY = 4;
     private int panelW = 172;
@@ -173,21 +154,7 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
     private EditBox libraryFilterBox;
 
     public BalancerScreen() {
-        this(new RecipePattern(), false);
-    }
-
-    /** JEI 配方加号：带一个预填的编码草稿打开终端。 */
-    public BalancerScreen(RecipePattern pattern) {
-        this(pattern, true);
-    }
-
-    private BalancerScreen(RecipePattern pattern, boolean fromJei) {
         super(Lang.c("RecipeBalancer · 配方编码终端"));
-        this.pattern = pattern;
-        this.fromJei = fromJei;
-        if (fromJei) {
-            status = Lang.t("已从 JEI 导入编码；请检查设备/产物后点「写入」");
-        }
     }
 
     @Override
@@ -207,7 +174,7 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
         int requiredWidth = Math.max(gridWidth, encodingWidth) + 8;
         panelW = Math.min(requiredWidth, width - 8);
         panelH = height - 8;
-        // 配平面板保持屏幕正中；JEI 自己填充 guiRight 之外的剩余空间
+        // 配平面板保持屏幕正中
         panelX = (width - panelW) / 2;
         panelY = 4;
 
@@ -285,7 +252,7 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
         libraryFilterBox = new EditBox(font, contentX, libraryFilterY, LIB_FILTER_BOX, 14,
                 Lang.c("筛选"));
         libraryFilterBox.setMaxLength(40);
-        libraryFilterBox.setHint(Lang.c("筛选"));
+        // 1.18.2 的 EditBox 没有 setHint（1.19.2 才加）；占位由上方「筛选」标签承担
         libraryFilterBox.setValue(libraryQuery);
         libraryFilterBox.setResponder(value -> {
             libraryQuery = value;
@@ -294,11 +261,11 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
         });
         addRenderableWidget(libraryFilterBox);
 
-        addRenderableWidget(Button.builder(Lang.c("打开"), b -> openWorkspaceList())
+        addRenderableWidget(Buttons.builder(Lang.c("打开"), b -> openWorkspaceList())
                 .bounds(openX, topY + 1, buttonW, 14).build());
-        addRenderableWidget(Button.builder(Lang.c("保存"), b -> storeWorkspace())
+        addRenderableWidget(Buttons.builder(Lang.c("保存"), b -> storeWorkspace())
                 .bounds(saveX, topY + 1, buttonW, 14).build());
-        addRenderableWidget(Button.builder(Lang.c("新建"), b -> newWorkspace())
+        addRenderableWidget(Buttons.builder(Lang.c("新建"), b -> newWorkspace())
                 .bounds(newX, topY + 1, buttonW, 14).build());
 
         // 左列：四个开关，贴在面板左外侧，从目标产物那一行起逐行向下；右列：求解
@@ -340,15 +307,12 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
                 b -> openExternalInputs()));
 
         // 写入/新建恢复上下排列；高度压缩到 14，正好能塞进耗时下方
-        addRenderableWidget(Button.builder(Lang.c("写入"),
+        addRenderableWidget(Buttons.builder(Lang.c("写入"),
                         b -> commitPattern(true))
                 .bounds(equipmentX, encodingY + 38, 40, 14).build());
-        addRenderableWidget(Button.builder(Lang.c("新建"),
+        addRenderableWidget(Buttons.builder(Lang.c("新建"),
                         b -> newPattern())
                 .bounds(equipmentX, encodingY + 54, 40, 14).build());
-
-        // resize 后 Minecraft 不会补发 Init.Post，JEI 会一直用旧属性；手动通知
-        JeiScreenSupport.notifyGuiInit(this);
     }
 
     /**
@@ -392,9 +356,10 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
             return false;
         }
         if (savedGuiScale < 0) {
-            savedGuiScale = minecraft.options.guiScale().get();
+            // 1.18.2 的 Options.guiScale 是普通 int 字段（1.19+ 才收进 OptionInstance）
+            savedGuiScale = minecraft.options.guiScale;
         }
-        minecraft.options.guiScale().set(scale - 1);
+        minecraft.options.guiScale = scale - 1;
         minecraft.resizeDisplay();
         return true;
     }
@@ -406,7 +371,7 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
         }
         int value = savedGuiScale;
         savedGuiScale = -1;
-        minecraft.options.guiScale().set(value);
+        minecraft.options.guiScale = value;
         skipAutoScale = true;
         try {
             minecraft.resizeDisplay();
@@ -448,8 +413,18 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
     // 渲染
     // ------------------------------------------------------------------
 
+    /**
+     * 1.18.2 的 {@code renderBackground} 只有 PoseStack 一个参数（带鼠标坐标的 4 参重载是 1.19+ 的），
+     * 而本界面的大量绘制要按鼠标位置判断悬停，因此背景与内容全部挪进
+     * {@link #render}，这里只留空实现挡住原版的泥土背景。
+     */
     @Override
-    public void renderBackground(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+    public void renderBackground(PoseStack pose) {
+        // 见上：实际绘制在 render 里按「背景 → 内容 → 控件 → 浮层」的顺序完成
+    }
+
+    /** 背景 + 面板 + 全部内容（原 renderBackground 的主体；需要鼠标坐标判断悬停）。 */
+    private void drawBackdrop(Draw graphics, int mouseX, int mouseY) {
         graphics.fill(0, 0, width, height, 0xE0101010);
         AeStyle.panel(graphics, panelX, panelY, panelW, panelH);
         // header 的底边就是工作区行的分界线：高度取 22 让线落在名称框/按钮下方、
@@ -487,9 +462,6 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
 
         graphics.drawString(font, font.plainSubstrByWidth(status, panelW - 8), panelX + 4,
                 statusY, AeStyle.ACCENT, false);
-
-        // 内容画完后再统一提交排队的物品图标（按光照分组，各只 flush 一次）
-        drawPendingItems(graphics);
     }
 
     /**
@@ -564,14 +536,14 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
         return n + 5;
     }
 
-    /** 一次性把预计算的槽位底图写进 GUI 批量缓冲（顶点顺序与 GuiGraphics.fill 一致）。 */
-    private void drawSlotChrome(GuiGraphics graphics) {
+    /** 一次性把预计算的槽位底图写进 GUI 批量缓冲（顶点顺序与 fill 一致）。 */
+    private void drawSlotChrome(Draw graphics) {
         int libTotal = libraryView.size();
         if (slotChrome.length == 0 || slotChromeLibScroll != libraryScroll
                 || slotChromeLibTotal != libTotal || slotChromeEncRow != encodingScrollRow) {
             buildSlotChrome();
         }
-        VertexConsumer consumer = graphics.bufferSource().getBuffer(RenderType.gui());
+        Draw.Batch batch = graphics.batch();
         Matrix4f matrix = graphics.pose().last().pose();
         for (int i = 0; i < slotChrome.length; i += 5) {
             int x1 = slotChrome[i];
@@ -579,90 +551,27 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
             int x2 = slotChrome[i + 2];
             int y2 = slotChrome[i + 3];
             int color = slotChrome[i + 4];
-            consumer.addVertex(matrix, x1, y1, 0.0f).setColor(color);
-            consumer.addVertex(matrix, x1, y2, 0.0f).setColor(color);
-            consumer.addVertex(matrix, x2, y2, 0.0f).setColor(color);
-            consumer.addVertex(matrix, x2, y1, 0.0f).setColor(color);
+            batch.addVertex(matrix, x1, y1, 0.0f).setColor(color);
+            batch.addVertex(matrix, x1, y2, 0.0f).setColor(color);
+            batch.addVertex(matrix, x2, y2, 0.0f).setColor(color);
+            batch.addVertex(matrix, x2, y1, 0.0f).setColor(color);
         }
+        batch.end();
     }
 
-    /**
-     * 槽内图标：物品排队延后绘制，非物品（JEI 化学品/流体、占位字母）仍即时绘制。
-     *
-     * <p>数量文字仍旧立刻画（它抬到 z=200，深度上永远压在图标上方），
-     * 所以延后绘制图标不会让数字被盖住。
-     */
-    private void renderSlotIcon(GuiGraphics graphics, Font font, String key, int x, int y,
+    /** 槽内图标：物品走原版 {@code renderGuiItem}，非物品（占位字母）由映射层绘制。 */
+    private void renderSlotIcon(Draw graphics, Font font, String key, int x, int y,
                                 String amount) {
         ItemStack stack = ItemKeyMapper.stack(key);
         if (stack.isEmpty()) {
             ItemKeyMapper.renderIcon(graphics, font, key, x, y, amount);
             return;
         }
-        queueItem(stack, x + 1, y + 1, 0, 1.0f);
+        graphics.renderItem(stack, x + 1, y + 1);
         ItemKeyMapper.renderAmountOverlay(graphics, font, amount, x, y);
     }
 
-    /** 把物品图标排进延后队列（位置/缩放/额外 z 都与原版逐件绘制的变换一致）。 */
-    private void queueItem(ItemStack stack, float x, float y, float z, float scale) {
-        Minecraft minecraft = Minecraft.getInstance();
-        BakedModel model = minecraft.getItemRenderer()
-                .getModel(stack, minecraft.level, minecraft.player, 0);
-        pendingItems.add(new PendingItem(stack, model, !model.usesBlockLight(),
-                x, y, z, scale));
-    }
-
-    /** 本轮内容画完后统一提交：平面光照组先画并 flush，立体光照组再画一次。 */
-    private void drawPendingItems(GuiGraphics graphics) {
-        if (pendingItems.isEmpty()) {
-            return;
-        }
-        ItemRenderer renderer = Minecraft.getInstance().getItemRenderer();
-        boolean hasFlat = false;
-        boolean hasSolid = false;
-        for (PendingItem item : pendingItems) {
-            if (item.flat()) {
-                hasFlat = true;
-            } else {
-                hasSolid = true;
-            }
-        }
-        if (hasFlat) {
-            Lighting.setupForFlatItems();
-            for (PendingItem item : pendingItems) {
-                if (item.flat()) {
-                    drawPending(graphics, renderer, item);
-                }
-            }
-            graphics.flush();
-            Lighting.setupFor3DItems();
-        }
-        if (hasSolid) {
-            for (PendingItem item : pendingItems) {
-                if (!item.flat()) {
-                    drawPending(graphics, renderer, item);
-                }
-            }
-            graphics.flush();
-        }
-        pendingItems.clear();
-    }
-
-    private void drawPending(GuiGraphics graphics, ItemRenderer renderer, PendingItem item) {
-        PoseStack pose = graphics.pose();
-        pose.pushPose();
-        pose.translate(item.x(), item.y(), item.z());
-        if (item.scale() != 1.0f) {
-            pose.scale(item.scale(), item.scale(), 1.0f);
-        }
-        pose.translate(8.0f, 8.0f, 150.0f);
-        pose.scale(16.0f, -16.0f, 16.0f);
-        renderer.render(item.stack(), ItemDisplayContext.GUI, false, pose,
-                graphics.bufferSource(), 15728880, OverlayTexture.NO_OVERLAY, item.model());
-        pose.popPose();
-    }
-
-    private void drawTargets(GuiGraphics graphics, int mouseX, int mouseY) {
+    private void drawTargets(Draw graphics, int mouseX, int mouseY) {
         List<Map.Entry<String, Double>> entries = new ArrayList<>(draft.targets().entrySet());
         targetScrollRow = Math.max(0, Math.min(targetScrollRow, maxTargetScroll()));
         for (int row = 0; row < targetRows; row++) {
@@ -680,7 +589,7 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
         }
     }
 
-    private void drawLibrary(GuiGraphics graphics, int mouseX, int mouseY) {
+    private void drawLibrary(Draw graphics, int mouseX, int mouseY) {
         int total = libraryView.size();
         libraryScroll = Math.max(0, Math.min(libraryScroll,
                 Math.max(0, recipeRows() - libRows)));
@@ -725,19 +634,17 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
                 }
                 if (!recipe.equType().isBlank()) {
                     ItemStack equipment = ItemKeyMapper.stack(recipe.equType());
+                    // 设备标记统一按 translate(x+10,y+10) + scale(0.5) 的变换画在右下角
+                    PoseStack pose = graphics.pose();
+                    pose.pushPose();
+                    pose.translate(x + 10, y + 10, 0);
+                    pose.scale(0.5f, 0.5f, 1.0f);
                     if (equipment.isEmpty()) {
-                        // 非物品设备（理论少见）仍按原变换即时绘制
-                        PoseStack pose = graphics.pose();
-                        pose.pushPose();
-                        pose.translate(x + 10, y + 10, 0);
-                        pose.scale(0.5f, 0.5f, 1.0f);
                         ItemKeyMapper.renderIcon(graphics, font, recipe.equType(), 0, 0, null);
-                        pose.popPose();
                     } else {
-                        // 原版这里是 translate(x+10,y+10) + scale(0.5) 后再 renderItem(1,1)，
-                        // 折合到延后队列的坐标就是 x+10.5 / y+10.5
-                        queueItem(equipment, x + 10.5f, y + 10.5f, 0, 0.5f);
+                        graphics.renderItem(equipment, 1, 1);
                     }
+                    pose.popPose();
                 }
             }
         }
@@ -747,7 +654,7 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
     }
 
     /** 配方库格子四边 1px 边框（蓝=当前编辑，红=待删除）。 */
-    private static void drawLibraryBorder(GuiGraphics graphics, int x, int y, int color) {
+    private static void drawLibraryBorder(Draw graphics, int x, int y, int color) {
         graphics.fill(x - 1, y - 1, x + SLOT + 1, y, color);
         graphics.fill(x - 1, y + SLOT, x + SLOT + 1, y + SLOT + 1, color);
         graphics.fill(x - 1, y - 1, x, y + SLOT + 1, color);
@@ -755,7 +662,7 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
     }
 
     /** 配方库筛选行右侧的三格开关：原料 / 产物 / 设备；启用格用蓝色底一眼可辨。 */
-    private void drawLibraryFilter(GuiGraphics graphics, int mouseX, int mouseY) {
+    private void drawLibraryFilter(Draw graphics, int mouseX, int mouseY) {
         for (int i = 0; i < LIB_FILTER_LABELS.length; i++) {
             int x = libFilterBarX + i * (LIB_FILTER_CELL + 1);
             int y = libraryFilterY;
@@ -836,7 +743,7 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
      * 编码区中间的缩放按钮：左列 ÷2/÷3/÷5，右列 ×2/×3/×5，底部一整行自定义系数。
      * 效果是同时缩放原料与产物两侧的量（比例不变）。
      */
-    private void drawMultiButtons(GuiGraphics graphics, int mouseX, int mouseY) {
+    private void drawMultiButtons(Draw graphics, int mouseX, int mouseY) {
         int blockW = 2 * MULTI_W + MULTI_GAP;
         // 顶部小箭头，代替原来的「→」
         graphics.drawString(font, "→", multiX + blockW / 2 - 4, encodingY + 4,
@@ -855,7 +762,7 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
                 inside(mouseX, mouseY, multiX, customY, blockW, MULTI_H));
     }
 
-    private void drawMiniButton(GuiGraphics graphics, int x, int y, int w, int h,
+    private void drawMiniButton(Draw graphics, int x, int y, int w, int h,
                                 String label, boolean hover) {
         graphics.fill(x, y, x + w, y + h, AeStyle.SLOT_BORDER);
         graphics.fill(x + 1, y + 1, x + w - 1, y + h - 1,
@@ -906,7 +813,7 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
         status = Lang.t("已按系数 %s 缩放样板", TimeExpression.formatEditableNumber(factor));
     }
 
-    private void drawEncoding(GuiGraphics graphics, int mouseX, int mouseY) {
+    private void drawEncoding(Draw graphics, int mouseX, int mouseY) {
         graphics.drawString(font, Lang.t("原料 %s", pattern.inputCount()),
                 inputX, encodingLabelY, AeStyle.ACCENT, false);
         graphics.drawString(font, Lang.t("产物 %s", pattern.outputCount()),
@@ -981,7 +888,7 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
         pose.popPose();
     }
 
-    private void drawInventory(GuiGraphics graphics, int mouseX, int mouseY) {
+    private void drawInventory(Draw graphics, int mouseX, int mouseY) {
         Inventory inventory = minecraft == null || minecraft.player == null
                 ? null : minecraft.player.getInventory();
         for (int row = 0; row < INV_ROWS; row++) {
@@ -994,8 +901,7 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
                 int index = row < 3 ? 9 + row * 9 + col : col;
                 ItemStack stack = inventory.getItem(index);
                 if (!stack.isEmpty()) {
-                    // 图标延后批量绘制；数量/耐久在 z=200，先画也不会被图标盖住
-                    queueItem(stack, x + 1, y + 1, 0, 1.0f);
+                    graphics.renderItem(stack, x + 1, y + 1);
                     graphics.renderItemDecorations(font, stack, x + 1, y + 1);
                 }
             }
@@ -1013,9 +919,14 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
     }
 
     @Override
-    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+    public void render(PoseStack pose, int mouseX, int mouseY, float partialTick) {
+        Draw graphics = new Draw(pose, this);
+        // 顺序：背景+内容 → 控件（名称框/按钮）→ 手持物品 → tooltip。
+        // 1.18.2 的 super.render() 会在画控件前调 renderBackground（本类为空实现），
+        // 因此背景与内容必须自己先画，否则会被控件底下那层盖掉。
+        drawBackdrop(graphics, mouseX, mouseY);
         updateOptionStates();
-        super.render(graphics, mouseX, mouseY, partialTick);
+        super.render(pose, mouseX, mouseY, partialTick);
 
         if (!carriedKey.isEmpty()) {
             ItemKeyMapper.renderIcon(graphics, font, carriedKey, mouseX - 8, mouseY - 8, null);
@@ -1030,7 +941,7 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
         bootstrapButton.setOn(draft.options().autoBootstrap());
     }
 
-    private void drawTooltips(GuiGraphics graphics, int mouseX, int mouseY) {
+    private void drawTooltips(Draw graphics, int mouseX, int mouseY) {
         if (drawIconButtonTooltip(graphics, mouseX, mouseY)) {
             return;
         }
@@ -1110,7 +1021,7 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
     /** 求解按钮提示：标题 +（必要时）黄色无解警告 + 当前参数一览。 */
     private Component solveTooltip() {
         SolveOptions options = draft.options();
-        MutableComponent tip = Component.empty().append(Lang.c("求解并查看结果"));
+        MutableComponent tip = Chat.empty().append(Lang.c("求解并查看结果"));
         if (!options.autoDetectRaw() && options.rawMaterials().isEmpty()) {
             tip.append("\n").append(Lang.c("未启动自动探测原料且无无限物质输入，显然无解")
                     .withStyle(ChatFormatting.YELLOW));
@@ -1141,7 +1052,7 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
     }
 
     private static void appendTipLine(MutableComponent tip, String text) {
-        appendTip(tip, Component.literal(text).withStyle(ChatFormatting.GRAY));
+        appendTip(tip, Chat.literal(text).withStyle(ChatFormatting.GRAY));
     }
 
     private static void appendTip(MutableComponent tip, Component line) {
@@ -1150,7 +1061,7 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
 
     /** 图标按钮提示：第一行标题，第二行灰色说明（自动换行）。 */
     private static Component twoLineTooltip(String titleKey, String descKey) {
-        return Component.empty()
+        return Chat.empty()
                 .append(Lang.c(titleKey))
                 .append("\n")
                 .append(Lang.c(descKey).withStyle(ChatFormatting.GRAY));
@@ -1162,23 +1073,23 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
      * @param grayLabel true 时标签也用灰色（用于求解按钮的参数总览）
      */
     private static Component onOffLine(String labelKey, boolean value, boolean grayLabel) {
-        MutableComponent line = Component.empty();
+        MutableComponent line = Chat.empty();
         if (grayLabel) {
-            line.append(Component.literal(Lang.t(labelKey)).withStyle(ChatFormatting.GRAY))
-                    .append(Component.literal(": ").withStyle(ChatFormatting.GRAY));
+            line.append(Chat.literal(Lang.t(labelKey)).withStyle(ChatFormatting.GRAY))
+                    .append(Chat.literal(": ").withStyle(ChatFormatting.GRAY));
         } else {
-            line.append(Lang.c(labelKey)).append(Component.literal(": "));
+            line.append(Lang.c(labelKey)).append(Chat.literal(": "));
         }
         return line.append(Lang.c(value ? "开" : "关")
                 .withStyle(value ? ChatFormatting.GREEN : ChatFormatting.RED));
     }
 
     /** 图标按钮的说明：悬停时在鼠标处显示。 */
-    private boolean drawIconButtonTooltip(GuiGraphics graphics, int mouseX, int mouseY) {
+    private boolean drawIconButtonTooltip(Draw graphics, int mouseX, int mouseY) {
         IconButton[] buttons = {objectiveButton, rawButton, seedButton, bootstrapButton,
                 solveButton, rawListButton, externalInputButton};
         for (IconButton button : buttons) {
-            if (button != null && button.isHovered()) {
+            if (button != null && button.isMouseOver(mouseX, mouseY)) {
                 graphics.renderComponentTooltip(font, List.of(button.tooltipText()),
                         mouseX, mouseY);
                 return true;
@@ -1464,65 +1375,11 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
             return;
         }
         if (button == 1) {
-            // 右键：该物质在 JEI 里只有一种配方就自动撰写并写入配方集，
-            // 有多种（如红石粉：合成 + 各种机器处理）只打开 JEI 配方页
-            if (key != null) {
-                autoWriteFromJei(key);
-            }
+            // 右键「自动撰写」依赖 JEI 配方查询；1.18.2 线暂不移植 JEI 适配，此处留空
             return;
         }
         if (button == 2) {
             openPatternAmount(input, index, key == null ? "" : key, amount);
-        }
-    }
-
-    /** 右键物质：单一配方自动新建并写入，多配方只打开 JEI 配方页。 */
-    private void autoWriteFromJei(String key) {
-        // 未装 JEI 时直接提示并中止，不触发任何导入逻辑
-        if (!JeiRuntimeHolder.installed()) {
-            status = Lang.t("JEI 未安装");
-            return;
-        }
-        AutoRecipeHooks.Hook hook = AutoRecipeHooks.get();
-        if (hook == null) {
-            status = Lang.t("JEI 不可用");
-            return;
-        }
-        int count;
-        RecipePattern built = null;
-        try {
-            count = hook.producerCount(key);
-            if (count == 1) {
-                built = hook.singlePattern(key);
-            }
-        } catch (RuntimeException | LinkageError e) {
-            status = Lang.t("JEI 不可用");
-            return;
-        }
-        if (count <= 0) {
-            hook.showRecipes(key);
-            status = Lang.t("没找到该物质的配方");
-            return;
-        }
-        if (built == null) {
-            hook.showRecipes(key);
-            status = Lang.t("该物质有 %s 种配方，已在 JEI 中打开", count);
-            return;
-        }
-        newPattern();
-        pattern.copyFrom(built);
-        if (commitPattern(true)) {
-            status = Lang.t("已自动写入 %s 的配方", ItemKeyMapper.displayName(key));
-            // 写入成功给一次按钮点击音，和点「写入」的反馈一致
-            playClickSound();
-        }
-    }
-
-    /** 原版按钮点击音（与「写入」按钮按下时一致）。 */
-    private void playClickSound() {
-        if (minecraft != null) {
-            minecraft.getSoundManager().play(
-                    SimpleSoundInstance.forUI(SoundEvents.UI_BUTTON_CLICK, 1.0F));
         }
     }
 
@@ -1582,27 +1439,28 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
         }));
     }
 
+    /** 1.18.2：只有纵向滚动，签名比 1.20+ 少一个 scrollX。 */
     @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+    public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
         if (mouseX >= panelX && mouseY >= targetY
                 && mouseY < targetY + targetRows * SLOT) {
             targetScrollRow = Math.max(0, Math.min(
-                    targetScrollRow + (scrollY < 0 ? 1 : -1), maxTargetScroll()));
+                    targetScrollRow + (delta < 0 ? 1 : -1), maxTargetScroll()));
             return true;
         }
         if (mouseX >= panelX && mouseY >= libraryY - 2
                 && mouseY < libraryY + libRows * SLOT) {
-            libraryScroll = Math.max(0, Math.min(libraryScroll + (scrollY < 0 ? 1 : -1),
+            libraryScroll = Math.max(0, Math.min(libraryScroll + (delta < 0 ? 1 : -1),
                     Math.max(0, recipeRows() - libRows)));
             return true;
         }
         if (mouseX >= inputX && mouseX < panelX + panelW - 4
                 && mouseY >= encodingY && mouseY < encodingY + visibleRows * SLOT) {
             encodingScrollRow = Math.max(0, Math.min(
-                    encodingScrollRow + (scrollY < 0 ? 1 : -1), maxEncodingScroll()));
+                    encodingScrollRow + (delta < 0 ? 1 : -1), maxEncodingScroll()));
             return true;
         }
-        return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+        return super.mouseScrolled(mouseX, mouseY, delta);
     }
 
     // ------------------------------------------------------------------
@@ -1828,151 +1686,5 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
 
     private static boolean inside(double x, double y, int rx, int ry, int rw, int rh) {
         return x >= rx && x < rx + rw && y >= ry && y < ry + rh;
-    }
-
-    // ------------------------------------------------------------------
-    // JEI ghost 拖拽 / 配方加号
-    // ------------------------------------------------------------------
-
-    public enum GhostKind {
-        INPUT, OUTPUT, EQUIPMENT, TARGET
-    }
-
-    public record GhostSlot(GhostKind kind, int index, int x, int y) {
-    }
-
-    /** 当前可见、可接收 ghost 的槽位（屏幕绝对坐标）。 */
-    public java.util.List<GhostSlot> ghostSlots() {
-        java.util.List<GhostSlot> result = new java.util.ArrayList<>();
-        for (int row = 0; row < visibleRows; row++) {
-            int y = encodingY + row * SLOT;
-            for (int col = 0; col < GRID_COLS; col++) {
-                int index = (encodingScrollRow + row) * GRID_COLS + col;
-                if (index < RecipePattern.MAX_INPUTS) {
-                    result.add(new GhostSlot(GhostKind.INPUT, index, inputX + col * SLOT, y));
-                }
-            }
-            for (int col = 0; col < OUTPUT_COLS; col++) {
-                int index = (encodingScrollRow + row) * OUTPUT_COLS + col;
-                if (index < RecipePattern.MAX_OUTPUTS) {
-                    result.add(new GhostSlot(GhostKind.OUTPUT, index, outputX + col * SLOT, y));
-                }
-            }
-        }
-        result.add(new GhostSlot(GhostKind.EQUIPMENT, 0, equipmentX, encodingY));
-        for (int row = 0; row < targetRows; row++) {
-            for (int col = 0; col < TARGET_COLS; col++) {
-                int index = (targetScrollRow + row) * TARGET_COLS + col;
-                result.add(new GhostSlot(GhostKind.TARGET, index,
-                        contentX + col * SLOT, targetY + row * SLOT));
-            }
-        }
-        return result;
-    }
-
-    public record HoveredKey(String key, int x, int y, int width, int height) {
-    }
-
-    /** JEI R/U：鼠标下的 ingredient key 与屏幕矩形（物品/流体/化学品通用）。 */
-    public HoveredKey jeiHoveredKey(double mouseX, double mouseY) {
-        int[] slot = encodingSlotAt(mouseX, mouseY);
-        if (slot != null) {
-            String key = slot[0] == 0 ? pattern.inputKey(slot[1]) : pattern.outputKey(slot[1]);
-            if (key != null) {
-                int cols = slot[0] == 0 ? GRID_COLS : OUTPUT_COLS;
-                int row = slot[1] / cols - encodingScrollRow;
-                int col = slot[1] % cols;
-                return hovered(key, (slot[0] == 0 ? inputX : outputX) + col * SLOT,
-                        encodingY + row * SLOT);
-            }
-        }
-        if (inside(mouseX, mouseY, equipmentX, encodingY, SLOT, SLOT)
-                && !pattern.equipmentKey().isBlank()) {
-            return hovered(pattern.equipmentKey(), equipmentX, encodingY);
-        }
-        int target = targetSlotAt(mouseX, mouseY);
-        if (target >= 0) {
-            List<Map.Entry<String, Double>> entries = new ArrayList<>(draft.targets().entrySet());
-            if (target < entries.size()) {
-                int row = target / TARGET_COLS - targetScrollRow;
-                int col = target % TARGET_COLS;
-                return hovered(entries.get(target).getKey(),
-                        contentX + col * SLOT, targetY + row * SLOT);
-            }
-        }
-        int library = libraryIndexAt(mouseX, mouseY);
-        if (library >= 0) {
-            String product = draft.recipes().get(library).productList().keySet()
-                    .stream().findFirst().orElse("");
-            if (!product.isEmpty()) {
-                int row = library / LIB_COLS - libraryScroll;
-                int col = library % LIB_COLS;
-                return hovered(product, contentX + col * SLOT, libraryY + row * SLOT);
-            }
-        }
-        int inventory = inventoryIndexAt(mouseX, mouseY);
-        if (inventory >= 0 && minecraft != null && minecraft.player != null) {
-            net.minecraft.world.item.ItemStack stack = minecraft.player.getInventory()
-                    .getItem(inventory);
-            if (!stack.isEmpty()) {
-                int row = inventory < 9 ? 3 : (inventory - 9) / 9;
-                int col = inventory < 9 ? inventory : (inventory - 9) % 9;
-                return new HoveredKey(ItemKeyMapper.of(stack), inventoryX + col * SLOT,
-                        inventoryY + row * SLOT, SLOT, SLOT);
-            }
-        }
-        return null;
-    }
-
-    private static HoveredKey hovered(String key, int x, int y) {
-        return key == null || key.isBlank() ? null : new HoveredKey(key, x, y, SLOT, SLOT);
-    }
-
-    public void applyGhost(GhostKind kind, int index, String key) {
-        applyGhost(kind, index, key, 1.0);
-    }
-
-    public void applyGhost(GhostKind kind, int index, String key, double amount) {
-        if (key == null || key.isBlank()) {
-            return;
-        }
-        double value = amount > 0 ? amount : 1.0;
-        switch (kind) {
-            case INPUT -> pattern.putInput(index, key, value);
-            case OUTPUT -> pattern.putOutput(index, key, value);
-            case EQUIPMENT -> pattern.setEquipmentKey(key);
-            case TARGET -> {
-                if (draft.targets().size() >= MAX_TARGETS && !draft.targets().containsKey(key)) {
-                    status = Lang.t("目标最多 %s 个", MAX_TARGETS);
-                    return;
-                }
-                draft.putTarget(key, value);
-                onDraftChanged();
-            }
-        }
-        status = "JEI ghost: " + ItemKeyMapper.displayName(key)
-                + " × " + TimeExpression.formatNumber(value);
-    }
-
-    // JEI 非 ContainerScreen 渲染（RecipeBalancerJeiPlugin 使用）
-    // 左右两列图标按钮贴在面板外侧，算进 GUI 范围，避免被 JEI 物品/书签面板盖住
-    @Override
-    public int jeiGuiLeft() {
-        return panelX - SIDE_PAD;
-    }
-
-    @Override
-    public int jeiGuiTop() {
-        return panelY;
-    }
-
-    @Override
-    public int jeiGuiWidth() {
-        return panelW + 2 * SIDE_PAD;
-    }
-
-    @Override
-    public int jeiGuiHeight() {
-        return panelH;
     }
 }

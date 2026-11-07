@@ -1,22 +1,20 @@
 package com.jessetech.recipebalancer.mc.itemmap;
 
-import com.google.gson.JsonElement;
 import com.jessetech.recipebalancer.mc.i18n.Lang;
-import com.google.gson.JsonParser;
+import com.jessetech.recipebalancer.mc.ui.Chat;
+import com.jessetech.recipebalancer.mc.ui.Draw;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.serialization.JsonOps;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.core.RegistryAccess;
-import net.minecraft.core.component.DataComponents;
-import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.TagParser;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.RegistryOps;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.alchemy.PotionContents;
+import net.minecraft.world.item.PotionItem;
+import net.minecraft.world.item.TooltipFlag;
+import net.minecraftforge.registries.ForgeRegistries;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -31,6 +29,10 @@ import java.util.regex.Pattern;
 /**
  * 物品身份与图标：core 里物品是字符串（registry id 或自定义名），
  * 这里负责与 {@link ItemStack} 互转，以及“未注册物品”的占位渲染。
+ *
+ * <p>1.18.2 没有 1.20.5+ 的数据组件（DataComponents）：带附加数据的物品
+ * 用整份 NBT 走 {@code stack|base64(snbt)} 保存，语义与 1.21.1 线的
+ * “带 patch 才存完整 stack”一致 —— 没有 NBT 的普通物品仍然只存 registry id。
  */
 public final class ItemKeyMapper {
 
@@ -40,14 +42,14 @@ public final class ItemKeyMapper {
     private static final Pattern INGREDIENT_KEY_PATTERN =
             Pattern.compile("ingredient\\|[A-Za-z0-9_-]+(?:\\|[A-Za-z0-9_-]+){2}");
 
-    /** ingredient key 里固化的是编码当时的名称，换语言后需重新问 JEI。 */
+    /** ingredient key 里固化的是编码当时的名称，换语言后需重新解析。 */
     private static final Map<String, String> INGREDIENT_NAME_CACHE = new ConcurrentHashMap<>();
 
-    /** JEI 渲染钩子；由 RecipeBalancerJeiPlugin 在 JEI 可用时安装，避免无 JEI 环境加载 JEI 类。 */
+    /** 非物品 ingredient 的渲染钩子；JEI 适配层（后续移植）在运行期安装，避免无 JEI 环境加载 JEI 类。 */
     public interface IngredientRenderHook {
-        boolean render(GuiGraphics graphics, Font font, String key, int x, int y, String amount);
+        boolean render(Draw graphics, Font font, String key, int x, int y, String amount);
 
-        boolean renderTooltip(GuiGraphics graphics, Font font, String key, int mouseX, int mouseY);
+        boolean renderTooltip(Draw graphics, Font font, String key, int mouseX, int mouseY);
     }
 
     /** 按当前语言取 ingredient 显示名的钩子；返回 null 表示解析不了，回退到固化名。 */
@@ -79,29 +81,29 @@ public final class ItemKeyMapper {
     }
 
     /**
-     * 普通物品只存 registry id；带组件（药水、附魔、自定义名等）时
-     * 用 `stack|<base64(ItemStack JSON)>` 保存完整 ItemStack。
+     * 普通物品只存 registry id；带 NBT（药水、附魔、自定义名等）时
+     * 用 {@code stack|<base64(snbt)>} 保存完整 ItemStack。
      */
     public static String of(ItemStack stack) {
         if (stack == null || stack.isEmpty()) {
             return "";
         }
-        ResourceLocation id = BuiltInRegistries.ITEM.getKey(stack.getItem());
+        ResourceLocation id = ForgeRegistries.ITEMS.getKey(stack.getItem());
         if (id == null) {
             return "";
         }
-        ItemStack single = stack.copyWithCount(1);
-        if (single.isComponentsPatchEmpty()) {
+        ItemStack single = stack.copy();
+        single.setCount(1);
+        if (!single.hasTag()) {
             return id.toString();
         }
         try {
-            RegistryOps<JsonElement> ops = RegistryOps.create(JsonOps.INSTANCE, registryAccess());
-            JsonElement json = ItemStack.CODEC.encodeStart(ops, single).getOrThrow();
+            CompoundTag tag = single.save(new CompoundTag());
             String encoded = Base64.getUrlEncoder().withoutPadding()
-                    .encodeToString(json.toString().getBytes(StandardCharsets.UTF_8));
+                    .encodeToString(tag.toString().getBytes(StandardCharsets.UTF_8));
             return STACK_PREFIX + encoded;
         } catch (RuntimeException e) {
-            // 极端环境（无 registry access）退化到 registry id，至少不崩
+            // 极端环境退化到 registry id，至少不崩
             return id.toString();
         }
     }
@@ -114,33 +116,34 @@ public final class ItemKeyMapper {
         if (id.startsWith(STACK_PREFIX)) {
             return STACK_CACHE.computeIfAbsent(id, ItemKeyMapper::decodeStack);
         }
-        return BuiltInRegistries.ITEM.getOptional(ResourceLocation.tryParse(id))
-                .map(ItemStack::new).orElse(ItemStack.EMPTY);
+        ResourceLocation location = ResourceLocation.tryParse(id);
+        if (location == null) {
+            return ItemStack.EMPTY;
+        }
+        net.minecraft.world.item.Item item = ForgeRegistries.ITEMS.getValue(location);
+        return item == null ? ItemStack.EMPTY : new ItemStack(item);
     }
 
     private static ItemStack decodeStack(String key) {
         try {
-            String jsonText = new String(Base64.getUrlDecoder()
+            String snbt = new String(Base64.getUrlDecoder()
                     .decode(key.substring(STACK_PREFIX.length())), StandardCharsets.UTF_8);
-            JsonElement json = JsonParser.parseString(jsonText);
-            RegistryOps<JsonElement> ops = RegistryOps.create(JsonOps.INSTANCE, registryAccess());
-            return ItemStack.CODEC.parse(ops, json).result()
-                    .map(stack -> stack.copyWithCount(1)).orElse(ItemStack.EMPTY);
-        } catch (RuntimeException e) {
+            CompoundTag tag = TagParser.parseTag(snbt);
+            ItemStack stack = ItemStack.of(tag);
+            if (stack.isEmpty()) {
+                return ItemStack.EMPTY;
+            }
+            stack.setCount(1);
+            return stack;
+        } catch (Exception e) {
             return ItemStack.EMPTY;
         }
-    }
-
-    private static RegistryAccess registryAccess() {
-        Minecraft minecraft = Minecraft.getInstance();
-        return minecraft != null && minecraft.level != null
-                ? minecraft.level.registryAccess() : RegistryAccess.EMPTY;
     }
 
     private static String baseItemId(String key) {
         ItemStack stack = stack(key);
         if (!stack.isEmpty()) {
-            ResourceLocation id = BuiltInRegistries.ITEM.getKey(stack.getItem());
+            ResourceLocation id = ForgeRegistries.ITEMS.getKey(stack.getItem());
             if (id != null) {
                 return id.toString();
             }
@@ -152,7 +155,7 @@ public final class ItemKeyMapper {
         return !stack(key).isEmpty();
     }
 
-    /** key 是否为已知物质（注册表物品或 JEI ingredient）；否则按自定义物质处理。 */
+    /** key 是否为已知物质（注册表物品或非物品 ingredient）；否则按自定义物质处理。 */
     public static boolean isKnown(String key) {
         if (key == null || key.isBlank()) {
             return false;
@@ -172,7 +175,7 @@ public final class ItemKeyMapper {
     }
 
     /**
-     * 非物品 ingredient 的显示名：优先按当前语言向 JEI 重新解析，
+     * 非物品 ingredient 的显示名：优先按当前语言向适配层重新解析，
      * 解析不到才回退到 key 里固化的名称（按语言缓存，切换语言自然失效）。
      */
     public static String ingredientDisplayName(String key) {
@@ -226,8 +229,8 @@ public final class ItemKeyMapper {
             return List.of(normalized);
         }
         List<String> byName = new ArrayList<>();
-        for (ResourceLocation id : BuiltInRegistries.ITEM.keySet()) {
-            String name = new ItemStack(BuiltInRegistries.ITEM.get(id)).getHoverName().getString();
+        for (ResourceLocation id : ForgeRegistries.ITEMS.getKeys()) {
+            String name = new ItemStack(ForgeRegistries.ITEMS.getValue(id)).getHoverName().getString();
             if (name.equalsIgnoreCase(value) || id.toString().equalsIgnoreCase(value)) {
                 byName.add(id.toString());
             }
@@ -248,19 +251,13 @@ public final class ItemKeyMapper {
             return registryName(key);
         }
         String name = stack.getHoverName().getString();
-        PotionContents contents = stack.get(DataComponents.POTION_CONTENTS);
-        if (contents == null || !contents.hasEffects()) {
+        if (!(stack.getItem() instanceof PotionItem)) {
             return name;
         }
         // 直接用物品自身的 tooltip：Lingering 会按 0.25 时长因子、Splash 按原版规则显示
         Minecraft minecraft = Minecraft.getInstance();
-        net.minecraft.world.item.Item.TooltipContext context =
-                minecraft != null && minecraft.level != null
-                        ? net.minecraft.world.item.Item.TooltipContext.of(minecraft.level)
-                        : net.minecraft.world.item.Item.TooltipContext.EMPTY;
-        List<Component> tooltip = stack.getTooltipLines(context,
-                minecraft == null ? null : minecraft.player,
-                net.minecraft.world.item.TooltipFlag.NORMAL);
+        List<Component> tooltip = stack.getTooltipLines(
+                minecraft == null ? null : minecraft.player, TooltipFlag.Default.NORMAL);
         List<String> effects = new ArrayList<>();
         for (int i = 1; i < tooltip.size(); i++) {
             String line = tooltip.get(i).getString();
@@ -294,7 +291,7 @@ public final class ItemKeyMapper {
         return output.toString();
     }
 
-    /** 注册名（tooltip/用量界面展示）；组件物品只显示底层 registry id。 */
+    /** 注册名（tooltip/用量界面展示）；带 NBT 的物品只显示底层 registry id。 */
     public static String registryName(String key) {
         if (IngredientKey.isIngredientKey(key)) {
             return IngredientKey.describe(key);
@@ -378,7 +375,7 @@ public final class ItemKeyMapper {
      *
      * @param amount 右下角数量文本；null/空 = 不画
      */
-    public static void renderIcon(GuiGraphics graphics, Font font, String key, int x, int y, String amount) {
+    public static void renderIcon(Draw graphics, Font font, String key, int x, int y, String amount) {
         String id = normalize(key);
         if (id.isEmpty()) {
             return;
@@ -415,14 +412,14 @@ public final class ItemKeyMapper {
         renderAmount(graphics, font, amount, x, y);
     }
 
-    /** JEI 渲染钩子复用：在 18px 槽内画数量文本。 */
-    public static void renderAmountOverlay(GuiGraphics graphics, Font font, String amount,
+    /** 渲染钩子复用：在 18px 槽内画数量文本。 */
+    public static void renderAmountOverlay(Draw graphics, Font font, String amount,
                                            int x, int y) {
         renderAmount(graphics, font, amount, x, y);
     }
 
     /** 紧凑数量文本：过长时等比缩小，避免像 100000 一样溢出格子。 */
-    private static void renderAmount(GuiGraphics graphics, Font font, String amount, int x, int y) {
+    private static void renderAmount(Draw graphics, Font font, String amount, int x, int y) {
         if (amount == null || amount.isBlank()) {
             return;
         }
@@ -443,14 +440,14 @@ public final class ItemKeyMapper {
         pose.popPose();
     }
 
-    public static void renderTooltip(GuiGraphics graphics, Font font, String key, int mouseX, int mouseY) {
+    public static void renderTooltip(Draw graphics, Font font, String key, int mouseX, int mouseY) {
         String id = normalize(key);
         if (id.isEmpty()) {
             return;
         }
         ItemStack stack = stack(id);
         if (!stack.isEmpty()) {
-            // 原生完整 tooltip：药水效果/时长、附魔、组件信息都会显示
+            // 原生完整 tooltip：药水效果/时长、附魔、NBT 信息都会显示
             graphics.renderTooltip(font, stack, mouseX, mouseY);
             return;
         }
@@ -460,14 +457,14 @@ public final class ItemKeyMapper {
             if (hook != null && hook.renderTooltip(graphics, font, id, mouseX, mouseY)) {
                 return;
             }
-            lines.add(Component.literal(ingredientDisplayName(id)));
-            lines.add(Component.literal(IngredientKey.describe(id))
+            lines.add(Chat.literal(ingredientDisplayName(id)));
+            lines.add(Chat.literal(IngredientKey.describe(id))
                     .withStyle(ChatFormatting.GRAY));
             lines.add(Lang.c("非物品 ingredient；数量单位 B（500 mB = 0.5）")
                     .withStyle(ChatFormatting.DARK_GRAY));
         } else {
-            lines.add(Component.literal(shortLabel(id)).withStyle(ChatFormatting.GOLD));
-            lines.add(Component.literal(id).withStyle(ChatFormatting.GRAY));
+            lines.add(Chat.literal(shortLabel(id)).withStyle(ChatFormatting.GOLD));
+            lines.add(Chat.literal(id).withStyle(ChatFormatting.GRAY));
             lines.add(Lang.c("当前整合包未找到此物品（占位显示）")
                     .withStyle(ChatFormatting.DARK_GRAY));
         }

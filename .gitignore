@@ -7,8 +7,11 @@ build/
 draft/
 
 # 开发运行实例（存档、日志、配置，体积很大）
+# 各版本线独立目录，切分支互不串味
 run/
 run-data/
+1_18_2_forge/
+1_20_1_neo/
 
 # IDE
 .idea/

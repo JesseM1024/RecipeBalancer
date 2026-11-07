@@ -1,13 +1,13 @@
 package com.jessetech.recipebalancer.mc.ui;
 
-import net.minecraft.client.gui.GuiGraphics;
+import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.network.chat.Component;
 
 import java.util.function.Supplier;
 
 /**
- * 方形图标按钮：沿用原版按钮底（与「存取/保存」同款），上面只叠一层纯白像素图标。
+ * 方形图标按钮：沿用原版按钮底（与「打开/保存」同款），上面只叠一层纯白像素图标。
  *
  * <p>开关类按钮关闭时图标变淡；提示文字由界面在渲染末尾统一画，
  * 避免被同帧其它 widget 覆盖。
@@ -27,7 +27,8 @@ public final class IconButton extends Button {
      */
     public IconButton(int x, int y, int size, PixelIcon icon, boolean stateful,
                       Supplier<Component> tooltip, OnPress onPress) {
-        super(x, y, size, size, Component.empty(), onPress, DEFAULT_NARRATION);
+        // 1.18.2 的 Button 没有 builder()/DEFAULT_NARRATION，直接给 6 参构造器
+        super(x, y, size, size, Chat.empty(), onPress);
         this.icon = icon;
         this.stateful = stateful;
         this.tooltip = tooltip;
@@ -41,12 +42,14 @@ public final class IconButton extends Button {
         return tooltip.get();
     }
 
+    /** 1.18.2 的可绘制入口叫 renderButton（1.19.3 起改名 renderWidget）。 */
     @Override
-    protected void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+    public void renderButton(PoseStack pose, int mouseX, int mouseY, float partialTick) {
         // 原版按钮底（悬停变蓝的那套贴图），只把文字换成图标
-        super.renderWidget(graphics, mouseX, mouseY, partialTick);
+        super.renderButton(pose, mouseX, mouseY, partialTick);
         int color = stateful && !on ? ICON_OFF : ICON_ON;
-        icon.draw(graphics, getX() + (getWidth() - icon.width()) / 2,
-                getY() + (getHeight() - icon.height()) / 2, color);
+        // 1.18.2 的控件坐标是字段（x/y/width/height），没有 getX()/getY()/getWidth()
+        icon.draw(new Draw(pose), x + (width - icon.width()) / 2,
+                y + (height - icon.height()) / 2, color);
     }
 }

@@ -6,10 +6,11 @@ import com.jessetech.recipebalancer.core.model.ScenarioDraft;
 import com.jessetech.recipebalancer.mc.i18n.Lang;
 import com.jessetech.recipebalancer.mc.io.WorkspaceSession;
 import com.jessetech.recipebalancer.mc.itemmap.ScenarioKeyNormalizer;
-import com.jessetech.recipebalancer.mc.jei.JeiScreenSupport;
 import com.jessetech.recipebalancer.mc.ui.AeStyle;
+import com.jessetech.recipebalancer.mc.ui.Buttons;
+import com.jessetech.recipebalancer.mc.ui.Draw;
+import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.Util;
-import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
@@ -21,7 +22,7 @@ import java.util.List;
 import java.util.Locale;
 
 /** 已保存配方集（场景）列表：筛选 / 载入 / 另存 / 删除。 */
-public final class ScenarioListScreen extends Screen implements JeiPanelScreen {
+public final class ScenarioListScreen extends RbScreen {
 
     private static final int PANEL_W = 264;
     private static final int PANEL_H = 204;
@@ -70,7 +71,6 @@ public final class ScenarioListScreen extends Screen implements JeiPanelScreen {
         filterBox = new EditBox(font, filterX, panelY + 3,
                 Math.max(48, panelX + PANEL_W - 8 - filterX), 14, Lang.c("筛选"));
         filterBox.setMaxLength(40);
-        filterBox.setHint(Lang.c("筛选"));
         filterBox.setResponder(value -> applyFilter());
         filterBox.setValue(query);
         addRenderableWidget(filterBox);
@@ -81,20 +81,19 @@ public final class ScenarioListScreen extends Screen implements JeiPanelScreen {
         nameBox.setValue(currentName.isBlank() ? WorkspaceSession.DEFAULT_NAME : currentName);
         addRenderableWidget(nameBox);
 
-        addRenderableWidget(Button.builder(Lang.c("存储为"), b -> saveCurrent())
+        addRenderableWidget(Buttons.builder(Lang.c("存储为"), b -> saveCurrent())
                 .bounds(panelX + 164, panelY + PANEL_H - 53, 44, 20).build());
-        addRenderableWidget(Button.builder(Lang.c("删除"), b -> deleteSelected())
+        addRenderableWidget(Buttons.builder(Lang.c("删除"), b -> deleteSelected())
                 .bounds(panelX + 212, panelY + PANEL_H - 53, 44, 20).build());
-        addRenderableWidget(Button.builder(Lang.c("返回"), b -> minecraft.setScreen(parent))
+        addRenderableWidget(Buttons.builder(Lang.c("返回"), b -> minecraft.setScreen(parent))
                 .bounds(panelX + 8, panelY + PANEL_H - 27, 80, 20).build());
         // 底行中间：打开工作区文件夹（用于在文件管理器里直接复制/粘贴配方集 json）
-        addRenderableWidget(Button.builder(Lang.c("打开文件夹"), b -> openFolder())
+        addRenderableWidget(Buttons.builder(Lang.c("打开文件夹"), b -> openFolder())
                 .bounds(panelX + 92, panelY + PANEL_H - 27, 80, 20).build());
         // 右下角：读取选中项（与右键载入等价，方便不做右键操作）
-        addRenderableWidget(Button.builder(Lang.c("读取"), b -> loadSelected())
+        addRenderableWidget(Buttons.builder(Lang.c("读取"), b -> loadSelected())
                 .bounds(panelX + PANEL_W - 8 - 80, panelY + PANEL_H - 27, 80, 20).build());
         applyFilter();
-        JeiScreenSupport.notifyGuiInit(this);
     }
 
     /** 按筛选框内容重建可见列表；筛选变化时清掉选中与滚动。 */
@@ -152,7 +151,8 @@ public final class ScenarioListScreen extends Screen implements JeiPanelScreen {
         Path directory = store.directory();
         try {
             Files.createDirectories(directory);
-            Util.getPlatform().openPath(directory);
+            // 1.18.2 的 Util.OS 只有 openFile(File)，没有 openPath(Path)
+            Util.getPlatform().openFile(directory.toFile());
             status = Lang.t("已打开配方集文件夹");
         } catch (Exception e) {
             status = Lang.t("打开文件夹失败: %s", e.getMessage());
@@ -181,7 +181,8 @@ public final class ScenarioListScreen extends Screen implements JeiPanelScreen {
     }
 
     @Override
-    public void renderBackground(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+    public void renderBackground(PoseStack pose) {
+        Draw graphics = new Draw(pose, this);
         graphics.fill(0, 0, width, height, 0xB0101010);
         AeStyle.panel(graphics, panelX, panelY, PANEL_W, PANEL_H);
         AeStyle.header(graphics, panelX, panelY, PANEL_W, 20);
@@ -189,8 +190,9 @@ public final class ScenarioListScreen extends Screen implements JeiPanelScreen {
     }
 
     @Override
-    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        super.render(graphics, mouseX, mouseY, partialTick);
+    public void render(PoseStack pose, int mouseX, int mouseY, float partialTick) {
+        Draw graphics = new Draw(pose, this);
+        super.render(pose, mouseX, mouseY, partialTick);
 
         AeStyle.subPanel(graphics, panelX + 4, listY, PANEL_W - 8, listH);
         graphics.enableScissor(panelX + 4, listY, panelX + PANEL_W - 4, listY + listH);
@@ -247,13 +249,14 @@ public final class ScenarioListScreen extends Screen implements JeiPanelScreen {
         return super.mouseClicked(mouseX, mouseY, button);
     }
 
+    /** 1.18.2：只有纵向滚动，签名比 1.20+ 少一个 scrollX。 */
     @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+    public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
         if (mouseX >= panelX && mouseY >= listY && mouseY < listY + listH) {
-            scroll -= scrollY * ROW_H * 2;
+            scroll -= delta * ROW_H * 2;
             return true;
         }
-        return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+        return super.mouseScrolled(mouseX, mouseY, delta);
     }
 
     @Override
@@ -261,26 +264,6 @@ public final class ScenarioListScreen extends Screen implements JeiPanelScreen {
         if (minecraft != null) {
             minecraft.setScreen(parent);
         }
-    }
-
-    @Override
-    public int jeiGuiLeft() {
-        return panelX;
-    }
-
-    @Override
-    public int jeiGuiTop() {
-        return panelY;
-    }
-
-    @Override
-    public int jeiGuiWidth() {
-        return PANEL_W;
-    }
-
-    @Override
-    public int jeiGuiHeight() {
-        return PANEL_H;
     }
 
     @Override

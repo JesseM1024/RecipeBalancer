@@ -2,15 +2,14 @@ package com.jessetech.recipebalancer.mc.screen;
 
 import com.jessetech.recipebalancer.mc.i18n.Lang;
 import com.jessetech.recipebalancer.mc.itemmap.ItemKeyMapper;
-import com.jessetech.recipebalancer.mc.jei.JeiBookmarks;
-import com.jessetech.recipebalancer.mc.jei.JeiRuntimeHolder;
-import com.jessetech.recipebalancer.mc.jei.JeiScreenSupport;
 import com.jessetech.recipebalancer.mc.ui.AeStyle;
+import com.jessetech.recipebalancer.mc.ui.Buttons;
+import com.jessetech.recipebalancer.mc.ui.Chat;
+import com.jessetech.recipebalancer.mc.ui.Draw;
+import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.ChatFormatting;
-import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.renderer.Rect2i;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
@@ -29,10 +28,10 @@ import java.util.Set;
  * <ul>
  *   <li>上方是 9 列格子，点空格自定义物质，点已有格编辑，右键移除；</li>
  *   <li>下方是背包 4 行，点格子即把该物品加进清单；</li>
- *   <li>底部纵向堆叠「读取书签」「返回」，一键读 JEI 右侧书签。</li>
+ *   <li>底部纵向堆叠「清空列表」「返回」。</li>
  * </ul>
  */
-public final class KeySetScreen extends Screen implements JeiPanelScreen {
+public final class KeySetScreen extends RbScreen {
 
     public interface Callback {
         void accept(Set<String> keys);
@@ -82,15 +81,11 @@ public final class KeySetScreen extends Screen implements JeiPanelScreen {
         inventoryY = panelY + 122;
         scrollRow = Math.max(0, Math.min(scrollRow, maxScroll()));
 
-        // 半宽：左边清空（按两下确认），右边读 JEI 书签
-        int halfW = (PANEL_W - 16 - 4) / 2;
-        addRenderableWidget(Button.builder(Lang.c("清空列表"), b -> clearWithConfirm())
-                .bounds(panelX + 8, panelY + 200, halfW, 20).build());
-        addRenderableWidget(Button.builder(Lang.c("读取书签"), b -> addBookmarks())
-                .bounds(panelX + 8 + halfW + 4, panelY + 200, halfW, 20).build());
-        addRenderableWidget(Button.builder(Lang.c("返回"), b -> minecraft.setScreen(parent))
+        // 清空占满整行（按两下确认）
+        addRenderableWidget(Buttons.builder(Lang.c("清空列表"), b -> clearWithConfirm())
+                .bounds(panelX + 8, panelY + 200, PANEL_W - 16, 20).build());
+        addRenderableWidget(Buttons.builder(Lang.c("返回"), b -> minecraft.setScreen(parent))
                 .bounds(panelX + 8, panelY + 224, PANEL_W - 16, 20).build());
-        JeiScreenSupport.notifyGuiInit(this);
     }
 
     private int maxScroll() {
@@ -123,21 +118,6 @@ public final class KeySetScreen extends Screen implements JeiPanelScreen {
         status = custom
                 ? Lang.t("已作为自定义物质添加: %s", key)
                 : Lang.t("已添加: %s", ItemKeyMapper.displayName(key));
-    }
-
-    /**
-     * JEI 拖拽命中区域：整个物料网格（含空格）。
-     *
-     * <p>清单是有序的「种类集合」，没有空格占位的概念，所以拖到网格任意位置都等价于
-     * 追加到清单末尾。
-     */
-    public Rect2i jeiGridArea() {
-        return new Rect2i(panelX + 8, gridY, COLS * SLOT, ROWS * SLOT);
-    }
-
-    /** JEI 拖拽落点：把配料 key 追加进清单（重复/超限仍走 {@link #addKey} 的统一提示）。 */
-    public void dropIngredient(String key) {
-        addKey(key);
     }
 
     private void removeAt(int slot) {
@@ -244,42 +224,6 @@ public final class KeySetScreen extends Screen implements JeiPanelScreen {
         status = Lang.t("已清空列表");
     }
 
-    /** 一键读 JEI 右侧书签。 */
-    private void addBookmarks() {
-        // 先判 JEI 是否存在：未安装时只提示、不触发，也不能让 NoClassDefFoundError 冒出来
-        if (!JeiRuntimeHolder.installed()) {
-            status = Lang.t("JEI 未安装");
-            return;
-        }
-        if (!JeiRuntimeHolder.ready()) {
-            status = Lang.t("JEI 不可用");
-            return;
-        }
-        Set<String> found;
-        try {
-            found = JeiBookmarks.readKeys();
-        } catch (RuntimeException | LinkageError e) {
-            status = Lang.t("JEI 不可用");
-            return;
-        }
-        if (found.isEmpty()) {
-            status = Lang.t("JEI 书签为空");
-            return;
-        }
-        int before = entries.size();
-        for (String key : found) {
-            if (entries.size() >= MAX_ENTRIES) {
-                break;
-            }
-            if (!entries.contains(key)) {
-                entries.add(key);
-            }
-        }
-        notifyChanged();
-        status = Lang.t("已读取 %s 个书签，新增 %s 个", found.size(),
-                entries.size() - before);
-    }
-
     private int gridSlotAt(double mouseX, double mouseY) {
         if (mouseX < panelX + 8 || mouseX >= panelX + 8 + COLS * SLOT
                 || mouseY < gridY || mouseY >= gridY + ROWS * SLOT) {
@@ -319,7 +263,8 @@ public final class KeySetScreen extends Screen implements JeiPanelScreen {
     }
 
     @Override
-    public void renderBackground(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+    public void renderBackground(PoseStack pose) {
+        Draw graphics = new Draw(pose, this);
         graphics.fill(0, 0, width, height, 0xB0101010);
         AeStyle.panel(graphics, panelX, panelY, PANEL_W, PANEL_H);
         AeStyle.header(graphics, panelX, panelY, PANEL_W, 20);
@@ -332,8 +277,9 @@ public final class KeySetScreen extends Screen implements JeiPanelScreen {
     }
 
     @Override
-    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        super.render(graphics, mouseX, mouseY, partialTick);
+    public void render(PoseStack pose, int mouseX, int mouseY, float partialTick) {
+        Draw graphics = new Draw(pose, this);
+        super.render(pose, mouseX, mouseY, partialTick);
 
         scrollRow = Math.max(0, Math.min(scrollRow, maxScroll()));
         for (int row = 0; row < ROWS; row++) {
@@ -362,8 +308,8 @@ public final class KeySetScreen extends Screen implements JeiPanelScreen {
         if (slot >= 0 && slot < entries.size()) {
             String key = entries.get(slot);
             graphics.renderComponentTooltip(font, List.of(
-                    Component.literal(ItemKeyMapper.displayName(key)),
-                    Component.literal(ItemKeyMapper.registryName(key))
+                    Chat.literal(ItemKeyMapper.displayName(key)),
+                    Chat.literal(ItemKeyMapper.registryName(key))
                             .withStyle(ChatFormatting.GRAY)), mouseX, mouseY);
         } else if (slot >= 0) {
             graphics.renderComponentTooltip(font,
@@ -372,7 +318,7 @@ public final class KeySetScreen extends Screen implements JeiPanelScreen {
     }
 
     /** 背包 4 行（主背包 3 行 + 快捷栏），9 格宽度＝面板内容宽度。 */
-    private void drawInventory(GuiGraphics graphics) {
+    private void drawInventory(Draw graphics) {
         Inventory inventory = minecraft == null || minecraft.player == null
                 ? null : minecraft.player.getInventory();
         for (int row = 0; row < INV_ROWS; row++) {
@@ -410,15 +356,16 @@ public final class KeySetScreen extends Screen implements JeiPanelScreen {
         return super.mouseClicked(mouseX, mouseY, button);
     }
 
+    /** 1.18.2：只有纵向滚动，签名比 1.20+ 少一个 scrollX。 */
     @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+    public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
         if (mouseX >= panelX && mouseX < panelX + PANEL_W
                 && mouseY >= gridY && mouseY < gridY + ROWS * SLOT) {
             scrollRow = Math.max(0, Math.min(
-                    scrollRow + (scrollY < 0 ? 1 : -1), maxScroll()));
+                    scrollRow + (delta < 0 ? 1 : -1), maxScroll()));
             return true;
         }
-        return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+        return super.mouseScrolled(mouseX, mouseY, delta);
     }
 
     @Override
@@ -426,26 +373,6 @@ public final class KeySetScreen extends Screen implements JeiPanelScreen {
         if (minecraft != null) {
             minecraft.setScreen(parent);
         }
-    }
-
-    @Override
-    public int jeiGuiLeft() {
-        return panelX;
-    }
-
-    @Override
-    public int jeiGuiTop() {
-        return panelY;
-    }
-
-    @Override
-    public int jeiGuiWidth() {
-        return PANEL_W;
-    }
-
-    @Override
-    public int jeiGuiHeight() {
-        return PANEL_H;
     }
 
     @Override

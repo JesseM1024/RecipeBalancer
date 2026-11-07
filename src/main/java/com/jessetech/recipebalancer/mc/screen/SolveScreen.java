@@ -5,8 +5,11 @@ import com.jessetech.recipebalancer.core.model.SolveResult;
 import com.jessetech.recipebalancer.mc.i18n.Lang;
 import com.jessetech.recipebalancer.mc.itemmap.ItemKeyMapper;
 import com.jessetech.recipebalancer.mc.ui.AeStyle;
+import com.jessetech.recipebalancer.mc.ui.Buttons;
+import com.jessetech.recipebalancer.mc.ui.Chat;
+import com.jessetech.recipebalancer.mc.ui.Draw;
 import com.jessetech.recipebalancer.mc.ui.graph.SolveGraphView;
-import net.minecraft.client.gui.GuiGraphics;
+import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
@@ -21,7 +24,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /** 求解结果二级页：只看报告，避免一级编码界面被文字挤占。 */
-public final class SolveScreen extends Screen implements JeiPanelScreen {
+public final class SolveScreen extends RbScreen {
 
     private final Screen parent;
     /** 注册名口径的报告（ingredient|/stack| 已被替换成显示名，普通物品仍是 registry id）。 */
@@ -115,15 +118,15 @@ public final class SolveScreen extends Screen implements JeiPanelScreen {
         graph = success && result != null
                 ? new SolveGraphView(result, recipes, targets, inventoryEnabled) : null;
 
-        addRenderableWidget(Button.builder(Lang.c("返回编码"), b -> minecraft.setScreen(parent))
+        addRenderableWidget(Buttons.builder(Lang.c("返回编码"), b -> minecraft.setScreen(parent))
                 .bounds(panelX + 8, panelY + panelH - 26, 100, 20).build());
-        namesButton = addRenderableWidget(Button.builder(namesLabel(), b -> toggleNames())
+        namesButton = addRenderableWidget(Buttons.builder(namesLabel(), b -> toggleNames())
                 .bounds(panelX + 216, panelY + panelH - 26, 110, 20).build());
         namesButton.visible = !graphMode;
         if (graph != null) {
-            toggleButton = addRenderableWidget(Button.builder(toggleLabel(), b -> toggleView())
+            toggleButton = addRenderableWidget(Buttons.builder(toggleLabel(), b -> toggleView())
                     .bounds(panelX + 112, panelY + panelH - 26, 100, 20).build());
-            layoutButton = addRenderableWidget(Button.builder(layoutLabel(), b -> toggleLayout())
+            layoutButton = addRenderableWidget(Buttons.builder(layoutLabel(), b -> toggleLayout())
                     .bounds(panelX + 216, panelY + panelH - 26, 110, 20).build());
             layoutButton.visible = graphMode;
         }
@@ -189,8 +192,8 @@ public final class SolveScreen extends Screen implements JeiPanelScreen {
     private Component styled(String raw) {
         int color = titleColor(raw);
         return color == 0
-                ? Component.literal(raw)
-                : Component.literal(raw).withStyle(Style.EMPTY.withColor(color));
+                ? Chat.literal(raw)
+                : Chat.literal(raw).withStyle(Style.EMPTY.withColor(color));
     }
 
     /**
@@ -261,7 +264,8 @@ public final class SolveScreen extends Screen implements JeiPanelScreen {
     }
 
     @Override
-    public void renderBackground(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+    public void renderBackground(PoseStack pose) {
+        Draw graphics = new Draw(pose, this);
         graphics.fill(0, 0, width, height, 0xD0101010);
         AeStyle.panel(graphics, panelX, panelY, panelW, panelH);
         AeStyle.header(graphics, panelX, panelY, panelW, 20);
@@ -271,8 +275,9 @@ public final class SolveScreen extends Screen implements JeiPanelScreen {
     }
 
     @Override
-    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        super.render(graphics, mouseX, mouseY, partialTick);
+    public void render(PoseStack pose, int mouseX, int mouseY, float partialTick) {
+        Draw graphics = new Draw(pose, this);
+        super.render(pose, mouseX, mouseY, partialTick);
 
         AeStyle.subPanel(graphics, panelX + 4, textY, panelW - 8, textH);
         if (graphMode && graph != null) {
@@ -301,7 +306,7 @@ public final class SolveScreen extends Screen implements JeiPanelScreen {
         }
     }
 
-    private void renderGraph(GuiGraphics graphics, int mouseX, int mouseY) {
+    private void renderGraph(Draw graphics, int mouseX, int mouseY) {
         graph.render(graphics, font, panelX + 4, textY, panelW - 8, textH);
         if (!graphNodeDragging) {
             graph.renderTooltip(graphics, font, mouseX, mouseY);
@@ -366,16 +371,17 @@ public final class SolveScreen extends Screen implements JeiPanelScreen {
         return super.mouseReleased(mouseX, mouseY, button);
     }
 
+    /** 1.18.2：只有纵向滚动，签名比 1.20+ 少一个 scrollX。 */
     @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+    public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
         if (graphMode && graph != null) {
             if (inGraphArea(mouseX, mouseY)) {
                 graph.zoomAt(mouseX - (panelX + 4), mouseY - textY,
-                        Math.pow(1.18, scrollY));
+                        Math.pow(1.18, delta));
             }
             return true;
         }
-        scroll -= scrollY * (font.lineHeight + 1) * 3;
+        scroll -= delta * (font.lineHeight + 1) * 3;
         return true;
     }
 
@@ -384,26 +390,6 @@ public final class SolveScreen extends Screen implements JeiPanelScreen {
         if (minecraft != null) {
             minecraft.setScreen(parent);
         }
-    }
-
-    @Override
-    public int jeiGuiLeft() {
-        return panelX;
-    }
-
-    @Override
-    public int jeiGuiTop() {
-        return panelY;
-    }
-
-    @Override
-    public int jeiGuiWidth() {
-        return panelW;
-    }
-
-    @Override
-    public int jeiGuiHeight() {
-        return panelH;
     }
 
     @Override

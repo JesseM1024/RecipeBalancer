@@ -1,7 +1,5 @@
 package com.jessetech.recipebalancer.mc.ui;
 
-import net.minecraft.client.gui.GuiGraphics;
-
 /**
  * 单色像素图标：{@code '#'} 画一个白像素，其余字符透明。
  *
@@ -152,7 +150,7 @@ public final class PixelIcon {
     }
 
     /** 逐行合并连续像素成一个矩形，避免逐像素 fill 造成过多绘制批次。 */
-    public void draw(GuiGraphics graphics, int x, int y, int color) {
+    public void draw(Draw graphics, int x, int y, int color) {
         for (int row = 0; row < rows.length; row++) {
             String line = rows[row];
             int runStart = -1;

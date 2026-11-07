@@ -1,8 +1,8 @@
 package com.jessetech.recipebalancer.mc.i18n;
 
+import com.jessetech.recipebalancer.mc.ui.Chat;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.resources.language.I18n;
-import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 
 import java.util.Locale;
@@ -19,7 +19,7 @@ public final class Lang {
     }
 
     public static MutableComponent c(String key, Object... args) {
-        return Component.literal(t(key, args));
+        return Chat.literal(t(key, args));
     }
 
     public static String t(String key, Object... args) {

@@ -9,14 +9,13 @@ import com.jessetech.recipebalancer.mc.i18n.Lang;
 import com.jessetech.recipebalancer.mc.itemmap.IngredientKey;
 import com.jessetech.recipebalancer.mc.itemmap.ItemKeyMapper;
 import com.jessetech.recipebalancer.mc.ui.AeStyle;
+import com.jessetech.recipebalancer.mc.ui.Chat;
+import com.jessetech.recipebalancer.mc.ui.Draw;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.VertexConsumer;
+import com.mojang.math.Matrix4f;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.renderer.RenderType;
 import net.minecraft.network.chat.Component;
-import org.joml.Matrix4f;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -1063,7 +1062,7 @@ public final class SolveGraphView {
         panY = mouseY - worldY * zoom;
     }
 
-    public void render(GuiGraphics graphics, Font font, int areaX, int areaY,
+    public void render(Draw graphics, Font font, int areaX, int areaY,
                        int areaW, int areaH) {
         lastAreaX = areaX;
         lastAreaY = areaY;
@@ -1120,7 +1119,7 @@ public final class SolveGraphView {
     }
 
     /** 实时显示缩放比例和当前可见世界范围。 */
-    private void drawCameraHud(GuiGraphics graphics, Font font,
+    private void drawCameraHud(Draw graphics, Font font,
                                int areaX, int areaY, int areaW) {
         String zoomText = Math.round(zoom * 100.0) + "%";
         long viewWidth = Math.round(areaW / zoom);
@@ -1135,11 +1134,11 @@ public final class SolveGraphView {
      * 悬停高亮：沿节点外框或边路径画「黄—灰」相间的滚动描边（marching ants），
      * 类似工业警示带，随缩放自动保持屏幕上恒定的段长与粗细。
      */
-    private void drawHoverOutline(GuiGraphics graphics) {
+    private void drawHoverOutline(Draw graphics) {
         if (hoveredNode == null && hoveredEdgeRef == null && selectedNode == null) {
             return;
         }
-        VertexConsumer consumer = graphics.bufferSource().getBuffer(RenderType.gui());
+        Draw.Batch batch = graphics.batch();
         Matrix4f matrix = graphics.pose().last().pose();
         double scale = Math.max(0.15, zoom);
         double dash = 6.0 / scale;
@@ -1148,34 +1147,35 @@ public final class SolveGraphView {
         double phase = 0.0;
         // 选中与悬停可以同时存在；同一个节点只画一次
         if (selectedNode != null) {
-            drawNodeAnts(consumer, matrix, selectedNode, dash, thickness, phase);
+            drawNodeAnts(batch, matrix, selectedNode, dash, thickness, phase);
         }
         if (hoveredNode != null && hoveredNode != selectedNode) {
-            drawNodeAnts(consumer, matrix, hoveredNode, dash, thickness, phase);
+            drawNodeAnts(batch, matrix, hoveredNode, dash, thickness, phase);
         }
         if (hoveredEdgeRef != null) {
             double[] points = hoverPath(hoveredEdgeRef);
             for (int i = 0; i + 3 < points.length; i += 2) {
-                dashedLine(consumer, matrix, points[i], points[i + 1],
+                dashedLine(batch, matrix, points[i], points[i + 1],
                         points[i + 2], points[i + 3], dash, phase, thickness);
             }
         }
+        batch.end();
     }
 
     /** 沿节点外框画一圈黄灰警示虚线。 */
-    private void drawNodeAnts(VertexConsumer consumer, Matrix4f matrix, GNode node,
+    private void drawNodeAnts(Draw.Batch batch, Matrix4f matrix, GNode node,
                               double dash, double thickness, double phase) {
         double scale = 6.0 / Math.max(1e-6, dash);
         double half = (node.recipe ? RECIPE : MATERIAL) / 2.0 + 2.5 / scale;
         double x = node.x;
         double y = node.y;
-        dashedLine(consumer, matrix, x - half, y - half, x + half, y - half,
+        dashedLine(batch, matrix, x - half, y - half, x + half, y - half,
                 dash, phase, thickness);
-        dashedLine(consumer, matrix, x + half, y - half, x + half, y + half,
+        dashedLine(batch, matrix, x + half, y - half, x + half, y + half,
                 dash, phase, thickness);
-        dashedLine(consumer, matrix, x + half, y + half, x - half, y + half,
+        dashedLine(batch, matrix, x + half, y + half, x - half, y + half,
                 dash, phase, thickness);
-        dashedLine(consumer, matrix, x - half, y + half, x - half, y - half,
+        dashedLine(batch, matrix, x - half, y + half, x - half, y - half,
                 dash, phase, thickness);
     }
 
@@ -1184,7 +1184,7 @@ public final class SolveGraphView {
      * 底下垫一层约 50% 不透明度的白底，文字在密集连线里也读得清。
      * 选中的节点也常驻一份字幕（与悬停互不覆盖）。
      */
-    private void drawHoverCaption(GuiGraphics graphics, Font font) {
+    private void drawHoverCaption(Draw graphics, Font font) {
         if (hoveredNode != null) {
             drawNodeCaption(graphics, font, hoveredNode);
         } else if (hoveredEdgeRef != null) {
@@ -1195,7 +1195,7 @@ public final class SolveGraphView {
         }
     }
 
-    private void drawNodeCaption(GuiGraphics graphics, Font font, GNode node) {
+    private void drawNodeCaption(Draw graphics, Font font, GNode node) {
         if (node.label == null) {
             node.label = font.plainSubstrByWidth(node.displayName, 84);
         }
@@ -1213,7 +1213,7 @@ public final class SolveGraphView {
         pose.popPose();
     }
 
-    private void drawEdgeCaption(GuiGraphics graphics, Font font, GEdge edge) {
+    private void drawEdgeCaption(Draw graphics, Font font, GEdge edge) {
         String text = edge.label;
         int width = font.width(text);
         double[] anchor = edgeLabelAnchor(edge, font);
@@ -1248,7 +1248,7 @@ public final class SolveGraphView {
     }
 
     /** 黄灰相间的虚线：按相位偏移交替着色，相位随时间前移形成滚动效果。 */
-    private static void dashedLine(VertexConsumer consumer, Matrix4f matrix,
+    private static void dashedLine(Draw.Batch batch, Matrix4f matrix,
                                    double x1, double y1, double x2, double y2,
                                    double dash, double phase, double thickness) {
         double dx = x2 - x1;
@@ -1267,13 +1267,13 @@ public final class SolveGraphView {
             }
             int index = (int) Math.floor((start + phase * 2.0) / dash);
             int color = (index & 1) == 0 ? ANT_YELLOW : ANT_GRAY;
-            addLine(consumer, matrix, x1 + ux * a, y1 + uy * a,
+            addLine(batch, matrix, x1 + ux * a, y1 + uy * a,
                     x1 + ux * b, y1 + uy * b, thickness, color);
         }
     }
 
     /** 鼠标悬浮：配方/物质/物流详细 tooltip。 */
-    public void renderTooltip(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+    public void renderTooltip(Draw graphics, Font font, int mouseX, int mouseY) {
         // 先清空悬停状态：鼠标移出图区时描边要立刻消失，不能残留上一帧的高亮
         hoveredNode = null;
         hoveredEdgeRef = null;
@@ -1306,7 +1306,7 @@ public final class SolveGraphView {
         hoveredEdgeRef = edge;
         if (edge != null) {
             List<Component> lines = new ArrayList<>();
-            lines.add(Component.literal(ItemKeyMapper.displayName(edge.material))
+            lines.add(Chat.literal(ItemKeyMapper.displayName(edge.material))
                     .withStyle(ChatFormatting.BOLD));
             lines.add(Lang.c(nodeLabel(edge.from) + " → " + nodeLabel(edge.to))
                     .withStyle(ChatFormatting.GRAY));
@@ -1398,7 +1398,7 @@ public final class SolveGraphView {
 
     private List<Component> materialTooltip(GNode node) {
         List<Component> lines = new ArrayList<>();
-        lines.add(Component.literal(ItemKeyMapper.displayName(node.key))
+        lines.add(Chat.literal(ItemKeyMapper.displayName(node.key))
                 .withStyle(ChatFormatting.BOLD));
         lines.add(Lang.c("类别: %s", categoryLabel(node.category))
                 .withStyle(ChatFormatting.GRAY));
@@ -1465,7 +1465,7 @@ public final class SolveGraphView {
         });
     }
 
-    private void drawLegend(GuiGraphics graphics, Font font, int areaX, int areaY) {
+    private void drawLegend(Draw graphics, Font font, int areaX, int areaY) {
         int x = areaX + 4;
         int y = areaY + 4;
         String[] labels = {
@@ -1500,13 +1500,13 @@ public final class SolveGraphView {
      * 所有边/箭头合批到一个 GUI VertexConsumer，避免每条边每像素一次 fill。
      * 边标签在合批刷新后单独绘制。
      */
-    private void drawEdges(GuiGraphics graphics, Font font,
+    private void drawEdges(Draw graphics, Font font,
                            double minX, double maxX, double minY, double maxY,
                            boolean showLabels) {
         if (edges.isEmpty()) {
             return;
         }
-        VertexConsumer consumer = graphics.bufferSource().getBuffer(RenderType.gui());
+        Draw.Batch batch = graphics.batch();
         Matrix4f matrix = graphics.pose().last().pose();
         // 选中/悬停某个节点时，只把它相关的边点亮，其它边压到很淡——线太多时靠这一下看清
         // 跨多列的「总线」边先画（压在下层），相邻列的本地流线后画（在上层），
@@ -1514,17 +1514,17 @@ public final class SolveGraphView {
         for (GEdge edge : edges) {
             if (edgeVisible(edge, minX, maxX, minY, maxY) && isBusEdge(edge)) {
                 dimEdges = shouldDim(edge);
-                drawEdgeGeometry(consumer, matrix, edge);
+                drawEdgeGeometry(batch, matrix, edge);
             }
         }
         for (GEdge edge : edges) {
             if (edgeVisible(edge, minX, maxX, minY, maxY) && !isBusEdge(edge)) {
                 dimEdges = shouldDim(edge);
-                drawEdgeGeometry(consumer, matrix, edge);
+                drawEdgeGeometry(batch, matrix, edge);
             }
         }
         dimEdges = false;
-        graphics.flush();
+        batch.end();
 
         if (!showLabels) {
             return;
@@ -1601,12 +1601,12 @@ public final class SolveGraphView {
         return new double[]{x1, sy, dropX, sy, dropX, tipY, x2, tipY};
     }
 
-    private void drawBusEdge(VertexConsumer consumer, Matrix4f matrix, GEdge edge) {
+    private void drawBusEdge(Draw.Batch batch, Matrix4f matrix, GEdge edge) {
         double[] path = busPath(edge);
         double dir = edge.to.x >= edge.from.x ? 1.0 : -1.0;
         if ((path[2] - path[0]) * dir < 6) {
             // 距离太短就退回斜线
-            drawStraightEdge(consumer, matrix, edge);
+            drawStraightEdge(batch, matrix, edge);
             return;
         }
         // 总线边也随流量加粗，但上限比普通连线低（长线容易互相重叠，太粗会糊成一片）
@@ -1615,10 +1615,10 @@ public final class SolveGraphView {
         // 主干 55% 透明度，入靶段与箭头 75%，视觉上层层递进
         int trunk = shade(fade(color, (int) Math.round(140 * edgeOpacity)));
         int tip = shade(fade(color, (int) Math.round(191 * edgeOpacity)));
-        addLine(consumer, matrix, path[0], path[1], path[2], path[3], thickness, trunk);
-        addLine(consumer, matrix, path[2], path[3], path[4], path[5], thickness, trunk);
-        addLine(consumer, matrix, path[4], path[5], path[6], path[7], thickness, tip);
-        addArrow(consumer, matrix, path[6], path[7], dir, 0, thickness, tip);
+        addLine(batch, matrix, path[0], path[1], path[2], path[3], thickness, trunk);
+        addLine(batch, matrix, path[2], path[3], path[4], path[5], thickness, trunk);
+        addLine(batch, matrix, path[4], path[5], path[6], path[7], thickness, tip);
+        addArrow(batch, matrix, path[6], path[7], dir, 0, thickness, tip);
     }
 
     /**
@@ -1646,33 +1646,33 @@ public final class SolveGraphView {
         }
     }
 
-    private static void addArrow(VertexConsumer consumer, Matrix4f matrix,
+    private static void addArrow(Draw.Batch batch, Matrix4f matrix,
                                  double x2, double y2, double ux, double uy,
                                  int thickness, int color) {
         double backX = x2 - ux * 7;
         double backY = y2 - uy * 7;
         double px = -uy;
         double py = ux;
-        addLine(consumer, matrix, x2, y2, backX + px * 3.5, backY + py * 3.5,
+        addLine(batch, matrix, x2, y2, backX + px * 3.5, backY + py * 3.5,
                 thickness + 1, color);
-        addLine(consumer, matrix, x2, y2, backX - px * 3.5, backY - py * 3.5,
+        addLine(batch, matrix, x2, y2, backX - px * 3.5, backY - py * 3.5,
                 thickness + 1, color);
     }
 
-    private void drawEdgeGeometry(VertexConsumer consumer, Matrix4f matrix, GEdge edge) {
+    private void drawEdgeGeometry(Draw.Batch batch, Matrix4f matrix, GEdge edge) {
         EdgeCurve curve = curveFor(edge);
         if (curve != null) {
-            drawCurvedEdge(consumer, matrix, edge, curve);
+            drawCurvedEdge(batch, matrix, edge, curve);
             return;
         }
         if (isBusEdge(edge)) {
-            drawBusEdge(consumer, matrix, edge);
+            drawBusEdge(batch, matrix, edge);
             return;
         }
-        drawStraightEdge(consumer, matrix, edge);
+        drawStraightEdge(batch, matrix, edge);
     }
 
-    private void drawStraightEdge(VertexConsumer consumer, Matrix4f matrix, GEdge edge) {
+    private void drawStraightEdge(Draw.Batch batch, Matrix4f matrix, GEdge edge) {
         double sx = edge.from.x;
         double sy = edge.from.y;
         double ex = edge.to.x;
@@ -1691,11 +1691,11 @@ public final class SolveGraphView {
 
         int thickness = 1 + Math.min(4, (int) Math.sqrt(Math.max(0.0, edge.flow)) * 2);
         int color = shade(fade(desaturate(edgeColor(edge)), baseAlpha()));
-        addLine(consumer, matrix, x1, y1, x2, y2, thickness, color);
-        addArrow(consumer, matrix, x2, y2, ux, uy, thickness, color);
+        addLine(batch, matrix, x1, y1, x2, y2, thickness, color);
+        addArrow(batch, matrix, x2, y2, ux, uy, thickness, color);
     }
 
-    private void drawCurvedEdge(VertexConsumer consumer, Matrix4f matrix,
+    private void drawCurvedEdge(Draw.Batch batch, Matrix4f matrix,
                                 GEdge edge, EdgeCurve curve) {
         int thickness = 1 + Math.min(4, (int) Math.sqrt(Math.max(0.0, edge.flow)) * 2);
         int color = shade(fade(desaturate(edgeColor(edge)), baseAlpha()));
@@ -1706,7 +1706,7 @@ public final class SolveGraphView {
             double t = i / (double) segments;
             double x = curve.pointX(t);
             double y = curve.pointY(t);
-            addLine(consumer, matrix, prevX, prevY, x, y, thickness, color);
+            addLine(batch, matrix, prevX, prevY, x, y, thickness, color);
             prevX = x;
             prevY = y;
         }
@@ -1720,9 +1720,9 @@ public final class SolveGraphView {
         double backY = curve.y2 - ty * 7;
         double px = -ty;
         double py = tx;
-        addLine(consumer, matrix, curve.x2, curve.y2,
+        addLine(batch, matrix, curve.x2, curve.y2,
                 backX + px * 3.5, backY + py * 3.5, thickness + 1, color);
-        addLine(consumer, matrix, curve.x2, curve.y2,
+        addLine(batch, matrix, curve.x2, curve.y2,
                 backX - px * 3.5, backY - py * 3.5, thickness + 1, color);
     }
 
@@ -1779,7 +1779,7 @@ public final class SolveGraphView {
         return false;
     }
 
-    private void drawEdgeLabel(GuiGraphics graphics, Font font, GEdge edge) {
+    private void drawEdgeLabel(Draw graphics, Font font, GEdge edge) {
         // 流量文字用该物质的本色（压深一档），和箭头同色，方便顺着线找来源
         int color = dimEdges ? fade(0xFF808080, (int) Math.round(255 * dimOpacity)) : darken(edgeColor(edge));
         double[] anchor = edgeLabelAnchor(edge, font);
@@ -1829,7 +1829,7 @@ public final class SolveGraphView {
         return new double[]{labelX, labelY};
     }
 
-    private static void addLine(VertexConsumer consumer, Matrix4f matrix,
+    private static void addLine(Draw.Batch batch, Matrix4f matrix,
                                 double x1, double y1, double x2, double y2,
                                 double thickness, int color) {
         double dx = x2 - x1;
@@ -1840,19 +1840,19 @@ public final class SolveGraphView {
         }
         double nx = -dy / dist * thickness * 0.5;
         double ny = dx / dist * thickness * 0.5;
-        // 与 GuiGraphics.fill 相同的四边形绕序，避免被背面剔除。
-        vertex(consumer, matrix, x1 - nx, y1 - ny, color);
-        vertex(consumer, matrix, x1 + nx, y1 + ny, color);
-        vertex(consumer, matrix, x2 + nx, y2 + ny, color);
-        vertex(consumer, matrix, x2 - nx, y2 - ny, color);
+        // 与 fill 相同的四边形绕序，避免被背面剔除。
+        vertex(batch, matrix, x1 - nx, y1 - ny, color);
+        vertex(batch, matrix, x1 + nx, y1 + ny, color);
+        vertex(batch, matrix, x2 + nx, y2 + ny, color);
+        vertex(batch, matrix, x2 - nx, y2 - ny, color);
     }
 
-    private static void vertex(VertexConsumer consumer, Matrix4f matrix,
+    private static void vertex(Draw.Batch batch, Matrix4f matrix,
                                double x, double y, int color) {
-        consumer.addVertex(matrix, (float) x, (float) y, 0.0f).setColor(color);
+        batch.addVertex(matrix, (float) x, (float) y, 0.0f).setColor(color);
     }
 
-    private void drawNode(GuiGraphics graphics, Font font, GNode node,
+    private void drawNode(Draw graphics, Font font, GNode node,
                           boolean showRecipeIcons, boolean showMaterialIcons) {
         if (node.recipe) {
             drawRecipeNode(graphics, font, node, showRecipeIcons);
@@ -1871,7 +1871,7 @@ public final class SolveGraphView {
         }
     }
 
-    private void drawRecipeNode(GuiGraphics graphics, Font font, GNode node,
+    private void drawRecipeNode(Draw graphics, Font font, GNode node,
                                 boolean showIcons) {
         int x = (int) Math.round(node.x) - RECIPE / 2;
         int y = (int) Math.round(node.y) - RECIPE / 2;
@@ -1895,7 +1895,7 @@ public final class SolveGraphView {
         drawCenteredLabel(graphics, font, node, node.x, node.y + RECIPE / 2.0 + 3);
     }
 
-    private void drawMaterialNode(GuiGraphics graphics, Font font, GNode node,
+    private void drawMaterialNode(Draw graphics, Font font, GNode node,
                                   boolean showIcons) {
         int color = switch (node.category) {
             case INPUT -> INPUT;
@@ -1920,7 +1920,7 @@ public final class SolveGraphView {
         drawCenteredLabel(graphics, font, node, node.x, node.y + MATERIAL / 2.0 + 3);
     }
 
-    private void drawCenteredLabel(GuiGraphics graphics, Font font, GNode node,
+    private void drawCenteredLabel(Draw graphics, Font font, GNode node,
                                    double centerX, double y) {
         if (node.label == null) {
             node.label = font.plainSubstrByWidth(node.displayName, 84);
@@ -1944,7 +1944,7 @@ public final class SolveGraphView {
         return new String(Character.toChars(first)).toUpperCase();
     }
 
-    private static void roundedFill(GuiGraphics graphics, int x, int y,
+    private static void roundedFill(Draw graphics, int x, int y,
                                     int width, int height, int radius, int color) {
         if (radius <= 0 || radius * 2 >= height) {
             graphics.fill(x, y, x + width, y + height, color);

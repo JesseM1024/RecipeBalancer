@@ -5,9 +5,11 @@ import com.jessetech.recipebalancer.core.time.TimeExpression;
 import com.jessetech.recipebalancer.mc.i18n.Lang;
 import com.jessetech.recipebalancer.mc.itemmap.IngredientKey;
 import com.jessetech.recipebalancer.mc.itemmap.ItemKeyMapper;
-import com.jessetech.recipebalancer.mc.jei.JeiScreenSupport;
 import com.jessetech.recipebalancer.mc.ui.AeStyle;
-import net.minecraft.client.gui.GuiGraphics;
+import com.jessetech.recipebalancer.mc.ui.Buttons;
+import com.jessetech.recipebalancer.mc.ui.Chat;
+import com.jessetech.recipebalancer.mc.ui.Draw;
+import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
@@ -21,7 +23,7 @@ import java.util.List;
  * <p>配方原料/产物/设备用无量纲数量；目标产物用速率（/t、/s、/m、/h），
  * 内部回调统一返回**每 tick 数量**（与 ScenarioDraft 一致）。
  */
-public final class AmountScreen extends Screen implements JeiPanelScreen {
+public final class AmountScreen extends RbScreen {
 
     public interface Callback {
         void accept(String itemKey, double amount);
@@ -48,7 +50,7 @@ public final class AmountScreen extends Screen implements JeiPanelScreen {
     /** rateMode=true：amount 为每 tick 数量，界面显示速率单位。 */
     public AmountScreen(Screen parent, String title, String itemKey, double amount,
                         boolean amountEditable, boolean rateMode, Callback callback) {
-        super(Component.literal(Lang.t(title)));
+        super(Chat.literal(Lang.t(title)));
         this.parent = parent;
         this.title = Lang.t(title);
         this.itemKey = ItemKeyMapper.normalize(itemKey);
@@ -91,8 +93,8 @@ public final class AmountScreen extends Screen implements JeiPanelScreen {
             amountBox.setValue(TimeExpression.formatEditableNumber(amount));
             addRenderableWidget(amountBox);
             if (rateMode) {
-                unitButton = addRenderableWidget(Button.builder(
-                                Component.literal(rateLabel()), b -> cycleRateUnit())
+                unitButton = addRenderableWidget(Buttons.builder(
+                                Chat.literal(rateLabel()), b -> cycleRateUnit())
                         .bounds(panelX + 116, panelY + 89, 60, 20).build());
             }
         }
@@ -101,29 +103,29 @@ public final class AmountScreen extends Screen implements JeiPanelScreen {
             int buttonY = panelY + 114;
             int buttonW = 48;
             int gap = 3;
-            addRenderableWidget(Button.builder(Component.literal("+1"), b -> adjust(1))
+            addRenderableWidget(Buttons.builder(Chat.literal("+1"), b -> adjust(1))
                     .bounds(panelX + 8, buttonY, buttonW, 20).build());
-            addRenderableWidget(Button.builder(Component.literal("+10"), b -> adjust(10))
+            addRenderableWidget(Buttons.builder(Chat.literal("+10"), b -> adjust(10))
                     .bounds(panelX + 8 + (buttonW + gap), buttonY, buttonW, 20).build());
-            addRenderableWidget(Button.builder(Component.literal("+100"), b -> adjust(100))
+            addRenderableWidget(Buttons.builder(Chat.literal("+100"), b -> adjust(100))
                     .bounds(panelX + 8 + 2 * (buttonW + gap), buttonY, buttonW, 20).build());
-            addRenderableWidget(Button.builder(Component.literal("+1000"), b -> adjust(1000))
+            addRenderableWidget(Buttons.builder(Chat.literal("+1000"), b -> adjust(1000))
                     .bounds(panelX + 8 + 3 * (buttonW + gap), buttonY, buttonW, 20).build());
 
-            addRenderableWidget(Button.builder(Component.literal("-1"), b -> adjust(-1))
+            addRenderableWidget(Buttons.builder(Chat.literal("-1"), b -> adjust(-1))
                     .bounds(panelX + 8, buttonY + 24, buttonW, 20).build());
-            addRenderableWidget(Button.builder(Component.literal("-10"), b -> adjust(-10))
+            addRenderableWidget(Buttons.builder(Chat.literal("-10"), b -> adjust(-10))
                     .bounds(panelX + 8 + (buttonW + gap), buttonY + 24, buttonW, 20).build());
-            addRenderableWidget(Button.builder(Component.literal("-100"), b -> adjust(-100))
+            addRenderableWidget(Buttons.builder(Chat.literal("-100"), b -> adjust(-100))
                     .bounds(panelX + 8 + 2 * (buttonW + gap), buttonY + 24, buttonW, 20).build());
-            addRenderableWidget(Button.builder(Component.literal("-1000"), b -> adjust(-1000))
+            addRenderableWidget(Buttons.builder(Chat.literal("-1000"), b -> adjust(-1000))
                     .bounds(panelX + 8 + 3 * (buttonW + gap), buttonY + 24, buttonW, 20).build());
         }
 
         // 取消左、确定右
-        addRenderableWidget(Button.builder(Lang.c("取消"), b -> cancel())
+        addRenderableWidget(Buttons.builder(Lang.c("取消"), b -> cancel())
                 .bounds(panelX + 8, panelY + panelH - 26, 100, 20).build());
-        addRenderableWidget(Button.builder(Lang.c("确定"), b -> confirm())
+        addRenderableWidget(Buttons.builder(Lang.c("确定"), b -> confirm())
                 .bounds(panelX + panelW - 108, panelY + panelH - 26, 100, 20).build());
 
         if (amountEditable && amountBox != null) {
@@ -131,7 +133,6 @@ public final class AmountScreen extends Screen implements JeiPanelScreen {
         } else {
             setInitialFocus(keyBox);
         }
-        JeiScreenSupport.notifyGuiInit(this);
     }
 
     private void cycleRateUnit() {
@@ -148,7 +149,7 @@ public final class AmountScreen extends Screen implements JeiPanelScreen {
         UnitPreferences.setRateUnit(rateUnit);
         amount = rateUnit.fromPerTick(perTick);
         amountBox.setValue(TimeExpression.formatEditableNumber(amount));
-        unitButton.setMessage(Component.literal(rateLabel()));
+        unitButton.setMessage(Chat.literal(rateLabel()));
     }
 
     private String rateLabel() {
@@ -212,7 +213,8 @@ public final class AmountScreen extends Screen implements JeiPanelScreen {
     }
 
     @Override
-    public void renderBackground(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+    public void renderBackground(PoseStack pose) {
+        Draw graphics = new Draw(pose, this);
         graphics.fill(0, 0, width, height, 0xB0101010);
         AeStyle.panel(graphics, panelX, panelY, panelW, panelH);
         AeStyle.header(graphics, panelX, panelY, panelW, 20);
@@ -220,8 +222,9 @@ public final class AmountScreen extends Screen implements JeiPanelScreen {
     }
 
     @Override
-    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        super.render(graphics, mouseX, mouseY, partialTick);
+    public void render(PoseStack pose, int mouseX, int mouseY, float partialTick) {
+        Draw graphics = new Draw(pose, this);
+        super.render(pose, mouseX, mouseY, partialTick);
 
         graphics.drawString(font, Lang.t("物品 / 注册名"),
                 panelX + 8, panelY + 22, AeStyle.MUTED, false);
@@ -270,26 +273,6 @@ public final class AmountScreen extends Screen implements JeiPanelScreen {
         if (minecraft != null) {
             minecraft.setScreen(parent);
         }
-    }
-
-    @Override
-    public int jeiGuiLeft() {
-        return panelX;
-    }
-
-    @Override
-    public int jeiGuiTop() {
-        return panelY;
-    }
-
-    @Override
-    public int jeiGuiWidth() {
-        return panelW;
-    }
-
-    @Override
-    public int jeiGuiHeight() {
-        return panelH;
     }
 
     @Override

@@ -3,9 +3,11 @@ package com.jessetech.recipebalancer.mc.screen;
 import com.jessetech.recipebalancer.core.time.TimeExpression;
 import com.jessetech.recipebalancer.core.time.TimeUnit;
 import com.jessetech.recipebalancer.mc.i18n.Lang;
-import com.jessetech.recipebalancer.mc.jei.JeiScreenSupport;
 import com.jessetech.recipebalancer.mc.ui.AeStyle;
-import net.minecraft.client.gui.GuiGraphics;
+import com.jessetech.recipebalancer.mc.ui.Buttons;
+import com.jessetech.recipebalancer.mc.ui.Chat;
+import com.jessetech.recipebalancer.mc.ui.Draw;
+import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
@@ -14,7 +16,7 @@ import net.minecraft.network.chat.Component;
 import java.util.function.DoubleConsumer;
 
 /** 配方耗时编辑：表达式 + 单位（t/秒/分/时），确定后统一转 tick。 */
-public final class TimeScreen extends Screen implements JeiPanelScreen {
+public final class TimeScreen extends RbScreen {
 
     private final Screen parent;
     private final DoubleConsumer callback;
@@ -49,17 +51,16 @@ public final class TimeScreen extends Screen implements JeiPanelScreen {
         expressionBox.setValue(TimeExpression.formatEditableNumber(unit.fromTicks(ticks)));
         addRenderableWidget(expressionBox);
 
-        unitButton = addRenderableWidget(Button.builder(Component.literal(unit.label()), b -> cycleUnit())
+        unitButton = addRenderableWidget(Buttons.builder(Chat.literal(unit.label()), b -> cycleUnit())
                 .bounds(panelX + 164, panelY + 27, 64, 20).build());
 
         // 取消左、确定右
-        addRenderableWidget(Button.builder(Lang.c("取消"), b -> cancel())
+        addRenderableWidget(Buttons.builder(Lang.c("取消"), b -> cancel())
                 .bounds(panelX + 8, panelY + PANEL_H - 28, 104, 20).build());
-        addRenderableWidget(Button.builder(Lang.c("确定"), b -> confirm())
+        addRenderableWidget(Buttons.builder(Lang.c("确定"), b -> confirm())
                 .bounds(panelX + PANEL_W - 112, panelY + PANEL_H - 28, 104, 20).build());
 
         setInitialFocus(expressionBox);
-        JeiScreenSupport.notifyGuiInit(this);
     }
 
     private void cycleUnit() {
@@ -75,7 +76,7 @@ public final class TimeScreen extends Screen implements JeiPanelScreen {
             ticks = preserved;
             expressionBox.setValue(TimeExpression.formatEditableNumber(unit.fromTicks(ticks)));
         }
-        unitButton.setMessage(Component.literal(unit.label()));
+        unitButton.setMessage(Chat.literal(unit.label()));
     }
 
     private void confirm() {
@@ -95,7 +96,8 @@ public final class TimeScreen extends Screen implements JeiPanelScreen {
     }
 
     @Override
-    public void renderBackground(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+    public void renderBackground(PoseStack pose) {
+        Draw graphics = new Draw(pose, this);
         graphics.fill(0, 0, width, height, 0xB0101010);
         AeStyle.panel(graphics, panelX, panelY, PANEL_W, PANEL_H);
         AeStyle.header(graphics, panelX, panelY, PANEL_W, 20);
@@ -104,8 +106,9 @@ public final class TimeScreen extends Screen implements JeiPanelScreen {
     }
 
     @Override
-    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        super.render(graphics, mouseX, mouseY, partialTick);
+    public void render(PoseStack pose, int mouseX, int mouseY, float partialTick) {
+        Draw graphics = new Draw(pose, this);
+        super.render(pose, mouseX, mouseY, partialTick);
 
         String preview;
         try {
@@ -142,26 +145,6 @@ public final class TimeScreen extends Screen implements JeiPanelScreen {
         if (minecraft != null) {
             minecraft.setScreen(parent);
         }
-    }
-
-    @Override
-    public int jeiGuiLeft() {
-        return panelX;
-    }
-
-    @Override
-    public int jeiGuiTop() {
-        return panelY;
-    }
-
-    @Override
-    public int jeiGuiWidth() {
-        return PANEL_W;
-    }
-
-    @Override
-    public int jeiGuiHeight() {
-        return PANEL_H;
     }
 
     @Override

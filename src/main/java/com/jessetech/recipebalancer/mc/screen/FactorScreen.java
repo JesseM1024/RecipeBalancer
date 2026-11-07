@@ -2,15 +2,16 @@ package com.jessetech.recipebalancer.mc.screen;
 
 import com.jessetech.recipebalancer.core.time.TimeExpression;
 import com.jessetech.recipebalancer.mc.i18n.Lang;
-import com.jessetech.recipebalancer.mc.jei.JeiScreenSupport;
 import com.jessetech.recipebalancer.mc.ui.AeStyle;
-import net.minecraft.client.gui.GuiGraphics;
+import com.jessetech.recipebalancer.mc.ui.Buttons;
+import com.jessetech.recipebalancer.mc.ui.Draw;
+import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 
 /** 输入一个缩放系数（支持 + - * / 与括号这类简单表达式）。 */
-public final class FactorScreen extends Screen implements JeiPanelScreen {
+public final class FactorScreen extends RbScreen {
 
     public interface Callback {
         void accept(double factor);
@@ -46,12 +47,11 @@ public final class FactorScreen extends Screen implements JeiPanelScreen {
         factorBox.setValue("1");
         addRenderableWidget(factorBox);
 
-        addRenderableWidget(Button.builder(Lang.c("取消"), b -> minecraft.setScreen(parent))
+        addRenderableWidget(Buttons.builder(Lang.c("取消"), b -> minecraft.setScreen(parent))
                 .bounds(panelX + 8, panelY + PANEL_H - 26, 88, 20).build());
-        addRenderableWidget(Button.builder(Lang.c("确定"), b -> confirm())
+        addRenderableWidget(Buttons.builder(Lang.c("确定"), b -> confirm())
                 .bounds(panelX + PANEL_W - 96, panelY + PANEL_H - 26, 88, 20).build());
         setInitialFocus(factorBox);
-        JeiScreenSupport.notifyGuiInit(this);
     }
 
     private void confirm() {
@@ -71,7 +71,8 @@ public final class FactorScreen extends Screen implements JeiPanelScreen {
     }
 
     @Override
-    public void renderBackground(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+    public void renderBackground(PoseStack pose) {
+        Draw graphics = new Draw(pose, this);
         graphics.fill(0, 0, width, height, 0xB0101010);
         AeStyle.panel(graphics, panelX, panelY, PANEL_W, PANEL_H);
         AeStyle.header(graphics, panelX, panelY, PANEL_W, 20);
@@ -95,26 +96,6 @@ public final class FactorScreen extends Screen implements JeiPanelScreen {
         if (minecraft != null) {
             minecraft.setScreen(parent);
         }
-    }
-
-    @Override
-    public int jeiGuiLeft() {
-        return panelX;
-    }
-
-    @Override
-    public int jeiGuiTop() {
-        return panelY;
-    }
-
-    @Override
-    public int jeiGuiWidth() {
-        return PANEL_W;
-    }
-
-    @Override
-    public int jeiGuiHeight() {
-        return PANEL_H;
     }
 
     @Override
