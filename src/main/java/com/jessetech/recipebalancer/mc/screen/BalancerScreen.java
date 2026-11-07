@@ -634,19 +634,17 @@ public final class BalancerScreen extends RbScreen {
                 }
                 if (!recipe.equType().isBlank()) {
                     ItemStack equipment = ItemKeyMapper.stack(recipe.equType());
-                    // 设备标记统一按 translate(x+10,y+10) + scale(0.5) 的变换画在右下角。
-                    // 物品图标必须用 Draw 的缩放重载：1.18.2 的 renderGuiItem 只认模型视图矩阵，
-                    // 改 PoseStack 不会生效（否则图标会跑到左上角）。
+                    // 设备标记统一按 translate(x+10,y+10) + scale(0.5) 的变换画在右下角
+                    PoseStack pose = graphics.pose();
+                    pose.pushPose();
+                    pose.translate(x + 10, y + 10, 0);
+                    pose.scale(0.5f, 0.5f, 1.0f);
                     if (equipment.isEmpty()) {
-                        PoseStack pose = graphics.pose();
-                        pose.pushPose();
-                        pose.translate(x + 10, y + 10, 0);
-                        pose.scale(0.5f, 0.5f, 1.0f);
                         ItemKeyMapper.renderIcon(graphics, font, recipe.equType(), 0, 0, null);
-                        pose.popPose();
                     } else {
-                        graphics.renderItem(equipment, x + 10, y + 10, 0.5f);
+                        graphics.renderItem(equipment, 1, 1);
                     }
+                    pose.popPose();
                 }
             }
         }

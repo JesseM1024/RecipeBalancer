@@ -1,5 +1,7 @@
 package com.jessetech.recipebalancer.mc.ui;
 
+import com.mojang.blaze3d.platform.GlStateManager;
+import com.mojang.blaze3d.platform.Lighting;
 import com.mojang.blaze3d.platform.Window;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.BufferBuilder;
@@ -13,6 +15,10 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiComponent;
 import net.minecraft.client.renderer.MultiBufferSource;
+import net.minecraft.client.renderer.block.model.ItemTransforms;
+import net.minecraft.client.renderer.texture.OverlayTexture;
+import net.minecraft.client.renderer.texture.TextureAtlas;
+import net.minecraft.client.resources.model.BakedModel;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.world.item.ItemStack;
@@ -111,34 +117,55 @@ public final class Draw {
         }
     }
 
+    /**
+     * 16×16 物品图标（绝对 GUI 坐标）。
+     *
+     * <p>走本类的 {@link #renderItemPosed} 而不是原版 {@code renderGuiItem}：
+     * 两者的最终变换完全一致，但后者只认 {@link RenderSystem#getModelViewStack()}、
+     * 完全忽略 PoseStack —— 在流程图那种「相机缩放/平移」的自绘坐标系里会把图标
+     * 画到屏幕固定位置（左上角/随机处）。
+     */
     public void renderItem(ItemStack stack, int x, int y) {
-        Minecraft.getInstance().getItemRenderer().renderGuiItem(stack, x, y);
+        renderItemPosed(stack, x, y);
     }
 
     /**
-     * 带缩放的物品图标（如配方库里 0.5 倍的设备标记）。
+     * 在当前 PoseStack 变换下画 16×16 物品。
      *
-     * <p>★ 陷阱 ★ 1.18.2 的 {@code ItemRenderer#renderGuiItem} 只认
-     * {@link RenderSystem#getModelViewStack()}，完全忽略传进去的 PoseStack ——
-     * 用 pose 做 translate/scale 不会生效（图标会画在左上角）。
-     * 因此这里直接在模型视图栈上做变换。
+     * <p>变换与 1.18.2 的 {@code ItemRenderer#renderGuiItem} 等价
+     * （translate(x+8, y+8, 100) + scale(16, -16, 16)），
+     * 区别只在于这里<b>吃 PoseStack</b>，因此可以随所在坐标系缩放平移。
      */
-    public void renderItem(ItemStack stack, int x, int y, float scale) {
-        if (scale == 1.0f) {
-            renderItem(stack, x, y);
+    public void renderItemPosed(ItemStack stack, float x, float y) {
+        if (stack.isEmpty()) {
             return;
         }
-        PoseStack modelView = RenderSystem.getModelViewStack();
-        modelView.pushPose();
-        modelView.translate(x, y, 0);
-        modelView.scale(scale, scale, 1.0f);
-        RenderSystem.applyModelViewMatrix();
-        try {
-            Minecraft.getInstance().getItemRenderer().renderGuiItem(stack, 0, 0);
-        } finally {
-            modelView.popPose();
-            RenderSystem.applyModelViewMatrix();
+        Minecraft minecraft = Minecraft.getInstance();
+        BakedModel model = minecraft.getItemRenderer()
+                .getModel(stack, minecraft.level, minecraft.player, 0);
+        boolean flat = !model.usesBlockLight();
+        pose.pushPose();
+        pose.translate(x + 8.0f, y + 8.0f, 100.0f);
+        pose.scale(16.0f, -16.0f, 16.0f);
+        // 与 renderGuiItem 完全一致的状态设置：像素风不过滤、开混合、清掉上一轮的颜色
+        minecraft.getTextureManager().getTexture(TextureAtlas.LOCATION_BLOCKS).setFilter(false, false);
+        RenderSystem.setShaderTexture(0, TextureAtlas.LOCATION_BLOCKS);
+        RenderSystem.enableBlend();
+        RenderSystem.blendFunc(GlStateManager.SourceFactor.SRC_ALPHA,
+                GlStateManager.DestFactor.ONE_MINUS_SRC_ALPHA);
+        RenderSystem.setShaderColor(1.0f, 1.0f, 1.0f, 1.0f);
+        RenderSystem.enableDepthTest();
+        if (flat) {
+            Lighting.setupForFlatItems();
         }
+        MultiBufferSource.BufferSource buffers = minecraft.renderBuffers().bufferSource();
+        minecraft.getItemRenderer().render(stack, ItemTransforms.TransformType.GUI, false, pose,
+                buffers, 15728880, OverlayTexture.NO_OVERLAY, model);
+        buffers.endBatch();
+        if (flat) {
+            Lighting.setupFor3DItems();
+        }
+        pose.popPose();
     }
 
     public void renderItemDecorations(Font font, ItemStack stack, int x, int y) {
@@ -205,7 +232,11 @@ public final class Draw {
             this.builder = Tesselator.getInstance().getBuilder();
             RenderSystem.enableBlend();
             RenderSystem.defaultBlendFunc();
+            // disableTexture 在 1.18.2 里同时把 shader 切成 position_color
             RenderSystem.disableTexture();
+            // 1.20 的 RenderType.gui() 是 NO_CULL：GUI 上随手画的四边形绕序不统一，
+            // 开着背面剔除会让一半方向的线段整块消失。
+            RenderSystem.disableCull();
             builder.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_COLOR);
         }
 
@@ -221,10 +252,11 @@ public final class Draw {
             return this;
         }
 
-        /** 提交并恢复 GUI 纹理状态。 */
+        /** 提交并恢复 GUI 纹理/剔除状态。 */
         public void end() {
             builder.end();
             BufferUploader.end(builder);
+            RenderSystem.enableCull();
             RenderSystem.enableTexture();
             RenderSystem.disableBlend();
         }

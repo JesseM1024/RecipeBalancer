@@ -1254,7 +1254,9 @@ public final class SolveGraphView {
         double dx = x2 - x1;
         double dy = y2 - y1;
         double length = Math.hypot(dx, dy);
-        if (length < 1e-6) {
+        // 同 addLine：NaN 会让比较失效，必须显式挡住
+        if (!(length >= 1e-6) || !Double.isFinite(x1) || !Double.isFinite(y1)
+                || !Double.isFinite(x2) || !Double.isFinite(y2)) {
             return;
         }
         double ux = dx / length;
@@ -1835,7 +1837,10 @@ public final class SolveGraphView {
         double dx = x2 - x1;
         double dy = y2 - y1;
         double dist = Math.hypot(dx, dy);
-        if (dist < 1e-6) {
+        // 用「!(x >= 阈值)」而不是「x < 阈值」：节点重合/连线长度为 0 时会出现 NaN，
+        // NaN 参与比较恒为 false，旧写法会放 NaN 顶点进缓冲，被 GPU 渲成穿屏的黑色长条。
+        if (!(dist >= 1e-6) || !Double.isFinite(x1) || !Double.isFinite(y1)
+                || !Double.isFinite(x2) || !Double.isFinite(y2)) {
             return;
         }
         double nx = -dy / dist * thickness * 0.5;
