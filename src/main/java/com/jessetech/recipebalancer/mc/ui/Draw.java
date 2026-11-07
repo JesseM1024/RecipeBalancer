@@ -14,6 +14,7 @@ import com.mojang.math.Matrix4f;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiComponent;
+import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.block.model.ItemTransforms;
 import net.minecraft.client.renderer.texture.OverlayTexture;
@@ -237,7 +238,12 @@ public final class Draw {
             this.builder = Tesselator.getInstance().getBuilder();
             RenderSystem.enableBlend();
             RenderSystem.defaultBlendFunc();
-            // disableTexture 在 1.18.2 里同时把 shader 切成 position_color
+            // ★ 1.18.2 的 disableTexture() 只关 GL 纹理，并不会切换着色器。
+            // 不显式切到 position_color，就会沿用上一笔（文字 position_color_tex、
+            // 物品 position_tex_lightmap_color）的着色器：POSITION_COLOR 顶点没有 UV，
+            // 黄灰描边因此被纹理采样成花屏或整块消失（流程图悬停/选中高亮失效）。
+            RenderSystem.setShader(GameRenderer::getPositionColorShader);
+            RenderSystem.setShaderColor(1.0f, 1.0f, 1.0f, 1.0f);
             RenderSystem.disableTexture();
             // 1.20 的 RenderType.gui() 是 NO_CULL：GUI 上随手画的四边形绕序不统一，
             // 开着背面剔除会让一半方向的线段整块消失。

@@ -45,8 +45,11 @@ public final class IconButton extends Button {
     /** 1.18.2 的可绘制入口叫 renderButton（1.19.3 起改名 renderWidget）。 */
     @Override
     public void renderButton(PoseStack pose, int mouseX, int mouseY, float partialTick) {
-        // 原版按钮底（悬停变蓝的那套贴图），只把文字换成图标
-        super.renderButton(pose, mouseX, mouseY, partialTick);
+        // 原版按钮底（悬停变蓝的那套贴图），只把文字换成图标。
+        // 18×18 这种小方块不能走 super：原版把 200×20 贴图左右各切一半硬贴，
+        // 会把圆角和上下边框切掉，看起来像贴图被压坏；这里改用九宫格。
+        Buttons.drawButtonBackground(pose, x, y, width, height,
+                46 + getYImage(isHoveredOrFocused()) * 20);
         int color = stateful && !on ? ICON_OFF : ICON_ON;
         // 1.18.2 的控件坐标是字段（x/y/width/height），没有 getX()/getY()/getWidth()
         icon.draw(new Draw(pose), x + (width - icon.width()) / 2,
