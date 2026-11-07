@@ -146,7 +146,12 @@ public final class Draw {
         boolean flat = !model.usesBlockLight();
         pose.pushPose();
         pose.translate(x + 8.0f, y + 8.0f, 100.0f);
-        pose.scale(16.0f, -16.0f, 16.0f);
+        // ★ 与 GuiGraphics.renderItem 一致：Y 翻转只用 mulPoseMatrix（只改位姿矩阵）。
+        // 写成 scale(16, -16, 16) 会顺带更新法线矩阵（PoseStack.scale 会同步 inverse-scale
+        // 法线），方块的明暗面因此错位，表现为「顶面暗、侧面亮」。
+        // 1.20.1 分支踩过同一个坑，这里照搬其修法。
+        pose.mulPoseMatrix(Matrix4f.createScaleMatrix(1.0f, -1.0f, 1.0f));
+        pose.scale(16.0f, 16.0f, 16.0f);
         // 与 renderGuiItem 完全一致的状态设置：像素风不过滤、开混合、清掉上一轮的颜色
         minecraft.getTextureManager().getTexture(TextureAtlas.LOCATION_BLOCKS).setFilter(false, false);
         RenderSystem.setShaderTexture(0, TextureAtlas.LOCATION_BLOCKS);
