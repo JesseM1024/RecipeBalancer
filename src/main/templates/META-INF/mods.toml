@@ -39,3 +39,11 @@ and bootstrap inventory support.
     versionRange="${minecraft_version_range}"
     ordering="NONE"
     side="CLIENT"
+
+# JEI 为可选依赖：编译期依赖其 API，运行期不安装时功能降级（无 JEI 录入通道）。
+[[dependencies.${mod_id}]]
+    modId="jei"
+    mandatory=false
+    versionRange="${jei_version_range}"
+    ordering="NONE"
+    side="CLIENT"

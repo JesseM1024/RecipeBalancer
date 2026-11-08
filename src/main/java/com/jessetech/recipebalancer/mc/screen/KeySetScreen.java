@@ -2,6 +2,9 @@ package com.jessetech.recipebalancer.mc.screen;
 
 import com.jessetech.recipebalancer.mc.i18n.Lang;
 import com.jessetech.recipebalancer.mc.itemmap.ItemKeyMapper;
+import com.jessetech.recipebalancer.mc.jei.JeiBookmarks;
+import com.jessetech.recipebalancer.mc.jei.JeiRuntimeHolder;
+import com.jessetech.recipebalancer.mc.jei.JeiScreenSupport;
 import com.jessetech.recipebalancer.mc.ui.AeStyle;
 import com.jessetech.recipebalancer.mc.ui.Buttons;
 import com.jessetech.recipebalancer.mc.ui.Chat;
@@ -31,7 +34,7 @@ import java.util.Set;
  *   <li>底部纵向堆叠「清空列表」「返回」。</li>
  * </ul>
  */
-public final class KeySetScreen extends RbScreen {
+public final class KeySetScreen extends RbScreen implements JeiPanelScreen {
 
     public interface Callback {
         void accept(Set<String> keys);
@@ -81,11 +84,51 @@ public final class KeySetScreen extends RbScreen {
         inventoryY = panelY + 122;
         scrollRow = Math.max(0, Math.min(scrollRow, maxScroll()));
 
-        // 清空占满整行（按两下确认）
+        // 半宽：左边清空（按两下确认），右边读 JEI 书签
+        int halfW = (PANEL_W - 16 - 4) / 2;
         addRenderableWidget(Buttons.builder(Lang.c("清空列表"), b -> clearWithConfirm())
-                .bounds(panelX + 8, panelY + 200, PANEL_W - 16, 20).build());
+                .bounds(panelX + 8, panelY + 200, halfW, 20).build());
+        addRenderableWidget(Buttons.builder(Lang.c("读取书签"), b -> addBookmarks())
+                .bounds(panelX + 8 + halfW + 4, panelY + 200, halfW, 20).build());
         addRenderableWidget(Buttons.builder(Lang.c("返回"), b -> minecraft.setScreen(parent))
                 .bounds(panelX + 8, panelY + 224, PANEL_W - 16, 20).build());
+        JeiScreenSupport.notifyGuiInit(this);
+    }
+
+    /** 一键读 JEI 右侧书签。 */
+    private void addBookmarks() {
+        // 先判 JEI 是否安装：未安装时只提示、不触发，也不能让 NoClassDefFoundError 冒出来
+        if (!JeiRuntimeHolder.installed()) {
+            status = Lang.t("JEI 未安装，快捷功能不可用");
+            return;
+        }
+        if (!JeiRuntimeHolder.ready()) {
+            status = Lang.t("JEI 不可用");
+            return;
+        }
+        Set<String> found;
+        try {
+            found = JeiBookmarks.readKeys();
+        } catch (RuntimeException | LinkageError e) {
+            status = Lang.t("JEI 不可用");
+            return;
+        }
+        if (found.isEmpty()) {
+            status = Lang.t("JEI 书签为空");
+            return;
+        }
+        int before = entries.size();
+        for (String key : found) {
+            if (entries.size() >= MAX_ENTRIES) {
+                break;
+            }
+            if (!entries.contains(key)) {
+                entries.add(key);
+            }
+        }
+        notifyChanged();
+        status = Lang.t("已读取 %s 个书签，新增 %s 个", found.size(),
+                entries.size() - before);
     }
 
     private int maxScroll() {
@@ -378,5 +421,50 @@ public final class KeySetScreen extends RbScreen {
     @Override
     public boolean isPauseScreen() {
         return false;
+    }
+
+    // JEI 面板定位
+    @Override
+    public int jeiGuiLeft() {
+        return panelX;
+    }
+
+    @Override
+    public int jeiGuiTop() {
+        return panelY;
+    }
+
+    @Override
+    public int jeiGuiWidth() {
+        return PANEL_W;
+    }
+
+    @Override
+    public int jeiGuiHeight() {
+        return PANEL_H;
+    }
+
+    /** JEI 拖拽的目标区域：可见网格（x, y, w, h），按 9 列 × 4 行算。 */
+    public int[] ghostGrid() {
+        return new int[]{panelX + 8, gridY, COLS * SLOT, ROWS * SLOT};
+    }
+
+    /** JEI 拖进来的物料：追加到清单末尾（已存在则只提示）。 */
+    public void addGhostKey(String key) {
+        if (key == null || key.isBlank()) {
+            return;
+        }
+        if (entries.contains(key)) {
+            status = Lang.t("已在列表中: %s", ItemKeyMapper.displayName(key));
+            return;
+        }
+        if (entries.size() >= MAX_ENTRIES) {
+            status = Lang.t("最多 %s 个物料", MAX_ENTRIES);
+            return;
+        }
+        entries.add(key);
+        scrollRow = Math.max(0, Math.min(scrollRow, maxScroll()));
+        notifyChanged();
+        status = Lang.t("已添加: %s", ItemKeyMapper.displayName(key));
     }
 }

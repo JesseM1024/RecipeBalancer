@@ -22,7 +22,7 @@ import java.util.List;
 import java.util.Locale;
 
 /** 已保存配方集（场景）列表：筛选 / 载入 / 另存 / 删除。 */
-public final class ScenarioListScreen extends RbScreen {
+public final class ScenarioListScreen extends RbScreen implements JeiPanelScreen {
 
     private static final int PANEL_W = 264;
     private static final int PANEL_H = 204;
@@ -269,5 +269,26 @@ public final class ScenarioListScreen extends RbScreen {
     @Override
     public boolean isPauseScreen() {
         return false;
+    }
+
+    // JEI 面板定位
+    @Override
+    public int jeiGuiLeft() {
+        return panelX;
+    }
+
+    @Override
+    public int jeiGuiTop() {
+        return panelY;
+    }
+
+    @Override
+    public int jeiGuiWidth() {
+        return PANEL_W;
+    }
+
+    @Override
+    public int jeiGuiHeight() {
+        return PANEL_H;
     }
 }

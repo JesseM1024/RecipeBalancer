@@ -16,7 +16,7 @@ import net.minecraft.network.chat.Component;
 import java.util.function.DoubleConsumer;
 
 /** 配方耗时编辑：表达式 + 单位（t/秒/分/时），确定后统一转 tick。 */
-public final class TimeScreen extends RbScreen {
+public final class TimeScreen extends RbScreen implements JeiPanelScreen {
 
     private final Screen parent;
     private final DoubleConsumer callback;
@@ -150,5 +150,26 @@ public final class TimeScreen extends RbScreen {
     @Override
     public boolean isPauseScreen() {
         return false;
+    }
+
+    // JEI 面板定位
+    @Override
+    public int jeiGuiLeft() {
+        return panelX;
+    }
+
+    @Override
+    public int jeiGuiTop() {
+        return panelY;
+    }
+
+    @Override
+    public int jeiGuiWidth() {
+        return PANEL_W;
+    }
+
+    @Override
+    public int jeiGuiHeight() {
+        return PANEL_H;
     }
 }

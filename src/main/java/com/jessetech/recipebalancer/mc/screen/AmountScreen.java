@@ -23,7 +23,7 @@ import java.util.List;
  * <p>配方原料/产物/设备用无量纲数量；目标产物用速率（/t、/s、/m、/h），
  * 内部回调统一返回**每 tick 数量**（与 ScenarioDraft 一致）。
  */
-public final class AmountScreen extends RbScreen {
+public final class AmountScreen extends RbScreen implements JeiPanelScreen {
 
     public interface Callback {
         void accept(String itemKey, double amount);
@@ -278,5 +278,26 @@ public final class AmountScreen extends RbScreen {
     @Override
     public boolean isPauseScreen() {
         return false;
+    }
+
+    // JEI 面板定位：把面板区域报给 JEI，避免物品/书签面板压住界面
+    @Override
+    public int jeiGuiLeft() {
+        return panelX;
+    }
+
+    @Override
+    public int jeiGuiTop() {
+        return panelY;
+    }
+
+    @Override
+    public int jeiGuiWidth() {
+        return panelW;
+    }
+
+    @Override
+    public int jeiGuiHeight() {
+        return panelH;
     }
 }

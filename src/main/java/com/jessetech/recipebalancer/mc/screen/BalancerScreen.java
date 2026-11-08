@@ -20,9 +20,13 @@ import com.jessetech.recipebalancer.mc.itemmap.ScenarioKeyNormalizer;
 import com.jessetech.recipebalancer.mc.ui.AeStyle;
 import com.jessetech.recipebalancer.mc.ui.Buttons;
 import com.jessetech.recipebalancer.mc.ui.Chat;
+import com.jessetech.recipebalancer.mc.jei.JeiRuntimeHolder;
+import com.jessetech.recipebalancer.mc.jei.JeiScreenSupport;
 import com.jessetech.recipebalancer.mc.ui.Draw;
 import com.jessetech.recipebalancer.mc.ui.IconButton;
 import com.jessetech.recipebalancer.mc.ui.PixelIcon;
+import net.minecraft.client.resources.sounds.SimpleSoundInstance;
+import net.minecraft.sounds.SoundEvents;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Matrix4f;
 import net.minecraft.ChatFormatting;
@@ -48,7 +52,7 @@ import java.util.Map;
  * 左键从背包拿起物品、点格子放置/删除；中键改用量或自定义物品；右键配方库两次删除。
  * 求解进入二级结果页，避免挤占一级界面。
  */
-public final class BalancerScreen extends RbScreen {
+public final class BalancerScreen extends RbScreen implements JeiPanelScreen {
 
     private static final int SLOT = 18;
     /** 左右两列图标按钮：18×18 方形，与面板外缘留 2px 缝。 */
@@ -152,6 +156,18 @@ public final class BalancerScreen extends RbScreen {
     private IconButton externalInputButton;
     private EditBox nameBox;
     private EditBox libraryFilterBox;
+
+    /**
+     * JEI 配方页按钮入口：带一个预填的编码草稿打开终端（配方仍需玩家复核后点「写入」）。
+     */
+    public static BalancerScreen withPattern(RecipePattern built) {
+        BalancerScreen screen = new BalancerScreen();
+        if (built != null) {
+            screen.pattern.copyFrom(built);
+            screen.status = Lang.t("已从 JEI 导入编码；请检查设备/产物后点「写入」");
+        }
+        return screen;
+    }
 
     public BalancerScreen() {
         super(Lang.c("RecipeBalancer · 配方编码终端"));
@@ -313,6 +329,9 @@ public final class BalancerScreen extends RbScreen {
         addRenderableWidget(Buttons.builder(Lang.c("新建"),
                         b -> newPattern())
                 .bounds(equipmentX, encodingY + 54, 40, 14).build());
+
+        // resize 后 Minecraft 不会补发 Init.Post，JEI 会一直用旧属性；手动通知
+        JeiScreenSupport.notifyGuiInit(this);
     }
 
     /**
@@ -1375,7 +1394,11 @@ public final class BalancerScreen extends RbScreen {
             return;
         }
         if (button == 1) {
-            // 右键「自动撰写」依赖 JEI 配方查询；1.18.2 线暂不移植 JEI 适配，此处留空
+            // 右键：该物质在 JEI 里只有一种配方就自动撰写并写入配方集，
+            // 有多种（如红石粉：合成 + 各种机器处理）只打开 JEI 配方页
+            if (key != null && !key.isBlank()) {
+                autoWriteFromJei(key);
+            }
             return;
         }
         if (button == 2) {
@@ -1686,5 +1709,201 @@ public final class BalancerScreen extends RbScreen {
 
     private static boolean inside(double x, double y, int rx, int ry, int rw, int rh) {
         return x >= rx && x < rx + rw && y >= ry && y < ry + rh;
+    }
+
+    // ------------------------------------------------------------------
+    // JEI ghost 拖拽 / 配方加号
+    // ------------------------------------------------------------------
+
+    public enum GhostKind {
+        INPUT, OUTPUT, EQUIPMENT, TARGET
+    }
+
+    public record GhostSlot(GhostKind kind, int index, int x, int y) {
+    }
+
+    /** 当前可见、可接收 ghost 的槽位（屏幕绝对坐标）。 */
+    public java.util.List<GhostSlot> ghostSlots() {
+        java.util.List<GhostSlot> result = new java.util.ArrayList<>();
+        for (int row = 0; row < visibleRows; row++) {
+            int y = encodingY + row * SLOT;
+            for (int col = 0; col < GRID_COLS; col++) {
+                int index = (encodingScrollRow + row) * GRID_COLS + col;
+                if (index < RecipePattern.MAX_INPUTS) {
+                    result.add(new GhostSlot(GhostKind.INPUT, index, inputX + col * SLOT, y));
+                }
+            }
+            for (int col = 0; col < OUTPUT_COLS; col++) {
+                int index = (encodingScrollRow + row) * OUTPUT_COLS + col;
+                if (index < RecipePattern.MAX_OUTPUTS) {
+                    result.add(new GhostSlot(GhostKind.OUTPUT, index, outputX + col * SLOT, y));
+                }
+            }
+        }
+        result.add(new GhostSlot(GhostKind.EQUIPMENT, 0, equipmentX, encodingY));
+        for (int row = 0; row < targetRows; row++) {
+            for (int col = 0; col < TARGET_COLS; col++) {
+                int index = (targetScrollRow + row) * TARGET_COLS + col;
+                result.add(new GhostSlot(GhostKind.TARGET, index,
+                        contentX + col * SLOT, targetY + row * SLOT));
+            }
+        }
+        return result;
+    }
+
+    public record HoveredKey(String key, int x, int y, int width, int height) {
+    }
+
+    /** JEI R/U：鼠标下的 ingredient key 与屏幕矩形（物品/流体/化学品通用）。 */
+    public HoveredKey jeiHoveredKey(double mouseX, double mouseY) {
+        int[] slot = encodingSlotAt(mouseX, mouseY);
+        if (slot != null) {
+            String key = slot[0] == 0 ? pattern.inputKey(slot[1]) : pattern.outputKey(slot[1]);
+            if (key != null) {
+                int cols = slot[0] == 0 ? GRID_COLS : OUTPUT_COLS;
+                int row = slot[1] / cols - encodingScrollRow;
+                int col = slot[1] % cols;
+                return hovered(key, (slot[0] == 0 ? inputX : outputX) + col * SLOT,
+                        encodingY + row * SLOT);
+            }
+        }
+        if (inside(mouseX, mouseY, equipmentX, encodingY, SLOT, SLOT)
+                && !pattern.equipmentKey().isBlank()) {
+            return hovered(pattern.equipmentKey(), equipmentX, encodingY);
+        }
+        int target = targetSlotAt(mouseX, mouseY);
+        if (target >= 0) {
+            List<Map.Entry<String, Double>> entries = new ArrayList<>(draft.targets().entrySet());
+            if (target < entries.size()) {
+                int row = target / TARGET_COLS - targetScrollRow;
+                int col = target % TARGET_COLS;
+                return hovered(entries.get(target).getKey(),
+                        contentX + col * SLOT, targetY + row * SLOT);
+            }
+        }
+        int library = libraryIndexAt(mouseX, mouseY);
+        if (library >= 0) {
+            String product = draft.recipes().get(library).productList().keySet()
+                    .stream().findFirst().orElse("");
+            if (!product.isEmpty()) {
+                int row = library / LIB_COLS - libraryScroll;
+                int col = library % LIB_COLS;
+                return hovered(product, contentX + col * SLOT, libraryY + row * SLOT);
+            }
+        }
+        int inventory = inventoryIndexAt(mouseX, mouseY);
+        if (inventory >= 0 && minecraft != null && minecraft.player != null) {
+            net.minecraft.world.item.ItemStack stack = minecraft.player.getInventory()
+                    .getItem(inventory);
+            if (!stack.isEmpty()) {
+                int row = inventory < 9 ? 3 : (inventory - 9) / 9;
+                int col = inventory < 9 ? inventory : (inventory - 9) % 9;
+                return new HoveredKey(ItemKeyMapper.of(stack), inventoryX + col * SLOT,
+                        inventoryY + row * SLOT, SLOT, SLOT);
+            }
+        }
+        return null;
+    }
+
+    private static HoveredKey hovered(String key, int x, int y) {
+        return key == null || key.isBlank() ? null : new HoveredKey(key, x, y, SLOT, SLOT);
+    }
+
+    public void applyGhost(GhostKind kind, int index, String key) {
+        applyGhost(kind, index, key, 1.0);
+    }
+
+    public void applyGhost(GhostKind kind, int index, String key, double amount) {
+        if (key == null || key.isBlank()) {
+            return;
+        }
+        double value = amount > 0 ? amount : 1.0;
+        switch (kind) {
+            case INPUT -> pattern.putInput(index, key, value);
+            case OUTPUT -> pattern.putOutput(index, key, value);
+            case EQUIPMENT -> pattern.setEquipmentKey(key);
+            case TARGET -> {
+                if (draft.targets().size() >= MAX_TARGETS && !draft.targets().containsKey(key)) {
+                    status = Lang.t("目标最多 %s 个", MAX_TARGETS);
+                    return;
+                }
+                draft.putTarget(key, value);
+                onDraftChanged();
+            }
+        }
+        status = "JEI ghost: " + ItemKeyMapper.displayName(key)
+                + " × " + TimeExpression.formatNumber(value);
+    }
+
+    /** 右键物质：单一配方自动新建并写入，多配方只打开 JEI 配方页。 */
+    private void autoWriteFromJei(String key) {
+        // 未装 JEI 时直接提示并中止，不触发任何导入逻辑
+        if (!JeiRuntimeHolder.installed()) {
+            status = Lang.t("JEI 未安装，快捷功能不可用");
+            return;
+        }
+        AutoRecipeHooks.Hook hook = AutoRecipeHooks.get();
+        if (hook == null) {
+            status = Lang.t("JEI 不可用");
+            return;
+        }
+        int count;
+        RecipePattern built = null;
+        try {
+            count = hook.producerCount(key);
+            if (count == 1) {
+                built = hook.singlePattern(key);
+            }
+        } catch (RuntimeException | LinkageError e) {
+            status = Lang.t("JEI 不可用");
+            return;
+        }
+        if (count <= 0) {
+            hook.showRecipes(key);
+            status = Lang.t("没找到该物质的配方");
+            return;
+        }
+        if (built == null) {
+            hook.showRecipes(key);
+            status = Lang.t("该物质有 %s 种配方，已在 JEI 中打开", count);
+            return;
+        }
+        newPattern();
+        pattern.copyFrom(built);
+        if (commitPattern(true)) {
+            status = Lang.t("已自动写入 %s 的配方", ItemKeyMapper.displayName(key));
+            // 写入成功给一次按钮点击音，和点「写入」的反馈一致
+            playClickSound();
+        }
+    }
+
+    /** 原版按钮点击音（与「写入」按钮按下时一致）。 */
+    private void playClickSound() {
+        if (minecraft != null) {
+            minecraft.getSoundManager().play(
+                    SimpleSoundInstance.forUI(SoundEvents.UI_BUTTON_CLICK, 1.0F));
+        }
+    }
+
+    // JEI 非 ContainerScreen 渲染（RecipeBalancerJeiPlugin 使用）
+    // 左右两列图标按钮贴在面板外侧，算进 GUI 范围，避免被 JEI 物品/书签面板盖住
+    @Override
+    public int jeiGuiLeft() {
+        return panelX - SIDE_PAD;
+    }
+
+    @Override
+    public int jeiGuiTop() {
+        return panelY;
+    }
+
+    @Override
+    public int jeiGuiWidth() {
+        return panelW + 2 * SIDE_PAD;
+    }
+
+    @Override
+    public int jeiGuiHeight() {
+        return panelH;
     }
 }

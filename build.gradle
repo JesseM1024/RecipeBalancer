@@ -61,6 +61,8 @@ configurations {
     runtimeClasspath.extendsFrom localRuntime
     // 只用于“解包进模组 jar”的库；不参与 mod 依赖声明
     shaded
+    // jeiModern 源码集专用：高版本 JEI（10.x）才有的 API
+    jeiModernCompile
 }
 
 // legacy 线专用：1.18.2 生产环境是 SRG 映射，本地依赖的 mod jar 也需要
@@ -70,6 +72,21 @@ obfuscation {
 }
 
 dependencies {
+    // ------------------------------------------------------------------
+    // JEI（1.18.2 只有 Forge 侧有；可选依赖）。
+    //
+    // 编译基线故意选最老的 9.4.1.113：只允许使用该版本就存在的 API，
+    // 这样同一份代码在 9.4 ~ 10.81 全区间可加载。更高版本才有的能力
+    // （IRecipeButtonControllerFactory / IRecipeCategoryDecorator / IClickableIngredientFactory）
+    // 一律走 mc/jei/JeiCapabilities 的运行期探测，不在主源码集里编译期引用。
+    //
+    // compileOnly：JEI 的类不进入产物 jar，未装 JEI 时由能力探测短路。
+    // dev 的 runClient 不能用来验证 JEI（JEI 的 config 注册在 userdev 会抛异常），
+    // 带 JEI 的验证统一放实机实例（1.18.2-Forge）。
+    // ------------------------------------------------------------------
+    compileOnly files("libs/jei-api/jei-${jei_baseline_version}.jar")
+    jeiModernCompile files("libs/jei-api/jei-${jei_verify_version}.jar")
+
     // ------------------------------------------------------------------
     // LP 求解器：Apache Commons Math（纯 Java simplex）。
     // implementation：dev 运行期 classpath；
@@ -94,12 +111,34 @@ dependencies {
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
+// ---------------------------------------------------------------------------
+// jeiModern 源码集：只放「JEI 10.x 才有」的实现（官方配方页按钮 API、装饰器）。
+//
+// 为什么单独一个源码集：9.x 没有 IRecipeButtonControllerFactory / IRecipeCategoryDecorator，
+// 这些类若编译进主源码集会让整个插件编译不过；放进独立源码集后用 10.81 编译，
+// 运行时由 JeiCapabilities 探测决定是否加载（9.x 上这些类永远不会被 Class.forName 到）。
+// ---------------------------------------------------------------------------
+sourceSets {
+    jeiModern {
+        java.srcDir 'src/jeiModern/java'
+        // 平台依赖沿用主源码集，但把「编译基线 JEI」剔除，换成高版本 JEI
+        compileClasspath = sourceSets.main.output + configurations.jeiModernCompile +
+                configurations.compileClasspath.filter {
+                    !it.name.startsWith('jei-1.18.2-')
+                }
+    }
+}
+
 // 把 shaded 库的 class 直接并入模组 jar；排除 META-INF 避免签名/清单冲突。
 tasks.named('jar') {
     from({ configurations.shaded.collect { zipTree(it) } }) {
         exclude 'META-INF/**'
         duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     }
+    // jeiModern（10.x 专属）只进产物 jar，老版本 JEI 上不会被加载。
+    // 不能挂进 sourceSets.main.output —— 那会让 compileJeiModernJava 与 classes 互相依赖。
+    dependsOn 'compileJeiModernJava'
+    from sourceSets.jeiModern.output
 }
 
 // 纯 JVM 测试：不依赖 runClient / MDG 的 dev 运行时。
@@ -161,6 +200,7 @@ var generateModMetadata = tasks.register('generateModMetadata', ProcessResources
             forge_version          : forge_version,
             forge_version_range    : forge_version_range,
             loader_version_range   : loader_version_range,
+            jei_version_range      : jei_version_range,
             mod_id                 : mod_id,
             mod_name               : mod_name,
             mod_license            : mod_license,

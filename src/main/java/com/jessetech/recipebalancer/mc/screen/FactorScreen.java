@@ -11,7 +11,7 @@ import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 
 /** 输入一个缩放系数（支持 + - * / 与括号这类简单表达式）。 */
-public final class FactorScreen extends RbScreen {
+public final class FactorScreen extends RbScreen implements JeiPanelScreen {
 
     public interface Callback {
         void accept(double factor);
@@ -101,5 +101,26 @@ public final class FactorScreen extends RbScreen {
     @Override
     public boolean isPauseScreen() {
         return false;
+    }
+
+    // JEI 面板定位
+    @Override
+    public int jeiGuiLeft() {
+        return panelX;
+    }
+
+    @Override
+    public int jeiGuiTop() {
+        return panelY;
+    }
+
+    @Override
+    public int jeiGuiWidth() {
+        return PANEL_W;
+    }
+
+    @Override
+    public int jeiGuiHeight() {
+        return PANEL_H;
     }
 }

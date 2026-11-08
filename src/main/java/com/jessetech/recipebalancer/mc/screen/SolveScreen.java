@@ -24,7 +24,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /** 求解结果二级页：只看报告，避免一级编码界面被文字挤占。 */
-public final class SolveScreen extends RbScreen {
+public final class SolveScreen extends RbScreen implements JeiPanelScreen {
 
     private final Screen parent;
     /** 注册名口径的报告（ingredient|/stack| 已被替换成显示名，普通物品仍是 registry id）。 */
@@ -395,5 +395,26 @@ public final class SolveScreen extends RbScreen {
     @Override
     public boolean isPauseScreen() {
         return false;
+    }
+
+    // JEI 面板定位：结果页也要报面板区域，否则 JEI 不认为它「有 GUI」
+    @Override
+    public int jeiGuiLeft() {
+        return panelX;
+    }
+
+    @Override
+    public int jeiGuiTop() {
+        return panelY;
+    }
+
+    @Override
+    public int jeiGuiWidth() {
+        return panelW;
+    }
+
+    @Override
+    public int jeiGuiHeight() {
+        return panelH;
     }
 }
