@@ -25,3 +25,12 @@ Thumbs.db
 _*.py
 _*.txt
 *-log.txt
+
+# 本地发布说明（只在磁盘保留，不入库）
+docs/ReleaseNote/
+
+# IDE 助手项目数据
+.codebuddy/
+
+# 临时游戏运行实例（仓库根目录下的 1.20.1 调试实例）
+1_20_1_neo/
