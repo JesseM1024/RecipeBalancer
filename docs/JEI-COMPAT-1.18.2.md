@@ -19,11 +19,11 @@
 | 一级界面额外区域（左右图标列） | `RbContainerGuiHandler#getGuiExtraAreas` | ✔ | ✔ | 容器化后的主路径 |
 | 悬停 R/U/A | `RbContainerGuiHandler#getIngredientUnderMouse` | ✔ | ✔ | 返回裸配料，由 JEI 包装 |
 | 悬停兜底 | `JeiHoverHandler`（`IGlobalGuiHandler`） | ✔ | ✔ | 容器回调不可用时仍能工作 |
-| 拖拽录入（物品/流体/化学品） | `JeiGhostHandler` / `JeiKeySetGhostHandler` | ✔ | ✔ | 编码格、设备、目标、物料清单 |
+| 拖拽录入（物品/流体/化学品） | `JeiGhostHandler` / `JeiKeySetGhostHandler` | ✔ | ✔ | 编码格、设备、目标、物料清单；高亮自绘，见下节 |
 | 右键「自动撰写」 | `JeiAutoRecipe` + `JeiPatternImporter` | ✔ | ✔ | 单配方直接写入，多配方打开 JEI |
-| 书签导入 | `JeiBookmarks` / `JeiBookmarkReader`（反射内部列表） | ✔ | ✔ | 9.x 读 `getIngredientList`，10.x 读 `getElements` |
+| 书签导入 | `JeiBookmarks` / `JeiBookmarkReader`（反射内部列表） | ✔ | ✔ | 9.4~9.6 `getIngredientList(String)`、9.7+ `getIngredientList()`、10.6+ `getElements()`，另有 `bookmarksList` 兜底 |
 | 非物品配料渲染 / 名称 | `JeiIngredientRenderer` | ✔ | ✔ | 流体、化学品按 JEI 渲染器绘制 |
-| 配方页「编码此配方」按钮 | 10.x：`src/jeiModern` 的 `RbRecipeButtonController`；9.x：`JeiRecipeOverlay` 客户端叠加层 | ✔ | ✔ | 两条路只启用一条，见下节 |
+| 配方页「编码此配方」按钮 | 10.81+：`src/jeiModern` 的 `RbRecipeButtonController`；9.x ~ 10.6：`JeiRecipeOverlay` 客户端叠加层 | ✔ | ✔ | 两条路只启用一条，见下节 |
 
 ## 配方页「编码此配方」按钮（9.x / 10.x 统一）
 
@@ -32,11 +32,17 @@
 
 | 版本 | 实现 | 说明 |
 |---|---|---|
-| JEI 10.x | `RbRecipeButtonController`（官方 `IRecipeButtonControllerFactory`） | 由 JEI 负责按钮位置/图标/点击分发 |
-| JEI 9.x | `JeiRecipeOverlay`（客户端叠加层） | 在每份配方布局右上角自绘 13×13 按钮；`DrawScreenEvent.Post` 绘制、`MouseClickedEvent.Pre` 接管点击 |
+| JEI 10.81+ | `RbRecipeButtonController`（官方 `IRecipeButtonControllerFactory`） | 由 JEI 负责按钮位置/点击分发；图标仍是 `JeiButtonSkin` |
+| JEI 9.x ~ 10.6 | `JeiRecipeOverlay`（客户端叠加层） | 10.6 只有 `IRecipeCategoryDecorator`、没有按钮工厂 API，仍走叠加层 |
 
-9.x 叠加层的配方来源：反射读 `RecipesGui.recipeLayouts`（当前页的 `RecipeLayout` 列表），
-逐份取 `getPosX/getPosY`（配方背景左上角）、`getRecipeCategory()`、`getRecipeSlots().getView()`。
+叠加层的配方来源（两套，按字段自动选择）：
+
+- 9.x：反射 `RecipesGui.recipeLayouts` → 每份取 `getPosX/getPosY`、`getRecipeCategory()`、
+  `getRecipeSlots().getView()`（槽位矩形是配方局部坐标）；
+- 10.6+：反射 `RecipesGui.layouts` → `RecipeGuiLayouts.recipeLayoutsWithButtons`
+  → `IRecipeLayoutDrawable` 的 `getRect()`（屏幕绝对坐标）、`getRecipeCategory()`、
+  `getRecipeSlotsView()`。
+
 槽位矩形由 `JeiSlots` 统一反射获取（9.x 的 `RecipeSlot` / 10.x 的 `IRecipeSlotDrawable` 都有
 `public Rect2i getRect()`），因此两代都能还原合成配方的九宫格形状。
 
@@ -47,6 +53,30 @@
   放不下时退到配方外上方，最后才是配方内部的两个角落；每个候选位置都会用槽位矩形做重叠检测；
 - 按钮**不压在槽位上**，因此悬停时 JEI 不会再叠一层物品提示（此前的「tooltip 两层文字」就是
   按钮压住槽位导致的）。点击切屏排在主线程下一 tick 执行，避免 JEI 渲染栈错位。
+
+## 幽灵拖拽高亮：改由本界面自绘
+
+JEI 把幽灵高亮画在哪个通道、用什么坐标空间，各版本不一致：
+9.x / 10.2 在 `GhostIngredientDragManager#drawTooltips` 里按绝对坐标画；10.6+ 改成容器界面的
+**前景通道**（`GuiEventHandler#onDrawForeground` → 覆盖层 `drawOnForeground` →
+`IngredientGridWithNavigation` → `GhostIngredientDragManager#drawOnForeground`），
+而该通道的位姿在 vanilla 平移 `(leftPos, topPos)` 之后又被 JEI 平移 `(-guiLeft, -guiTop)` 复位，
+补偿细节随版本变化（10.81 实测高亮整体偏右，10.6 正常）。
+
+因此本模组只让 JEI 负责**拖拽判定**：`Target#getArea()` 一律返回绝对屏幕坐标（鼠标命中、
+投放都按绝对坐标走），高亮本身由 `JeiGhostHandler` 把矩形交给 `JeiGhostHighlights`，
+再由 `BalancerScreen#render` 在 `super.render` 之后自绘（颜色取 JEI 默认：
+普通目标 `0x4013C90A`、鼠标悬停 `0x804CC959`），`shouldHighlightTargets()` 返回 `false`
+让 JEI 不要再画一遍。这样 9.x ~ 10.81 的高亮位置完全一致。
+
+拖拽开始时仍会打一行日志（目标数量、首/中/末矩形的具体坐标、GUI 原点、屏幕尺寸、JEI 版本），
+便于以后排查坐标问题：
+
+```
+[RecipeBalancer] JEI ghost 开始: 共 39 个, 首=(243,52 18x18), ...
+```
+
+`KeySetScreen` 是普通 `Screen`、不在容器前景通道里，仍由 JEI 绘制（坐标正确），未改动。
 
 日志会明确当前走哪条路：
 

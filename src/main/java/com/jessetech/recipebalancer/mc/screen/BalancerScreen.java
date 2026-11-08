@@ -175,6 +175,8 @@ public final class BalancerScreen extends RbContainerScreen implements JeiPanelS
 
     @Override
     protected void init() {
+        // 重新开界面时清掉上一轮可能残留的拖拽高亮
+        com.jessetech.recipebalancer.mc.jei.JeiGhostHighlights.end();
         // 先把 GUI 缩放调到合适：放大窗口能还原就还原，放不下最小布局就降一级
         if (restoreGuiScaleIfFits() || shrinkGuiScaleIfNeeded()) {
             return;
@@ -951,11 +953,33 @@ public final class BalancerScreen extends RbContainerScreen implements JeiPanelS
         // → 手持物品 → tooltip，与原来自绘顺序一致。
         updateOptionStates();
         super.render(pose, mouseX, mouseY, partialTick);
+        drawGhostHighlights(graphics, mouseX, mouseY);
 
         if (!carriedKey.isEmpty()) {
             ItemKeyMapper.renderIcon(graphics, font, carriedKey, mouseX - 8, mouseY - 8, null);
         }
         drawTooltips(graphics, mouseX, mouseY);
+    }
+
+    /**
+     * JEI 拖拽到本界面时的目标高亮。
+     *
+     * <p>由本界面自己画而不是交给 JEI：JEI 10.2 及以前把幽灵高亮画在 {@code drawTooltips} 的绝对坐标里，
+     * 10.6+ 改到容器界面的前景通道，坐标空间补偿不一致；10.81 实测 JEI 画出来的高亮整体偏右。
+     * 这里用和 {@code Target#getArea()} 完全相同的矩形自绘，颜色取 JEI 默认值，跨版本位置一致。
+     */
+    private void drawGhostHighlights(Draw graphics, int mouseX, int mouseY) {
+        if (!com.jessetech.recipebalancer.mc.jei.JeiGhostHighlights.active()) {
+            return;
+        }
+        for (net.minecraft.client.renderer.Rect2i area
+                : com.jessetech.recipebalancer.mc.jei.JeiGhostHighlights.areas()) {
+            boolean hovered = mouseX >= area.getX() && mouseX < area.getX() + area.getWidth()
+                    && mouseY >= area.getY() && mouseY < area.getY() + area.getHeight();
+            graphics.fill(area.getX(), area.getY(),
+                    area.getX() + area.getWidth(), area.getY() + area.getHeight(),
+                    hovered ? 0x804CC959 : 0x4013C90A);
+        }
     }
 
     /** 图标按钮没有文字，开关状态用图标明暗表示（提示语里也带当前状态）。 */
@@ -1663,6 +1687,7 @@ public final class BalancerScreen extends RbContainerScreen implements JeiPanelS
         }
         // 回到世界时把自动缩放还原，避免影响后续游玩
         restoreGuiScale();
+        com.jessetech.recipebalancer.mc.jei.JeiGhostHighlights.end();
         if (minecraft != null) {
             minecraft.setScreen(null);
         }
@@ -1915,6 +1940,18 @@ public final class BalancerScreen extends RbContainerScreen implements JeiPanelS
     @Override
     public int jeiGuiHeight() {
         return panelH;
+    }
+
+    /**
+     * 容器界面的 GUI 原点。JEI 10.6+ 的幽灵高亮画在平移 (-leftPos, -topPos) 的前景通道里，
+     * 那些版本要求目标区域用相对坐标（见 {@code JeiCapabilities#ghostAreasGuiRelative}）。
+     */
+    public int guiOriginX() {
+        return leftPos;
+    }
+
+    public int guiOriginY() {
+        return topPos;
     }
 
     /**

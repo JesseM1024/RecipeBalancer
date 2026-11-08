@@ -1,10 +1,12 @@
 package com.jessetech.recipebalancer.mc.jei;
 
+import com.jessetech.recipebalancer.RecipeBalancerMod;
 import mezz.jei.api.ingredients.ITypedIngredient;
 import mezz.jei.api.runtime.IJeiRuntime;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -13,20 +15,23 @@ import java.util.Set;
  * 书签读取的实际实现（含 {@code mezz.jei.*} 引用，只在 JEI 就绪后被加载）。
  *
  * <p>{@code IBookmarkOverlay} 只暴露「鼠标下那一个」，没有「列出全部」的公开 API，
- * 所以只能反射内部书签列表：
+ * 所以只能反射内部书签列表。各版本的入口一直在变，这里按「方法优先、字段兜底」逐级尝试：
  * <ul>
- *   <li>9.x：覆盖层持有 {@code mezz.jei.bookmarks.BookmarkList}，
- *       用 {@code getIngredientList(String)} 拿 {@code List<ITypedIngredient<?>>}；</li>
- *   <li>10.x：列表类改名 {@code mezz.jei.gui.bookmarks.BookmarkList}，
- *       用 {@code getElements()} 拿 {@code List<IElement<?>>}，元素上再取 {@code getTypedIngredient()}。</li>
+ *   <li>9.4~9.6：{@code BookmarkList#getIngredientList(String)}；</li>
+ *   <li>9.7+：同名方法改成无参 {@code getIngredientList()}（<b>参数变了，不看版本号就会漏</b>）；</li>
+ *   <li>10.6+：列表类搬到 {@code mezz.jei.gui.bookmarks}，条目改为 {@code getElements()}；</li>
+ *   <li>兜底：直接读 {@code bookmarksList} 字段里的 {@code IBookmark#getElement()#getTypedIngredient()}。</li>
  * </ul>
- * 字段名跨版本会变，这里按结构探测；都失败就返回空表（界面提示「JEI 书签为空」）。
+ * 全部失败时返回空表，并打一条 warn（只打一次），便于实机排查。
  */
 final class JeiBookmarkReader {
 
+    /** 书签列表对象可能挂在覆盖层的这些字段上（名字跨版本变过）。 */
     private static final String[] KNOWN_LIST_FIELDS = {
             "bookmarkList", "bookmarkListWrapper", "bookmarkListSource"
     };
+
+    private static boolean warned;
 
     private JeiBookmarkReader() {
     }
@@ -40,10 +45,12 @@ final class JeiBookmarkReader {
         try {
             Object overlay = runtime.getBookmarkOverlay();
             if (overlay == null) {
+                warnOnce("runtime 没有书签覆盖层");
                 return keys;
             }
             Object source = findBookmarkSource(overlay);
             if (source == null) {
+                warnOnce("找不到书签列表（覆盖层类 " + overlay.getClass().getName() + "）");
                 return keys;
             }
             for (Object typed : typedIngredients(source)) {
@@ -54,46 +61,71 @@ final class JeiBookmarkReader {
                     }
                 }
             }
-        } catch (ReflectiveOperationException | RuntimeException ignored) {
-            // JEI 内部结构变了就当没有书签
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
+            warnOnce("读取书签失败: " + e);
         }
         return keys;
     }
 
     /** 把书签列表对象里的条目统一成 {@link ITypedIngredient}。 */
     private static List<?> typedIngredients(Object source) throws ReflectiveOperationException {
-        try {
-            Method getIngredientList = source.getClass().getMethod("getIngredientList", String.class);
-            getIngredientList.setAccessible(true);
-            Object value = getIngredientList.invoke(source, "");
-            if (value instanceof List<?> list) {
-                return list;
+        // 9.7 起 getIngredientList 没有参数；9.4~9.6 需要一个 String，两种都试
+        List<?> legacy = callList(source, "getIngredientList");
+        if (legacy == null) {
+            legacy = callList(source, "getIngredientList", String.class);
+        }
+        if (legacy != null) {
+            return legacy;
+        }
+        // 10.6+：getElements() → List<IElement>，元素上取 getTypedIngredient()
+        List<?> elements = callList(source, "getElements");
+        if (elements != null) {
+            return elementsToTyped(elements);
+        }
+        // 兜底：直接读 bookmarksList 字段里的 IBookmark
+        Object bookmarks = readFieldValue(findField(source.getClass(), "bookmarksList"), source);
+        if (bookmarks instanceof List<?> list) {
+            List<Object> typed = new ArrayList<>(list.size());
+            for (Object bookmark : list) {
+                Object element = invokeNoArg(bookmark, "getElement");
+                Object ingredient = element == null ? null : invokeNoArg(element, "getTypedIngredient");
+                if (ingredient != null) {
+                    typed.add(ingredient);
+                }
             }
-        } catch (NoSuchMethodException ignored) {
-            // 10.x 没有这个方法，往下走 getElements
+            return typed;
         }
-        Method getElements = source.getClass().getMethod("getElements");
-        getElements.setAccessible(true);
-        Object elements = getElements.invoke(source);
-        if (!(elements instanceof List<?> list)) {
-            return List.of();
+        throw new NoSuchMethodException(source.getClass().getName() + " 没有可用的书签枚举入口");
+    }
+
+    private static List<?> callList(Object source, String method, Class<?>... parameterTypes) {
+        try {
+            Method found = source.getClass().getMethod(method, parameterTypes);
+            found.setAccessible(true);
+            Object[] args = new Object[parameterTypes.length];
+            for (int i = 0; i < args.length; i++) {
+                args[i] = "";
+            }
+            Object value = found.invoke(source, args);
+            return value instanceof List<?> list ? list : null;
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            return null;
         }
-        // 10.x 的条目是 IElement：取 getTypedIngredient()；9.x 已经是 ITypedIngredient
-        java.util.List<Object> typed = new java.util.ArrayList<>(list.size());
-        for (Object element : list) {
+    }
+
+    private static List<?> elementsToTyped(List<?> elements) {
+        List<Object> typed = new ArrayList<>(elements.size());
+        for (Object element : elements) {
+            if (element == null) {
+                continue;
+            }
             if (element instanceof ITypedIngredient<?>) {
                 typed.add(element);
                 continue;
             }
-            if (element == null) {
-                continue;
-            }
-            try {
-                Method getTyped = element.getClass().getMethod("getTypedIngredient");
-                getTyped.setAccessible(true);
-                typed.add(getTyped.invoke(element));
-            } catch (NoSuchMethodException ignored) {
-                // 认不出来的条目直接跳过
+            Object ingredient = invokeNoArg(element, "getTypedIngredient");
+            if (ingredient != null) {
+                typed.add(ingredient);
             }
         }
         return typed;
@@ -120,7 +152,7 @@ final class JeiBookmarkReader {
         return null;
     }
 
-    /** 字段值能提供书签列表（{@code getIngredientList} 或 {@code getElements}）就采用。 */
+    /** 字段值能提供书签列表（getIngredientList / getElements / bookmarksList）就采用。 */
     private static Object readListField(Field field, Object owner) throws IllegalAccessException {
         if (field == null) {
             return null;
@@ -130,8 +162,10 @@ final class JeiBookmarkReader {
         if (value == null) {
             return null;
         }
-        String name = value.getClass().getName();
-        if (!name.contains("BookmarkList")) {
+        if (value instanceof List<?> && "bookmarksList".equals(field.getName())) {
+            return value;
+        }
+        if (!value.getClass().getName().contains("BookmarkList")) {
             return null;
         }
         for (Method method : value.getClass().getMethods()) {
@@ -141,6 +175,31 @@ final class JeiBookmarkReader {
             }
         }
         return null;
+    }
+
+    private static Object readFieldValue(Field field, Object owner) {
+        if (field == null || owner == null) {
+            return null;
+        }
+        try {
+            field.setAccessible(true);
+            return field.get(owner);
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            return null;
+        }
+    }
+
+    private static Object invokeNoArg(Object target, String method) {
+        if (target == null) {
+            return null;
+        }
+        try {
+            Method found = target.getClass().getMethod(method);
+            found.setAccessible(true);
+            return found.invoke(target);
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            return null;
+        }
     }
 
     private static Field findField(Class<?> type, String name) {
@@ -153,5 +212,13 @@ final class JeiBookmarkReader {
             }
         }
         return null;
+    }
+
+    private static void warnOnce(String message) {
+        if (!warned) {
+            warned = true;
+            RecipeBalancerMod.LOGGER.warn(
+                    "[RecipeBalancer] JEI 书签读取不可用：{}（仅提示一次）", message);
+        }
     }
 }

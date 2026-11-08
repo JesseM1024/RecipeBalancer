@@ -12,7 +12,6 @@ import mezz.jei.api.gui.ingredient.IRecipeSlotView;
 import mezz.jei.api.gui.inputs.IJeiUserInput;
 import mezz.jei.api.recipe.RecipeIngredientRole;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiComponent;
 
 /**
  * 「编码此配方」按钮：左键把当前 JEI 配方转成编码样板，带草稿打开编码终端。
@@ -21,24 +20,21 @@ import net.minecraft.client.gui.GuiComponent;
  */
 public final class RbRecipeButtonController implements IIconButtonController {
 
-    /** 13×13 的按钮图案：深色边框 + 中间一个「＋」，与原版小图标按钮风格一致。 */
+    /** 13×13 的按钮图案：与 9.x 叠加层、1.20.1 共用同一份像素表（{@link JeiButtonSkin}）。 */
     private static final IDrawable ICON = new IDrawable() {
         @Override
         public int getWidth() {
-            return 13;
+            return JeiButtonSkin.SIZE;
         }
 
         @Override
         public int getHeight() {
-            return 13;
+            return JeiButtonSkin.SIZE;
         }
 
         @Override
         public void draw(PoseStack pose, int x, int y) {
-            GuiComponent.fill(pose, x, y, x + 13, y + 13, 0xFF373737);
-            GuiComponent.fill(pose, x + 1, y + 1, x + 12, y + 12, 0xFFC6C6C6);
-            GuiComponent.fill(pose, x + 6, y + 3, x + 8, y + 11, 0xFF1E6B2E);
-            GuiComponent.fill(pose, x + 3, y + 6, x + 11, y + 8, 0xFF1E6B2E);
+            JeiButtonSkin.drawIcon(pose, x, y);
         }
     };
 
@@ -98,7 +94,9 @@ public final class RbRecipeButtonController implements IIconButtonController {
         } catch (RuntimeException | LinkageError e) {
             return false;
         }
-        minecraft.setScreen(BalancerScreen.withPattern(pattern));
+        // 正处在 JEI 的渲染/输入栈里，切屏排到主线程下一 tick，与 1.20.1 一致
+        RecipePattern built = pattern;
+        minecraft.execute(() -> minecraft.setScreen(BalancerScreen.withPattern(built)));
         return true;
     }
 }

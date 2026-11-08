@@ -67,7 +67,8 @@ public final class JeiRecipeOverlay {
                 ScreenEvent.DrawScreenEvent.Post.class, JeiRecipeOverlay::onDraw);
         MinecraftForge.EVENT_BUS.addListener(EventPriority.NORMAL, false,
                 ScreenEvent.MouseClickedEvent.Pre.class, JeiRecipeOverlay::onClick);
-        RecipeBalancerMod.LOGGER.info("[RecipeBalancer] JEI 配方页按钮：使用客户端叠加层（{}）",
+        RecipeBalancerMod.LOGGER.info(
+                "[RecipeBalancer] JEI 配方页按钮：客户端叠加层已安装（{}；官方按钮注册成功时自动让位）",
                 JeiCapabilities.version());
     }
 
@@ -134,7 +135,8 @@ public final class JeiRecipeOverlay {
         }
         List<?> layouts = recipeLayouts(screen);
         if (layouts == null) {
-            return hits;
+            // 9.x 用 recipeLayouts；10.x 换成了 RecipeGuiLayouts，字段名不同，这里走 10.x 路径
+            return collectModern(screen);
         }
         for (Object layout : layouts) {
             if (layout == null) {
@@ -177,6 +179,98 @@ public final class JeiRecipeOverlay {
             }
         }
         return hits;
+    }
+
+    /**
+     * 10.x（含没有官方按钮 API 的 10.6）的布局枚举：
+     * {@code RecipesGui.layouts} → {@code RecipeGuiLayouts.recipeLayoutsWithButtons}
+     * → 每项取 {@code IRecipeLayoutDrawable}（{@code recipeLayout()/getRecipeLayout()}）。
+     *
+     * <p>10.x 的布局矩形是<b>屏幕绝对坐标</b>，所以按钮直接贴在配方右侧的按钮列，
+     * 不需要再做局部坐标换算。
+     */
+    private static List<Hit> collectModern(Screen screen) {
+        List<Hit> hits = new ArrayList<>();
+        Object guiLayouts = readFieldValue(findField(screen.getClass(), "layouts"), screen);
+        if (guiLayouts == null) {
+            warnOnce("找不到 RecipesGui.layouts 字段（10.x）");
+            return hits;
+        }
+        Object raw = readFieldValue(findListField(guiLayouts.getClass()), guiLayouts);
+        if (!(raw instanceof List<?> layouts)) {
+            warnOnce("找不到 RecipeGuiLayouts 的布局列表字段");
+            return hits;
+        }
+        for (Object item : layouts) {
+            Object layout = invokeAny(item, "recipeLayout", "getRecipeLayout");
+            if (layout == null) {
+                continue;
+            }
+            Object rectValue = invoke(layout, "getRect");
+            IRecipeCategory<?> category = asCategory(invoke(layout, "getRecipeCategory"));
+            Object view = invoke(layout, "getRecipeSlotsView");
+            if (!(rectValue instanceof Rect2i rect) || category == null
+                    || !(view instanceof IRecipeSlotsView slotsView)) {
+                continue;
+            }
+            List<JeiSlots.Slot> slots = JeiSlots.fromView(slotsView);
+            if (slots.isEmpty()) {
+                continue;
+            }
+            // 配方右侧的按钮列（JEI 自带按钮上方一格），与 1.20.1 的位置一致
+            int x = clamp(rect.getX() + rect.getWidth() + BORDER_PADDING + 2, screen.width);
+            int y = clamp(rect.getY() + rect.getHeight() - BUTTON - (BUTTON + BUTTON_SPACING),
+                    screen.height);
+            if (duplicated(hits, x, y)) {
+                continue;
+            }
+            hits.add(new Hit(x, y, category, slots));
+        }
+        return hits;
+    }
+
+    private static boolean duplicated(List<Hit> hits, int x, int y) {
+        for (Hit existing : hits) {
+            if (existing.x() == x && existing.y() == y) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static Object readFieldValue(Field field, Object owner) {
+        if (field == null || owner == null) {
+            return null;
+        }
+        try {
+            field.setAccessible(true);
+            return field.get(owner);
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            return null;
+        }
+    }
+
+    /** 在类层级里找第一个 {@code List} 类型的字段（10.x 的布局列表）。 */
+    private static Field findListField(Class<?> type) {
+        for (Class<?> current = type; current != null && current != Object.class;
+             current = current.getSuperclass()) {
+            for (Field field : current.getDeclaredFields()) {
+                if (List.class.isAssignableFrom(field.getType())) {
+                    return field;
+                }
+            }
+        }
+        return null;
+    }
+
+    private static Object invokeAny(Object target, String... methods) {
+        for (String method : methods) {
+            Object value = invoke(target, method);
+            if (value != null) {
+                return value;
+            }
+        }
+        return null;
     }
 
     /**
