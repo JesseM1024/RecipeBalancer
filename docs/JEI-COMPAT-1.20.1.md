@@ -118,6 +118,11 @@ NeoForge 1.20.1 侧没有可用的 JEI，因此那一边 JEI 相关功能整体�
 二级界面（`AmountScreen`/`KeySetScreen`/`TimeScreen`/`ScenarioListScreen`/`SolveScreen`/`FactorScreen`）
 仍是普通 `Screen`，继续走 `addGuiScreenHandler` + `JeiGuiProperties`，行为不变。
 
+**拖拽高亮统一自绘**：`KeySetScreen`（无限外部供应 / 循环亏损补充的物料清单）虽然还是普通 `Screen`，
+但 JEI 对非容器界面会经 `drawTooltips` 与 `drawOnForeground` 两条路径各画一遍幽灵高亮，
+实机上就是「同一块网格画了两次」。因此它和一级界面共用 `JeiGhostHighlights#draw`：
+`shouldHighlightTargets()` 返回 `false`，界面在内容画完后自己画一次。
+
 ## 4. 实机验证矩阵（1.20.1-Forge 实例）
 
 做法：把目标版本的 `jei-1.20.1-forge-*.jar` 放进
