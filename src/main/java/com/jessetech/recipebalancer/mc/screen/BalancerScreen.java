@@ -59,7 +59,7 @@ import java.util.Map;
  * 左键从背包拿起物品、点格子放置/删除；中键改用量或自定义物品；右键配方库两次删除。
  * 求解进入二级结果页，避免挤占一级界面。
  */
-public final class BalancerScreen extends Screen implements JeiPanelScreen {
+public final class BalancerScreen extends RbContainerScreen {
 
     private static final int SLOT = 18;
     /** 左右两列图标按钮：18×18 方形，与面板外缘留 2px 缝。 */
@@ -192,6 +192,8 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
 
     @Override
     protected void init() {
+        // 重新开界面时清掉上一轮可能残留的拖拽高亮
+        com.jessetech.recipebalancer.mc.jei.JeiGhostHighlights.end();
         // 先把 GUI 缩放调到合适：放大窗口能还原就还原，放不下最小布局就降一级
         if (restoreGuiScaleIfFits() || shrinkGuiScaleIfNeeded()) {
             return;
@@ -210,6 +212,14 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
         // 配平面板保持屏幕正中；JEI 自己填充 guiRight 之外的剩余空间
         panelX = (width - panelW) / 2;
         panelY = 4;
+
+        // 容器界面的面板尺寸/位置：AbstractContainerScreen.init() 会按
+        // (width - imageWidth)/2 算 leftPos，这里把值对齐到本界面的 panelX/panelY。
+        imageWidth = panelW;
+        imageHeight = panelH;
+        super.init();
+        leftPos = panelX;
+        topPos = panelY;
 
         // 固定区域：工作区名/目标/配方库/配方库筛选行/编码/背包/状态
         // 编码最多 4 行；剩余高度全部给配方库
@@ -448,8 +458,18 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
     // 渲染
     // ------------------------------------------------------------------
 
-    // 1.20.1 的 Screen.renderBackground 不带鼠标坐标，而这里的高亮要用鼠标位置：
-    // 改成私有方法，在 render() 开头（super.render 之前）调用，保证铺底顺序不变。
+    /**
+     * 容器界面的背景钩子：{@code AbstractContainerScreen.render} 会在画控件之前调它，
+     * 1.20.1 的重载自带鼠标坐标，正好满足本界面按悬停决定高亮的需求。
+     *
+     * <p>绘制坐标是<b>绝对屏幕坐标</b>（此时位姿尚未平移 leftPos/topPos），
+     * 与原来的自绘逻辑完全一致。
+     */
+    @Override
+    protected void renderBg(GuiGraphics graphics, float partialTick, int mouseX, int mouseY) {
+        drawBackground(graphics, mouseX, mouseY);
+    }
+
     private void drawBackground(GuiGraphics graphics, int mouseX, int mouseY) {
         graphics.fill(0, 0, width, height, 0xE0101010);
         AeStyle.panel(graphics, panelX, panelY, panelW, panelH);
@@ -1020,14 +1040,36 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         updateOptionStates();
-        // 1.20.1 的 Screen.render 不会自动调 renderBackground，这里手动铺底
-        drawBackground(graphics, mouseX, mouseY);
+        // 顺序：super.render 内部先调 renderBg（背景+内容）再画控件；
+        // 之后是拖拽高亮 → 手持物品 → tooltip。
         super.render(graphics, mouseX, mouseY, partialTick);
+        drawGhostHighlights(graphics, mouseX, mouseY);
 
         if (!carriedKey.isEmpty()) {
             ItemKeyMapper.renderIcon(graphics, font, carriedKey, mouseX - 8, mouseY - 8, null);
         }
         drawTooltips(graphics, mouseX, mouseY);
+    }
+
+    /**
+     * JEI 拖拽到本界面时的目标高亮。
+     *
+     * <p>由本界面自己画而不是交给 JEI：不同 JEI 版本把幽灵高亮画在不同的绘制通道与坐标空间里，
+     * 1.18.2 分支上 10.81 实测 JEI 画出来的高亮会整体偏移。这里用和
+     * {@code Target#getArea()} 完全相同的矩形自绘，颜色取 JEI 默认值，跨版本位置一致。
+     */
+    private void drawGhostHighlights(GuiGraphics graphics, int mouseX, int mouseY) {
+        if (!com.jessetech.recipebalancer.mc.jei.JeiGhostHighlights.active()) {
+            return;
+        }
+        for (net.minecraft.client.renderer.Rect2i area
+                : com.jessetech.recipebalancer.mc.jei.JeiGhostHighlights.areas()) {
+            boolean hovered = mouseX >= area.getX() && mouseX < area.getX() + area.getWidth()
+                    && mouseY >= area.getY() && mouseY < area.getY() + area.getHeight();
+            graphics.fill(area.getX(), area.getY(),
+                    area.getX() + area.getWidth(), area.getY() + area.getHeight(),
+                    hovered ? 0x804CC959 : 0x4013C90A);
+        }
     }
 
     /** 图标按钮没有文字，开关状态用图标明暗表示（提示语里也带当前状态）。 */
@@ -1784,6 +1826,7 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
         }
         // 回到世界时把自动缩放还原，避免影响后续游玩
         restoreGuiScale();
+        com.jessetech.recipebalancer.mc.jei.JeiGhostHighlights.end();
         if (minecraft != null) {
             minecraft.setScreen(null);
         }
@@ -1794,6 +1837,13 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
         if (modifiers == 0 && !(getFocused() instanceof net.minecraft.client.gui.components.EditBox)
                 && com.jessetech.recipebalancer.mc.keybind.RbKeyMappings.OPEN.matches(keyCode, scanCode)) {
             onClose();
+            return true;
+        }
+        // 容器基类把「背包键」实现成 onClose()（原版会进而 player.closeContainer()）。
+        // 本界面没有服务端菜单，这条路径只会产生无意义的网络包，直接吞掉
+        // （原来是普通 Screen，背包键本来就没有动作）。输入框聚焦时不吞，正常输入字符。
+        if (!(getFocused() instanceof net.minecraft.client.gui.components.EditBox)
+                && minecraft != null && minecraft.options.keyInventory.matches(keyCode, scanCode)) {
             return true;
         }
         return super.keyPressed(keyCode, scanCode, modifiers);
@@ -1961,25 +2011,19 @@ public final class BalancerScreen extends Screen implements JeiPanelScreen {
                 + " × " + TimeExpression.formatNumber(value);
     }
 
-    // JEI 非 ContainerScreen 渲染（RecipeBalancerJeiPlugin 使用）
-    // 左右两列图标按钮贴在面板外侧，算进 GUI 范围，避免被 JEI 物品/书签面板盖住
-    @Override
-    public int jeiGuiLeft() {
-        return panelX - SIDE_PAD;
-    }
-
-    @Override
-    public int jeiGuiTop() {
-        return panelY;
-    }
-
-    @Override
-    public int jeiGuiWidth() {
-        return panelW + 2 * SIDE_PAD;
-    }
-
-    @Override
-    public int jeiGuiHeight() {
-        return panelH;
+    /**
+     * 供 JEI 容器处理器报告「GUI 之外但仍属于本界面」的区域。
+     *
+     * <p>左右两列 18×18 图标按钮贴在面板外侧，不算面板的一部分；
+     * 报成额外区域后，JEI 的物品/书签面板会把它们让开，
+     * 不再需要原来那种「把 guiXSize 报大」的 hack。
+     */
+    public java.util.List<net.minecraft.client.renderer.Rect2i> jeiExtraAreas() {
+        java.util.List<net.minecraft.client.renderer.Rect2i> areas = new java.util.ArrayList<>(2);
+        areas.add(new net.minecraft.client.renderer.Rect2i(panelX - SIDE_PAD, panelY,
+                SIDE_PAD, panelH));
+        areas.add(new net.minecraft.client.renderer.Rect2i(panelX + panelW, panelY,
+                SIDE_PAD, panelH));
+        return areas;
     }
 }

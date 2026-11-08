@@ -1,6 +1,6 @@
 # 1.20.1 分支的 JEI 兼容说明（JEI 15.x）
 
-适用分支：`1.20.1-neo`（产物 `recipebalancer-0.1.6-1.20.1.jar`）
+适用分支：`1.20.1-neo`（产物 `recipebalancer-0.3.0-1.20.1.jar`）
 JEI 在 1.20.1 **只有 Forge 侧发布**，本模组的 jar 同时可用于 Forge 1.20.1 与 NeoForge 1.20.1；
 NeoForge 1.20.1 侧没有可用的 JEI，因此那一边 JEI 相关功能整体不启用。
 
@@ -68,14 +68,55 @@ NeoForge 1.20.1 侧没有可用的 JEI，因此那一边 JEI 相关功能整体�
 | `JeiBookmarks` | 书签导入入口（先 `ready()` 短路） | 否 |
 | `JeiBookmarkReader` | 书签反射实现（仅 JEI 就绪后加载） | 是 |
 | `RecipeBalancerJeiPlugin` | `@JeiPlugin` 注册入口 | 是 |
-| `JeiGuiProperties` | `IGuiProperties`（15.x getter 风格） | 是 |
-| `JeiGhostHandler` | JEI → 槽位拖拽 | 是 |
-| `JeiHoverKeys` / `JeiLegacyClickHandler` | 悬停槽位 → 可点击配料（R/U/A） | 是 |
+| `ClientEditorMenu` | 纯客户端「零槽位空菜单」（`MenuType` 自造不注册、`containerId=0x7FFF`） | 否 |
+| `RbContainerScreen` | 容器界面基类：中和点槽/标签/关闭链路 | 否 |
+| `JeiGuiProperties` | 二级界面（仍是普通 `Screen`）的 `IGuiProperties` | 是 |
+| `RbContainerGuiHandler` | 一级界面的 `IGuiContainerHandler`：额外区域 + 悬停配料 | 是 |
+| `JeiGhostHandler` | JEI → 槽位拖拽判定（高亮交给 `JeiGhostHighlights` 自绘） | 是 |
+| `JeiGhostHighlights` | 拖拽高亮矩形快照（绝对坐标） | 否 |
+| `JeiHoverKeys` / `JeiLegacyClickHandler` | 悬停槽位 → 可点击配料（容器处理器为主，全局处理器兜底） | 是 |
 | `JeiIngredientMapper` / `JeiIngredientRenderer` | 配料 ↔ `ingredient|…` key、非物品渲染与提示 | 是 |
 | `JeiPatternImporter` / `JeiAutoRecipe` | JEI 配方 → 编码样板；「自动撰写」钩子 | 是 |
 | `JeiLegacyRecipeButton` / `JeiCraftableSlots` | 15.3~15.47 的配方页按钮（装饰器自绘 + 左键边沿判定） | 是 |
 | `JeiButtonSkin` | 13×13 按钮图案，**与 main 分支同一份逐像素表** | 否 |
 | `src/jeiModern/RbRecipeButtonFactory` / `RbRecipeButtonController` / `JeiModernRegister` | 官方按钮 API 实现（用 JEI 15.74 编译，运行期按能力探测加载） | 是 |
+
+## 3.1 一级界面容器化（0.3.0）
+
+**动机**：与 1.18.2 分支统一结构；拿到 JEI 只对容器界面开放的
+`IGuiContainerHandler`；为将来服务端也装模组时的配方转移留出菜单骨架。
+
+**做法**：`BalancerScreen` 从普通 `Screen` 改为
+`RbContainerScreen`（`AbstractContainerScreen<ClientEditorMenu>`），内容仍在
+`renderBg(GuiGraphics, float, int, int)` 里整屏自绘，面板坐标即 `leftPos/topPos`、
+`imageWidth/imageHeight = panelW/panelH`。
+
+**纯客户端保证**（逐条中和原版容器行为，已按 1.20.1 源码核实）：
+
+| 原版行为 | 触发点 | 本模组处理 |
+|---|---|---|
+| 点槽发包 `gameMode.handleInventoryMouseClick` | `AbstractContainerScreen#slotClicked` | `RbContainerScreen#slotClicked` 空实现；空菜单没有槽位，`hoveredSlot` 恒为 null |
+| 点击面板外丢弃物品（`slotId=-999`） | `mouseClicked` → `slotClicked` | 同上，被空实现吞掉 |
+| E 键关闭（`player.closeContainer()`） | `keyPressed` → `onClose` | `BalancerScreen#keyPressed` 在输入框未聚焦时直接吞掉背包键 |
+| 关闭界面 `player.closeContainer()` | `onClose` | 覆写为只 `setScreen(null)`（落库/草稿/命名/缩放还原顺序不变） |
+| 容器标题/「物品栏」标签 | `renderLabels` | 空实现（界面自绘） |
+| 快捷栏交换 / 丢弃 / 拾取 | `keyPressed`、`checkHotbarMouseClicked` | 都要求 `hoveredSlot != null`，空菜单永远走不到 |
+| 玩家死亡时 `closeContainer()` | `AbstractContainerScreen#tick` | 原版行为：死亡本身就会关界面，保留 |
+
+菜单不注册 `MenuType`/`MenuScreens`，`containerId` 取 `0x7FFF`（服务端 id 从 1 递增，撞不到），
+从不发送任何容器包，因此多人游戏、服务端未装本模组时照常工作。
+
+**JEI 对接变化**：
+
+| 项目 | 容器化前 | 容器化后 |
+|---|---|---|
+| 面板属性 | `addGuiScreenHandler(BalancerScreen, JeiGuiProperties)`，`guiXSize` 虚报为 `panelW + 2*SIDE_PAD` | JEI 自带的 `AbstractContainerScreen` 默认处理器按 `leftPos/topPos/imageWidth/imageHeight` 推导 |
+| 左右图标列 | 靠虚报宽度让面板让开 | `RbContainerGuiHandler#getGuiExtraAreas` 报两块额外区域 |
+| 悬停 R/U/A | 全局处理器 `JeiLegacyClickHandler` | `RbContainerGuiHandler#getClickableIngredientUnderMouse` 为主（JEI 传绝对鼠标坐标），全局处理器保留兜底 |
+| 拖拽高亮 | 交给 JEI 画 | `shouldHighlightTargets()=false`，界面按同一份绝对坐标自绘（普通 `0x4013C90A`、悬停 `0x804CC959`） |
+
+二级界面（`AmountScreen`/`KeySetScreen`/`TimeScreen`/`ScenarioListScreen`/`SolveScreen`/`FactorScreen`）
+仍是普通 `Screen`，继续走 `addGuiScreenHandler` + `JeiGuiProperties`，行为不变。
 
 ## 4. 实机验证矩阵（1.20.1-Forge 实例）
 
@@ -92,9 +133,9 @@ NeoForge 1.20.1 侧没有可用的 JEI，因此那一边 JEI 相关功能整体�
 | 用例 | 15.0.0.12 | 15.3.0.8 | 15.12.2.51 | 15.20/15.21 | 15.48 | 15.56 | 15.74 | 无 JEI |
 |---|---|---|---|---|---|---|---|
 | 启动无 `NoClassDefFound` / `NoSuchMethod` | | | | | | | ✔（dev 已验证） |
-| 日志出现 `[RecipeBalancer] JEI 15.x…` 与「已用全局处理器注册」 | | | | | | | n/a |
-| JEI 面板不遮挡本模组 GUI（面板定位） | | | | | | | n/a |
-| 从 JEI 拖物品到槽位 | | | | | | | n/a |
+| 日志出现 `[RecipeBalancer] JEI 15.x…`、「容器处理器：已注册」与「全局处理器兜底」 | | | | | | | n/a |
+| JEI 面板不遮挡本模组 GUI（左右图标列让位） | | | | | | | n/a |
+| 从 JEI 拖物品到槽位（绿色高亮正好压在格子上） | | | | | | | n/a |
 | 书签一键导入 | | | | | | | n/a |
 | 配方页出现「编码此配方」按钮并可用 | | | | | | | n/a |
 | 悬停槽位 R/U/A | | | | | | | n/a |
@@ -106,6 +147,9 @@ NeoForge 1.20.1 侧没有可用的 JEI，因此那一边 JEI 相关功能整体�
   （JEI 只支持正式环境），因此带 JEI 的验证只能在实机实例做。
 - 书签列表靠反射 JEI 内部字段，跨版本失败时返回空表（界面提示「JEI 书签为空」），不影响其它功能。
 - JEI 面板属性刷新同样靠反射，失败时退回 `ScreenEvent.Init.Post`（只告警一次）。
-- 新增的「屏幕处理器 + 工厂」悬停重载没有实现（走的是全局处理器旧重载）；若实测发现某个版本上
-  R/U/A 不生效，再补一个「只引用新 API」的类按能力探测挂载。
+- 容器处理器实现的是 15.x 全区间都有的
+  `getClickableIngredientUnderMouse(T, double, double)`（老式重载）；更新的
+  「工厂重载」没有实现，其默认实现会转调老式重载，因此不需要按版本分支。
+- 容器化后 `AbstractContainerScreen#tick` 在玩家死亡时会调用 `player.closeContainer()`：
+  这是原版行为（死亡本来就会关界面），未做额外处理。
 - 上表版本号只表示「该样本里有 / 没有」，不代表精确引入版本；判定始终走运行期能力探测。

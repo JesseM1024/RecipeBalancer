@@ -27,3 +27,9 @@ Thumbs.db
 _*.py
 _*.txt
 *-log.txt
+
+# Local release / publish notes (kept on disk, not tracked)
+docs/ReleaseNote/
+
+# IDE assistant project data
+.codebuddy/

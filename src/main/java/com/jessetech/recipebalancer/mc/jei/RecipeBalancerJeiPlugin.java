@@ -24,14 +24,15 @@ import java.util.List;
 /**
  * RecipeBalancer 的 JEI 插件入口（1.20.1 / JEI 15.x）。
  *
- * <p>JEI 只自动识别 {@code AbstractContainerScreen}，本模组全是自定义 {@code Screen}，
- * 因此要逐个注册 {@code IGuiProperties} 告诉 JEI 面板该贴在哪一侧。
+ * <p>一级界面（配方编码主界面）已容器化，走 JEI 对 {@code AbstractContainerScreen} 开放的
+ * {@link RbContainerGuiHandler}（额外区域 + 悬停配料）；其余二级界面仍是自定义 {@code Screen}，
+ * 逐个注册 {@code IGuiProperties} 告诉 JEI 面板该贴在哪一侧。
  *
  * <p><b>版本策略</b>：本类只使用 JEI 15.3.0.8 就存在的 API（编译基线），
  * 更高版本才有的能力（配方页按钮 API、悬停工厂重载）由 {@link JeiCapabilities} 探测，
  * 未命中时退回 15.x 全区间可用的旧路径：
  * <ul>
- *   <li>悬停 R/U/A：{@link JeiLegacyClickHandler}（{@code IGlobalGuiHandler}）；</li>
+ *   <li>悬停 R/U/A：容器处理器为主，{@link JeiLegacyClickHandler}（{@code IGlobalGuiHandler}）兜底；</li>
  *   <li>配方页按钮：{@link JeiLegacyRecipeButton}（{@code IRecipeCategoryDecorator} 自绘）。</li>
  * </ul>
  */
@@ -104,9 +105,19 @@ public final class RecipeBalancerJeiPlugin implements IModPlugin {
             RecipeBalancerMod.LOGGER.warn(
                     "[RecipeBalancer] JEI 面板定位不可用: {}", t.toString());
         }
-        // 悬停查询：本地 8 个样本里全局处理器的旧重载一直存在，始终注册它。
+        // 主路径：一级界面已是容器界面，走 JEI 只对容器开放的 IGuiContainerHandler
+        // （额外区域 + 悬停配料，15.0~15.74 全区间可用）。
+        try {
+            registration.addGuiContainerHandler(BalancerScreen.class,
+                    new RbContainerGuiHandler());
+            RecipeBalancerMod.LOGGER.info("[RecipeBalancer] JEI 容器处理器：已注册（一级界面）");
+        } catch (Throwable t) {
+            RecipeBalancerMod.LOGGER.warn(
+                    "[RecipeBalancer] JEI 容器处理器注册失败: {}", t.toString());
+        }
+        // 兜底：本地 8 个样本里全局处理器的旧重载一直存在，始终注册它。
         // 较新的样本里另有「屏幕处理器 + 工厂」重载，但其默认实现返回 empty，
-        // 注册全局处理器既不会冲突，也能覆盖「JEI 先问屏幕处理器、拿不到再问全局」的分支。
+        // 注册全局处理器既不会冲突，也能覆盖「JEI 先问容器处理器、拿不到再问全局」的分支。
         try {
             registration.addGlobalGuiHandler(new JeiLegacyClickHandler());
             RecipeBalancerMod.LOGGER.info(
@@ -127,8 +138,8 @@ public final class RecipeBalancerJeiPlugin implements IModPlugin {
     }
 
     private static void registerScreenHandlers(IGuiHandlerRegistration registration) {
-        registration.addGuiScreenHandler(BalancerScreen.class,
-                screen -> JeiGuiProperties.of(screen, screen));
+        // 一级界面已改为容器界面，改由 addGuiContainerHandler 注册（见 registerGuiHandlers），
+        // 这里只处理仍是普通 Screen 的二级界面。
         registration.addGuiScreenHandler(AmountScreen.class,
                 screen -> JeiGuiProperties.of(screen, screen));
         registration.addGuiScreenHandler(KeySetScreen.class,
