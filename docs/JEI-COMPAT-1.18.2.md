@@ -76,7 +76,11 @@ JEI 把幽灵高亮画在哪个通道、用什么坐标空间，各版本不一�
 [RecipeBalancer] JEI ghost 开始: 共 39 个, 首=(243,52 18x18), ...
 ```
 
-`KeySetScreen` 是普通 `Screen`、不在容器前景通道里，仍由 JEI 绘制（坐标正确），未改动。
+`KeySetScreen`（无限外部供应 / 循环亏损补充的物料清单）同样是普通 `Screen`，但它也改成自绘：
+JEI 对普通 `Screen` 会经 `drawTooltips` 与 `drawOnForeground` 两条路径各画一遍，
+实机上表现为「同一块网格高亮画了两次」（两层叠加更亮、边缘更糊）。
+两个屏现在共用 `JeiGhostHighlights#draw`，每帧只在内容画完后调用一次，
+`shouldHighlightTargets()` 一律返回 `false`。
 
 日志会明确当前走哪条路：
 
