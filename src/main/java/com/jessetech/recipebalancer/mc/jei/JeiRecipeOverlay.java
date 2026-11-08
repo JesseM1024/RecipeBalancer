@@ -3,6 +3,7 @@ package com.jessetech.recipebalancer.mc.jei;
 import com.jessetech.recipebalancer.RecipeBalancerMod;
 import com.jessetech.recipebalancer.core.model.RecipePattern;
 import com.jessetech.recipebalancer.mc.i18n.Lang;
+import com.jessetech.recipebalancer.mc.itemmap.ProductIndex;
 import com.jessetech.recipebalancer.mc.screen.BalancerScreen;
 import com.mojang.blaze3d.vertex.PoseStack;
 import mezz.jei.api.gui.ingredient.IRecipeSlotsView;
@@ -49,9 +50,18 @@ public final class JeiRecipeOverlay {
     /** JEI 槽位边长（16 物品格 + 1px 边框，取 18 做保守的重叠判断）。 */
     private static final int SLOT = 18;
 
+    /** 蓝色高亮的缓存时长：与 1.20.1 一样 500ms 重算一次，避免每帧全量判定。 */
+    private static final long HIGHLIGHT_REFRESH_MS = 500L;
+
     private static boolean installed;
     /** 反射失败只提示一次，避免每帧刷日志。 */
     private static boolean warned;
+
+    /** 高亮缓存：按钮位置（每份配方唯一）→ 该配方里「配方库能自产」的绝对矩形。 */
+    private static int cachedX = Integer.MIN_VALUE;
+    private static int cachedY = Integer.MIN_VALUE;
+    private static long cachedAt;
+    private static List<Rect2i> cachedRects = List.of();
 
     private JeiRecipeOverlay() {
     }
@@ -86,6 +96,10 @@ public final class JeiRecipeOverlay {
         int mouseY = event.getMouseY();
         for (Hit hit : hits) {
             boolean hovered = inside(mouseX, mouseY, hit.x(), hit.y());
+            if (hovered) {
+                // 悬停按钮时，把配方库里已有配方的槽位标蓝（与 1.20.1 同色同画法）
+                drawCraftableHighlights(pose, hit);
+            }
             JeiButtonSkin.draw(pose, hit.x(), hit.y(), hovered);
             if (hovered) {
                 screen.renderTooltip(pose, Lang.c("编码此配方到 RecipeBalancer"),
@@ -124,8 +138,37 @@ public final class JeiRecipeOverlay {
         return runtime != null && runtime.getRecipesGui() == screen;
     }
 
-    /** 一个可点击的按钮位置 + 该配方的编码数据。 */
-    private record Hit(int x, int y, IRecipeCategory<?> category, List<JeiSlots.Slot> slots) {
+    /** 一个可点击的按钮位置 + 该配方的绝对矩形 + 编码数据。 */
+    private record Hit(int x, int y, Rect2i layoutRect, IRecipeCategory<?> category,
+                       List<JeiSlots.Slot> slots) {
+    }
+
+    /**
+     * 悬停「编码此配方」按钮时，把配方库里已有生产配方的物质标蓝。
+     *
+     * <p>配色、1px 描边与绘制顺序与 1.20.1 的 {@code JeiHighlightOverlay} 完全一致；
+     * 结果按按钮位置缓存 500ms，避免每帧对整份配方做候选配料判定。
+     */
+    private static void drawCraftableHighlights(PoseStack pose, Hit hit) {
+        long now = System.currentTimeMillis();
+        if (hit.x() != cachedX || hit.y() != cachedY || now - cachedAt >= HIGHLIGHT_REFRESH_MS) {
+            cachedX = hit.x();
+            cachedY = hit.y();
+            cachedAt = now;
+            cachedRects = craftableRects(hit);
+        }
+        for (Rect2i rect : cachedRects) {
+            JeiHighlightOverlay.draw(pose, rect);
+        }
+    }
+
+    private static List<Rect2i> craftableRects(Hit hit) {
+        List<Rect2i> rects = new ArrayList<>();
+        ProductIndex index = ProductIndex.current();
+        for (JeiSlots.Slot slot : JeiCraftableSlots.filter(hit.slots(), index)) {
+            rects.add(JeiSlots.absolute(slot, hit.layoutRect()));
+        }
+        return rects;
     }
 
     private static List<Hit> collect(Screen screen) {
@@ -164,7 +207,8 @@ public final class JeiRecipeOverlay {
                 // 取不到槽位就不画按钮，避免点出一个空样板
                 continue;
             }
-            int[] local = place(width, height, slotRects(slots));
+            Rect2i layoutRect = new Rect2i(posX, posY, width, height);
+            int[] local = place(width, height, slotRects(slots, layoutRect));
             int x = clamp(posX + local[0], screen.width);
             int y = clamp(posY + local[1], screen.height);
             boolean duplicated = false;
@@ -175,7 +219,7 @@ public final class JeiRecipeOverlay {
                 }
             }
             if (!duplicated) {
-                hits.add(new Hit(x, y, category, slots));
+                hits.add(new Hit(x, y, layoutRect, category, slots));
             }
         }
         return hits;
@@ -224,7 +268,7 @@ public final class JeiRecipeOverlay {
             if (duplicated(hits, x, y)) {
                 continue;
             }
-            hits.add(new Hit(x, y, category, slots));
+            hits.add(new Hit(x, y, rect, category, slots));
         }
         return hits;
     }
@@ -294,11 +338,12 @@ public final class JeiRecipeOverlay {
         return candidates[0];
     }
 
-    private static List<Rect2i> slotRects(List<JeiSlots.Slot> slots) {
+    /** 槽位矩形换算成配方局部坐标（按钮摆位用；9.x 给的是绝对坐标）。 */
+    private static List<Rect2i> slotRects(List<JeiSlots.Slot> slots, Rect2i layoutRect) {
         List<Rect2i> rects = new ArrayList<>(slots.size());
         for (JeiSlots.Slot slot : slots) {
             if (slot.hasRect()) {
-                rects.add(new Rect2i(slot.x(), slot.y(), SLOT, SLOT));
+                rects.add(JeiSlots.local(slot, layoutRect));
             }
         }
         return rects;

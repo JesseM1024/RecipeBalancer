@@ -24,6 +24,7 @@
 | 书签导入 | `JeiBookmarks` / `JeiBookmarkReader`（反射内部列表） | ✔ | ✔ | 9.4~9.6 `getIngredientList(String)`、9.7+ `getIngredientList()`、10.6+ `getElements()`，另有 `bookmarksList` 兜底 |
 | 非物品配料渲染 / 名称 | `JeiIngredientRenderer` | ✔ | ✔ | 流体、化学品按 JEI 渲染器绘制 |
 | 配方页「编码此配方」按钮 | 10.81+：`src/jeiModern` 的 `RbRecipeButtonController`；9.x ~ 10.6：`JeiRecipeOverlay` 客户端叠加层 | ✔ | ✔ | 两条路只启用一条，见下节 |
+| 悬停按钮时的「配方库已有」蓝色高亮 | `JeiCraftableSlots` + `JeiHighlightOverlay` | ✔ | ✔ | 配色与 1.20.1 严格一致，见下节 |
 
 ## 配方页「编码此配方」按钮（9.x / 10.x 统一）
 
@@ -43,8 +44,11 @@
   → `IRecipeLayoutDrawable` 的 `getRect()`（屏幕绝对坐标）、`getRecipeCategory()`、
   `getRecipeSlotsView()`。
 
-槽位矩形由 `JeiSlots` 统一反射获取（9.x 的 `RecipeSlot` / 10.x 的 `IRecipeSlotDrawable` 都有
-`public Rect2i getRect()`），因此两代都能还原合成配方的九宫格形状。
+槽位矩形由 `JeiSlots` 统一反射获取（9.x 的 `RecipeSlot#getRect()` 返回
+`mezz.jei.common.util.ImmutableRect2i`，10.x 的 `IRecipeSlotDrawable#getRect()` 返回 MC 的
+`Rect2i`，两者都按 getter 归一化），因此两代都能还原合成配方的九宫格形状。
+坐标空间也不统一（9.x / 10.81 定位时直接把槽位设成绝对坐标，10.6 可能是配方局部坐标），
+由 `JeiSlots#absolute` 用「是否与配方矩形相交」统一换算。
 
 **外观与摆位与 1.20.1 严格一致**：
 
@@ -53,6 +57,22 @@
   放不下时退到配方外上方，最后才是配方内部的两个角落；每个候选位置都会用槽位矩形做重叠检测；
 - 按钮**不压在槽位上**，因此悬停时 JEI 不会再叠一层物品提示（此前的「tooltip 两层文字」就是
   按钮压住槽位导致的）。点击切屏排在主线程下一 tick 执行，避免 JEI 渲染栈错位。
+
+## 悬停按钮时的「配方库已有」蓝色高亮
+
+与 1.20.1 同一功能、同一配色：**鼠标停在「编码此配方」按钮上时，配方里凡是「当前工作区配方库
+已有生产配方」的槽位都标蓝**，方便先判断这条链路能不能自产再决定要不要编码。
+
+- 判定：只看原料 / 产物槽位，任意候选配料满足 `ProductIndex.current().produces(key)` 即算可自产
+  （`JeiCraftableSlots`，与 1.20.1 的 `JeiCraftableSlots#find` 同口径）；
+- 配色（严格对齐 1.20.1 的 `JeiHighlightOverlay`）：填充 `0x40004688`、1px 边框 `0x9F004E96`，
+  四边各 1px，先填充后描边；
+- 结果按按钮位置缓存 500ms，避免每帧对整份配方做候选配料判定；
+- 两条按钮路径都在「配方与物品图标画完之后」绘制：
+  10.81+ 用官方 `IIconButtonController#drawExtras`（JEI 在画完按钮后回调），
+  9.x ~ 10.6 在 `ScreenEvent.DrawScreenEvent.Post` 里先画高亮、再画按钮与提示。
+
+## 幽灵拖拽高亮：改由本界面自绘
 
 ## 幽灵拖拽高亮：改由本界面自绘
 
