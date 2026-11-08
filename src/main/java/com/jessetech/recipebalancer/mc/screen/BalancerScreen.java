@@ -1059,17 +1059,7 @@ public final class BalancerScreen extends RbContainerScreen {
      * {@code Target#getArea()} 完全相同的矩形自绘，颜色取 JEI 默认值，跨版本位置一致。
      */
     private void drawGhostHighlights(GuiGraphics graphics, int mouseX, int mouseY) {
-        if (!com.jessetech.recipebalancer.mc.jei.JeiGhostHighlights.active()) {
-            return;
-        }
-        for (net.minecraft.client.renderer.Rect2i area
-                : com.jessetech.recipebalancer.mc.jei.JeiGhostHighlights.areas()) {
-            boolean hovered = mouseX >= area.getX() && mouseX < area.getX() + area.getWidth()
-                    && mouseY >= area.getY() && mouseY < area.getY() + area.getHeight();
-            graphics.fill(area.getX(), area.getY(),
-                    area.getX() + area.getWidth(), area.getY() + area.getHeight(),
-                    hovered ? 0x804CC959 : 0x4013C90A);
-        }
+        com.jessetech.recipebalancer.mc.jei.JeiGhostHighlights.draw(graphics, mouseX, mouseY);
     }
 
     /** 图标按钮没有文字，开关状态用图标明暗表示（提示语里也带当前状态）。 */

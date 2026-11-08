@@ -3,6 +3,7 @@ package com.jessetech.recipebalancer.mc.screen;
 import com.jessetech.recipebalancer.mc.i18n.Lang;
 import com.jessetech.recipebalancer.mc.itemmap.ItemKeyMapper;
 import com.jessetech.recipebalancer.mc.jei.JeiBookmarks;
+import com.jessetech.recipebalancer.mc.jei.JeiGhostHighlights;
 import com.jessetech.recipebalancer.mc.jei.JeiRuntimeHolder;
 import com.jessetech.recipebalancer.mc.jei.JeiScreenSupport;
 import com.jessetech.recipebalancer.mc.ui.AeStyle;
@@ -76,6 +77,8 @@ public final class KeySetScreen extends Screen implements JeiPanelScreen {
 
     @Override
     protected void init() {
+        // 重新开界面时清掉上一轮可能残留的拖拽高亮
+        JeiGhostHighlights.end();
         panelX = (width - PANEL_W) / 2;
         panelY = (height - PANEL_H) / 2;
         gridY = panelY + 24;
@@ -351,6 +354,9 @@ public final class KeySetScreen extends Screen implements JeiPanelScreen {
         }
         drawInventory(graphics);
 
+        // JEI 拖拽：整块物料网格是一个落点，高亮自绘（JEI 会画两遍）
+        JeiGhostHighlights.draw(graphics, mouseX, mouseY);
+
         if (!status.isEmpty()) {
             graphics.drawString(font, font.plainSubstrByWidth(status, PANEL_W - 16),
                     panelX + 8, panelY + 98, AeStyle.ACCENT, false);
@@ -425,6 +431,7 @@ public final class KeySetScreen extends Screen implements JeiPanelScreen {
 
     @Override
     public void onClose() {
+        JeiGhostHighlights.end();
         if (minecraft != null) {
             minecraft.setScreen(parent);
         }
