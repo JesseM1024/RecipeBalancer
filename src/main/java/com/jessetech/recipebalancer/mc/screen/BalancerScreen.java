@@ -52,7 +52,7 @@ import java.util.Map;
  * 左键从背包拿起物品、点格子放置/删除；中键改用量或自定义物品；右键配方库两次删除。
  * 求解进入二级结果页，避免挤占一级界面。
  */
-public final class BalancerScreen extends RbScreen implements JeiPanelScreen {
+public final class BalancerScreen extends RbContainerScreen implements JeiPanelScreen {
 
     private static final int SLOT = 18;
     /** 左右两列图标按钮：18×18 方形，与面板外缘留 2px 缝。 */
@@ -193,6 +193,14 @@ public final class BalancerScreen extends RbScreen implements JeiPanelScreen {
         // 配平面板保持屏幕正中
         panelX = (width - panelW) / 2;
         panelY = 4;
+
+        // 容器界面的面板尺寸/位置：AbstractContainerScreen.init() 会按
+        // (width - imageWidth)/2 算 leftPos，这里把值对齐到本界面的 panelX/panelY
+        imageWidth = panelW;
+        imageHeight = panelH;
+        super.init();
+        leftPos = panelX;
+        topPos = panelY;
 
         // 固定区域：工作区名/目标/配方库/配方库筛选行/编码/背包/状态
         // 编码最多 4 行；剩余高度全部给配方库
@@ -433,13 +441,12 @@ public final class BalancerScreen extends RbScreen implements JeiPanelScreen {
     // ------------------------------------------------------------------
 
     /**
-     * 1.18.2 的 {@code renderBackground} 只有 PoseStack 一个参数（带鼠标坐标的 4 参重载是 1.19+ 的），
-     * 而本界面的大量绘制要按鼠标位置判断悬停，因此背景与内容全部挪进
-     * {@link #render}，这里只留空实现挡住原版的泥土背景。
+     * 容器界面的背景钩子：{@code AbstractContainerScreen.render} 会在画控件之前调它，
+     * 1.18.2 的重载自带鼠标坐标，正好满足本界面按悬停决定高亮的需求。
      */
     @Override
-    public void renderBackground(PoseStack pose) {
-        // 见上：实际绘制在 render 里按「背景 → 内容 → 控件 → 浮层」的顺序完成
+    protected void renderBg(PoseStack pose, float partialTick, int mouseX, int mouseY) {
+        drawBackdrop(draw(pose), mouseX, mouseY);
     }
 
     /** 背景 + 面板 + 全部内容（原 renderBackground 的主体；需要鼠标坐标判断悬停）。 */
@@ -939,11 +946,9 @@ public final class BalancerScreen extends RbScreen implements JeiPanelScreen {
 
     @Override
     public void render(PoseStack pose, int mouseX, int mouseY, float partialTick) {
-        Draw graphics = new Draw(pose, this);
-        // 顺序：背景+内容 → 控件（名称框/按钮）→ 手持物品 → tooltip。
-        // 本界面的内容需要鼠标坐标判断悬停，所以 renderBackground 留空，
-        // 背景与内容都在这里按顺序自己画（RbScreen 会先调一次空的 renderBackground）。
-        drawBackdrop(graphics, mouseX, mouseY);
+        Draw graphics = draw(pose);
+        // 顺序：背景+内容（super.render 内部先调 renderBg）→ 控件（名称框/按钮）
+        // → 手持物品 → tooltip，与原来自绘顺序一致。
         updateOptionStates();
         super.render(pose, mouseX, mouseY, partialTick);
 
@@ -1670,6 +1675,11 @@ public final class BalancerScreen extends RbScreen implements JeiPanelScreen {
             onClose();
             return true;
         }
+        // 容器基类把「背包键」实现成 player.closeContainer()（给玩家背包菜单发关闭包）。
+        // 本界面没有服务端菜单，这条路径只会产生无意义的网络包，直接吞掉（原 Screen 行为也是无动作）。
+        if (minecraft != null && minecraft.options.keyInventory.matches(keyCode, scanCode)) {
+            return true;
+        }
         return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
@@ -1905,5 +1915,20 @@ public final class BalancerScreen extends RbScreen implements JeiPanelScreen {
     @Override
     public int jeiGuiHeight() {
         return panelH;
+    }
+
+    /**
+     * 供 JEI 容器处理器报告「GUI 之外但仍属于本界面」的区域。
+     *
+     * <p>左右两列 18×18 图标按钮贴在面板外侧，不算面板的一部分；
+     * 报成额外区域后，JEI 的书签/物品面板会把它们让开，不再盖住按钮。
+     */
+    public java.util.List<net.minecraft.client.renderer.Rect2i> jeiExtraAreas() {
+        java.util.List<net.minecraft.client.renderer.Rect2i> areas = new java.util.ArrayList<>(2);
+        areas.add(new net.minecraft.client.renderer.Rect2i(panelX - SIDE_PAD, panelY,
+                SIDE_PAD, panelH));
+        areas.add(new net.minecraft.client.renderer.Rect2i(panelX + panelW, panelY,
+                SIDE_PAD, panelH));
+        return areas;
     }
 }

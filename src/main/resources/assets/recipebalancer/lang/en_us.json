@@ -113,6 +113,8 @@
   "布局: 分层": "Layout: Layered",
   "布局: 弹性": "Layout: Force",
   "名称: 显示名": "Names: Display",
+  "编码此配方": "Encode Recipe",
+  "编码此配方到 RecipeBalancer": "Encode this recipe to RecipeBalancer",
   "名称: 注册名": "Names: IDs",
                 
   "配方运行方案（流量单位 /t）": "Recipe Plan (flow unit /t)",

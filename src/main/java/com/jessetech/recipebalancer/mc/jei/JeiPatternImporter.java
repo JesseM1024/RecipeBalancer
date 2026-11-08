@@ -12,22 +12,146 @@ import mezz.jei.api.recipe.category.IRecipeCategory;
 import mezz.jei.api.runtime.IJeiRuntime;
 import net.minecraft.world.item.ItemStack;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
 /**
  * 把 JEI 的配方转成我们的编码样板（输入 / 输出 / 设备）。
  *
- * <p>9.x 没有 {@code IRecipeSlotsView} 的公开入口（10.x 才有），
- * 因此统一从 {@code IRecipeLayout} 的配料分组读：每个分组自带 input 标记与候选配料。
+ * <p>两种入口：
+ * <ul>
+ *   <li>{@link #buildFromSlots}：从统一的槽位视图导入（9.x 叠加按钮 / 10.x 官方按钮），
+ *       带矩形时保留合成配方的九宫格形状；</li>
+ *   <li>{@link #build}：9.x 的备用路径，按配料分组顺序导入（分组 API 在 9.x 可用，
+ *       10.x 已被废弃/裁掉，只作为兜底）。</li>
+ * </ul>
  */
 public final class JeiPatternImporter {
+
+    /** 我们编码区的原料列数，决定 JEI 槽位行列如何映射。 */
+    private static final int INPUT_COLS = 3;
 
     private JeiPatternImporter() {
     }
 
     /**
+     * 统一入口：槽位视图 → 编码样板。
+     *
+     * <p>合成配方按槽位矩形还原九宫格形状（与 1.20.1 行为一致）；机器配方或取不到矩形时
+     * 按顺序紧排，保证内容不丢。
+     */
+    public static RecipePattern buildFromSlots(IRecipeCategory<?> category,
+                                               List<JeiSlots.Slot> slots) {
+        RecipePattern pattern = new RecipePattern();
+        if (slots == null || slots.isEmpty()) {
+            applyEquipment(category, pattern);
+            return pattern;
+        }
+        List<JeiSlots.Slot> inputs = new ArrayList<>();
+        List<JeiSlots.Slot> outputs = new ArrayList<>();
+        for (JeiSlots.Slot slot : slots) {
+            if (slot.role() == mezz.jei.api.recipe.RecipeIngredientRole.OUTPUT) {
+                outputs.add(slot);
+            } else if (slot.role() == mezz.jei.api.recipe.RecipeIngredientRole.INPUT) {
+                inputs.add(slot);
+            }
+        }
+
+        List<Integer> xs = new ArrayList<>();
+        List<Integer> ys = new ArrayList<>();
+        boolean allHaveRect = true;
+        for (JeiSlots.Slot slot : inputs) {
+            if (!slot.hasRect()) {
+                allHaveRect = false;
+                continue;
+            }
+            if (!xs.contains(slot.x())) {
+                xs.add(slot.x());
+            }
+            if (!ys.contains(slot.y())) {
+                ys.add(slot.y());
+            }
+        }
+        Collections.sort(xs);
+        Collections.sort(ys);
+        boolean grid = allHaveRect && isCraftingRecipe(category)
+                && !xs.isEmpty() && xs.size() <= INPUT_COLS && ys.size() <= 9;
+
+        int inputIndex = 0;
+        for (JeiSlots.Slot slot : inputs) {
+            JeiIngredientMapper.Mapped mapped = pick(slot.ingredients());
+            if (mapped == null) {
+                continue;
+            }
+            int index = inputIndex++;
+            if (grid) {
+                index = ys.indexOf(slot.y()) * INPUT_COLS + xs.indexOf(slot.x());
+            }
+            if (index >= 0 && index < RecipePattern.MAX_INPUTS) {
+                pattern.putInput(index, mapped.key(), mapped.amount());
+            }
+        }
+        int outputIndex = 0;
+        for (JeiSlots.Slot slot : outputs) {
+            JeiIngredientMapper.Mapped mapped = pick(slot.ingredients());
+            if (mapped == null || outputIndex >= RecipePattern.MAX_OUTPUTS) {
+                continue;
+            }
+            pattern.putOutput(outputIndex++, mapped.key(), mapped.amount());
+        }
+        applyEquipment(category, pattern);
+        return pattern;
+    }
+
+    /** 只有合成配方保留空格（纯视觉），机器配方等一律按顺序紧排。 */
+    private static boolean isCraftingRecipe(IRecipeCategory<?> category) {
+        try {
+            net.minecraft.resources.ResourceLocation uid = category.getUid();
+            return uid != null && uid.getPath().contains("crafting");
+        } catch (RuntimeException | LinkageError e) {
+            return false;
+        }
+    }
+
+    /**
+     * 该槽位有多候选（如不同木板）时，优先选配方库能自产的那种，且取配方序号最小的；
+     * 没有能自产的，退回 JEI 当前展示的那个（取第一个候选）。
+     */
+    public static JeiIngredientMapper.Mapped pick(List<ITypedIngredient<?>> candidates) {
+        ProductIndex index = ProductIndex.current();
+        JeiIngredientMapper.Mapped best = null;
+        int bestRecipe = Integer.MAX_VALUE;
+        for (ITypedIngredient<?> candidate : candidates) {
+            JeiIngredientMapper.Mapped mapped = JeiIngredientMapper.of(candidate);
+            if (mapped == null) {
+                continue;
+            }
+            int at = index.indexOf(mapped.key());
+            if (at >= 0 && at < bestRecipe) {
+                bestRecipe = at;
+                best = mapped;
+            }
+        }
+        if (best != null) {
+            return best;
+        }
+        for (ITypedIngredient<?> candidate : candidates) {
+            JeiIngredientMapper.Mapped mapped = JeiIngredientMapper.of(candidate);
+            if (mapped != null) {
+                return mapped;
+            }
+        }
+        return null;
+    }
+
+    /**
      * 入口：一份 JEI 配方布局 → 编码样板。
+     *
+     * <p>先尝试 10.x 的 {@code getRecipeSlotsView()}（反射调用，9.x 没有这个方法），
+     * 这样能保留九宫格形状；取不到再退回 9.x 的配料分组顺序导入。
      *
      * <p>9.x 的 {@code IRecipeLayoutDrawable} 没有 {@code getRecipeCategory()}，
      * 所以类别由调用方一起传进来（催化剂查询要用）。
@@ -36,6 +160,10 @@ public final class JeiPatternImporter {
         RecipePattern pattern = new RecipePattern();
         if (layout == null) {
             return pattern;
+        }
+        RecipePattern viaSlots = buildViaSlotsView(category, layout);
+        if (viaSlots != null) {
+            return viaSlots;
         }
         IJeiRuntime runtime = JeiIngredientMapper.runtime();
         if (runtime == null) {
@@ -74,6 +202,24 @@ public final class JeiPatternImporter {
         }
         applyEquipment(category, pattern);
         return pattern;
+    }
+
+    /** 10.x 才有 {@code getRecipeSlotsView()}：反射取槽位视图，取不到返回 null 走旧路径。 */
+    private static RecipePattern buildViaSlotsView(IRecipeCategory<?> category, Object layout) {
+        try {
+            java.lang.reflect.Method method = layout.getClass().getMethod("getRecipeSlotsView");
+            method.setAccessible(true);
+            Object view = method.invoke(layout);
+            if (view instanceof mezz.jei.api.gui.ingredient.IRecipeSlotsView slotsView) {
+                List<JeiSlots.Slot> slots = JeiSlots.fromView(slotsView);
+                if (!slots.isEmpty()) {
+                    return buildFromSlots(category, slots);
+                }
+            }
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError ignored) {
+            // 9.x 没有这个方法，或实现类换了名字：交给下面的分组路径
+        }
+        return null;
     }
 
     /** 设备：取该配方类型的第一个催化剂。 */

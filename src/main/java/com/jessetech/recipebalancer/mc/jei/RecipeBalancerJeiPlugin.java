@@ -38,6 +38,13 @@ public final class RecipeBalancerJeiPlugin implements IModPlugin {
     private static final String MODERN_REGISTER =
             "com.jessetech.recipebalancer.mc.jei.JeiModernRegister";
 
+    /** 官方配方页按钮是否已成功注册（true 时叠加层让位）。 */
+    private static volatile boolean officialRecipeButtons;
+
+    static boolean officialRecipeButtons() {
+        return officialRecipeButtons;
+    }
+
     @Override
     public ResourceLocation getPluginUid() {
         return UID;
@@ -51,6 +58,14 @@ public final class RecipeBalancerJeiPlugin implements IModPlugin {
         ItemKeyMapper.setIngredientNameHook(renderer);
         AutoRecipeHooks.set(new JeiAutoRecipe());
         RecipeBalancerMod.LOGGER.info("[RecipeBalancer] {}", JeiCapabilities.describe());
+        try {
+            // 9.x 没有官方按钮 API：用客户端叠加层在配方页画「编码此配方」按钮；
+            // 10.x 有官方 API 时本层会自动让位（见 JeiRecipeOverlay#active）。
+            JeiRecipeOverlay.install();
+        } catch (Throwable t) {
+            RecipeBalancerMod.LOGGER.warn("[RecipeBalancer] JEI 配方页叠加按钮安装失败: {}",
+                    t.toString());
+        }
         warmUpHelperClasses();
     }
 
@@ -90,9 +105,21 @@ public final class RecipeBalancerJeiPlugin implements IModPlugin {
                     "[RecipeBalancer] JEI 面板定位不可用: {}", t.toString());
         }
         try {
+            // 主路径：一级界面已是容器界面，走 JEI 只对容器开放的 IGuiContainerHandler
+            // （额外区域 + 悬停配料，9.x 起一直可用）。
+            registration.addGuiContainerHandler(BalancerScreen.class,
+                    new RbContainerGuiHandler());
+            RecipeBalancerMod.LOGGER.info("[RecipeBalancer] JEI 容器处理器：已注册（一级界面）");
+        } catch (Throwable t) {
+            RecipeBalancerMod.LOGGER.warn(
+                    "[RecipeBalancer] JEI 容器处理器注册失败: {}", t.toString());
+        }
+        try {
+            // 兜底：若某个 JEI 构建不支持/裁掉了容器侧悬停回调，全局处理器仍能让 R/U/A 工作。
+            // 代价只是同一个界面上被查询两次（无害），换来跨版本稳定。
             registration.addGlobalGuiHandler(new JeiHoverHandler());
             RecipeBalancerMod.LOGGER.info(
-                    "[RecipeBalancer] JEI 悬停查询：已用全局处理器注册（工厂 API={}）",
+                    "[RecipeBalancer] JEI 悬停查询：全局处理器兜底已注册（工厂 API={}）",
                     JeiCapabilities.supportsClickableFactory());
         } catch (Throwable t) {
             RecipeBalancerMod.LOGGER.warn("[RecipeBalancer] JEI 悬停查询不可用: {}",
@@ -110,8 +137,8 @@ public final class RecipeBalancerJeiPlugin implements IModPlugin {
     }
 
     private static void registerScreenHandlers(IGuiHandlerRegistration registration) {
-        registration.addGuiScreenHandler(BalancerScreen.class,
-                screen -> JeiGuiProperties.of(screen, screen));
+        // 一级界面已改为容器界面，改由 addGuiContainerHandler 注册（见 registerGuiHandlers），
+        // 这里只处理仍是普通 Screen 的二级界面。
         registration.addGuiScreenHandler(AmountScreen.class,
                 screen -> JeiGuiProperties.of(screen, screen));
         registration.addGuiScreenHandler(KeySetScreen.class,
@@ -130,13 +157,17 @@ public final class RecipeBalancerJeiPlugin implements IModPlugin {
 
     @Override
     public void registerAdvanced(IAdvancedRegistration registration) {
-        // 配方页按钮只有 JEI 10.x 才有（9.x 既没有按钮 API 也没有类别装饰器）
+        // 配方页按钮：10.x 走官方 API；9.x（或官方注册失败）由客户端叠加层提供，
+        // 两条路只会启用一条，避免同一页出现两个按钮。
         if (JeiCapabilities.supportsRecipeButtons() && registerModernButtons(registration)) {
+            officialRecipeButtons = true;
             RecipeBalancerMod.LOGGER.info("[RecipeBalancer] JEI 配方页按钮：已注册（按钮 API，{}）",
                     JeiCapabilities.version());
             return;
         }
-        RecipeBalancerMod.LOGGER.info("[RecipeBalancer] JEI 配方页按钮不可用（{} 无对应 API）",
+        officialRecipeButtons = false;
+        RecipeBalancerMod.LOGGER.info(
+                "[RecipeBalancer] JEI 配方页按钮：官方 API 不可用（{}），改用客户端叠加层",
                 JeiCapabilities.version());
     }
 
