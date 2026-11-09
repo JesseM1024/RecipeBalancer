@@ -35,6 +35,50 @@ public final class JeiIngredientMapper {
                         }
                     });
 
+    /**
+     * 配料变体摘要：对 1.21.1 的 {@code DataComponentMap} 取稳定哈希（8 位十六进制）。
+     *
+     * <p>物品不在本方法范围内（物品走 {@link #ofItem}，组件已编码进 key）。
+     * 空组件表（水、蜂蜜这类普通流体）返回空串，key 保持不变，兼容旧存档。
+     */
+    static String componentFingerprint(Object ingredient) {
+        if (ingredient == null) {
+            return "";
+        }
+        Object components = invoke(ingredient, "getComponentsPatch");
+        if (components == null) {
+            components = invoke(ingredient, "getComponents");
+        }
+        if (components == null) {
+            return "";
+        }
+        String text = String.valueOf(components);
+        if (text.isEmpty() || text.endsWith("{}]") || text.endsWith("{}") || text.contains("map={}")) {
+            return "";
+        }
+        try {
+            byte[] digest = java.security.MessageDigest.getInstance("SHA-1")
+                    .digest(text.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            StringBuilder hex = new StringBuilder(8);
+            for (int i = 0; i < 4; i++) {
+                hex.append(String.format("%02x", digest[i]));
+            }
+            return hex.toString();
+        } catch (java.security.NoSuchAlgorithmException e) {
+            return Integer.toHexString(text.hashCode());
+        }
+    }
+
+    private static Object invoke(Object target, String method) {
+        try {
+            java.lang.reflect.Method reflected = target.getClass().getMethod(method);
+            reflected.setAccessible(true);
+            return reflected.invoke(target);
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            return null;
+        }
+    }
+
     /** 已提示过的「同 key 不同配料」碰撞，避免刷屏。 */
     private static final java.util.Set<String> COLLIDED =
             java.util.Collections.synchronizedSet(new java.util.HashSet<String>());
@@ -110,6 +154,13 @@ public final class JeiIngredientMapper {
             }
             // 非物品默认是 mB 计量；500 mB -> 0.5 B
             double amount = rawAmount > 0 ? rawAmount / 1000.0 : 1.0;
+            // 1.21.1 用 DataComponents 描述变体（Create 药水流体的药水类型就在组件里），
+            // 而 JEI 的 uid 通常只到「流体注册名」这一级。把组件表摘要并入 uid，
+            // 否则不同药水会编码成同一个 key，互相顶掉。
+            String fingerprint = componentFingerprint(ingredient);
+            if (!fingerprint.isEmpty()) {
+                uid = uid + "#" + fingerprint;
+            }
             String key = IngredientKey.encode(typed.getType().getUid(), uid, name);
             remember(key, typed);
             return new Mapped(key, amount, name);

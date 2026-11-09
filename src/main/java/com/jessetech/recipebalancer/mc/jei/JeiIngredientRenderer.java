@@ -93,10 +93,43 @@ public final class JeiIngredientRenderer
             if (type.isEmpty()) {
                 return Optional.empty();
             }
-            return resolveWithType(manager, type.get(), IngredientKey.uniqueId(key));
+            String uniqueId = IngredientKey.uniqueId(key);
+            int hash = uniqueId.indexOf('#');
+            if (hash > 0) {
+                return resolveWithFingerprint(manager, type.get(),
+                        uniqueId.substring(0, hash), uniqueId.substring(hash + 1));
+            }
+            return resolveWithType(manager, type.get(), uniqueId);
         } catch (RuntimeException | LinkageError e) {
             return Optional.empty();
         }
+    }
+
+    /**
+     * 带组件摘要的 uid 解析：先按基础 uid 查，再比对组件摘要；
+     * 不一致时在同类配料里找摘要相同的那个（Create 药水流体等同 uid 不同组件的场景）。
+     */
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private static Optional<ITypedIngredient<?>> resolveWithFingerprint(
+            mezz.jei.api.runtime.IIngredientManager manager,
+            mezz.jei.api.ingredients.IIngredientType<?> type,
+            String baseUid, String fingerprint) {
+        Optional<ITypedIngredient<?>> direct = resolveWithType(manager, type, baseUid);
+        if (direct.isPresent() && fingerprint.equals(JeiIngredientMapper.componentFingerprint(
+                direct.get().getIngredient()))) {
+            return direct;
+        }
+        for (Object candidate : manager.getAllIngredients((mezz.jei.api.ingredients.IIngredientType) type)) {
+            if (!fingerprint.equals(JeiIngredientMapper.componentFingerprint(candidate))) {
+                continue;
+            }
+            Optional<ITypedIngredient<?>> typed = manager.createTypedIngredient(
+                    (mezz.jei.api.ingredients.IIngredientType) type, candidate);
+            if (typed.isPresent()) {
+                return typed;
+            }
+        }
+        return Optional.empty();
     }
 
     // 新 API 要改成 codec 序列化（会改变存档里的 ingredient key 编码），
