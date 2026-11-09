@@ -219,7 +219,15 @@ public final class JeiRecipeOverlay {
                 continue;
             }
             List<JeiSlots.Slot> slots = JeiSlots.fromLayout(layout);
-            int[] at = place(rect, slots, screen);
+            List<Rectangle2d> blocked = new ArrayList<>();
+            for (JeiSlots.Slot slot : slots) {
+                if (slot.hasRect()) {
+                    blocked.add(new Rectangle2d(slot.x(), slot.y(),
+                            slot.width(), slot.height()));
+                }
+            }
+            addTransferButton(blocked, layout);
+            int[] at = place(rect, blocked, screen);
             if (at == null) {
                 continue;
             }
@@ -250,7 +258,54 @@ public final class JeiRecipeOverlay {
      *
      * @return {x, y}；放不下返回 null
      */
-    private static int[] place(Rectangle2d rect, List<JeiSlots.Slot> slots, Screen screen) {
+    /**
+     * 把 JEI 自己的「配方转移」按钮也记为禁区。
+     *
+     * <p>AE / RS 编码终端这类容器屏上，JEI 会在配方右下角画转移按钮；
+     * 我们的按钮优先位置正好落在附近，不避让就会叠在一起。
+     * 7.x 的 {@code RecipeTransferButton} 是原版 {@code Widget}，坐标在 protected 字段里，
+     * 只能按字段名反射；拿不到就忽略（不影响其余避让）。
+     */
+    private static void addTransferButton(List<Rectangle2d> blocked, RecipeLayout<?> layout) {
+        Object button = null;
+        try {
+            button = layout.getClass().getMethod("getRecipeTransferButton").invoke(layout);
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError ignored) {
+            // 没有这个方法（或返回 null）：该版本不画转移按钮
+        }
+        if (button == null) {
+            return;
+        }
+        Object visible = field(button, "visible");
+        if (visible instanceof Boolean && !((Boolean) visible)) {
+            return;
+        }
+        int x = intField(button, "x");
+        int y = intField(button, "y");
+        int width = intField(button, "width");
+        int height = intField(button, "height");
+        if (width > 0 && height > 0) {
+            blocked.add(new Rectangle2d(x, y, width, height));
+        }
+    }
+
+    private static int intField(Object owner, String name) {
+        Class<?> type = owner.getClass();
+        while (type != null) {
+            try {
+                Field field = type.getDeclaredField(name);
+                field.setAccessible(true);
+                return field.getInt(owner);
+            } catch (NoSuchFieldException e) {
+                type = type.getSuperclass();
+            } catch (ReflectiveOperationException | RuntimeException e) {
+                return -1;
+            }
+        }
+        return -1;
+    }
+
+    private static int[] place(Rectangle2d rect, List<Rectangle2d> blocked, Screen screen) {
         int size = JeiButtonSkin.SIZE;
         // 与 1.20.1 / 1.18.2 一致：优先贴在配方**右侧下方**（JEI 自己的侧边按钮也在那一带），
         // 放不下再沿右侧上移，最后才退到配方内部右下/右上。
@@ -265,20 +320,17 @@ public final class JeiRecipeOverlay {
                     || at[1] + size > screen.height) {
                 continue;
             }
-            if (!overlapsAny(at[0], at[1], size, slots)) {
+            if (!overlapsAny(at[0], at[1], size, blocked)) {
                 return at;
             }
         }
         return null;
     }
 
-    private static boolean overlapsAny(int x, int y, int size, List<JeiSlots.Slot> slots) {
-        for (JeiSlots.Slot slot : slots) {
-            if (!slot.hasRect()) {
-                continue;
-            }
-            if (x < slot.x() + slot.width() && slot.x() < x + size
-                    && y < slot.y() + slot.height() && slot.y() < y + size) {
+    private static boolean overlapsAny(int x, int y, int size, List<Rectangle2d> blocked) {
+        for (Rectangle2d area : blocked) {
+            if (x < area.getX() + area.getWidth() && area.getX() < x + size
+                    && y < area.getY() + area.getHeight() && area.getY() < y + size) {
                 return true;
             }
         }
