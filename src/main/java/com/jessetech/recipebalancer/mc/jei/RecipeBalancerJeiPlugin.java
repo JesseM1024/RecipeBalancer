@@ -137,10 +137,8 @@ public final class RecipeBalancerJeiPlugin implements IModPlugin {
                 screen -> JeiGuiProperties.of(screen, screen));
         registration.addGuiScreenHandler(ScenarioListScreen.class,
                 screen -> JeiGuiProperties.of(screen, screen));
-        // 求解结果页 / 系数输入页同样要报 GUIPproperties，否则 JEI 不认为
-        // 这些界面「有 GUI」，左侧书签面板与物品面板都不会渲染。
-        registration.addGuiScreenHandler(SolveScreen.class,
-                screen -> JeiGuiProperties.of(screen, screen));
+        // 结果页**故意不注册** IGuiProperties：注册了 JEI 就会把物品面板/书签/提示
+        // 画在结果正文上（文字被盖住）。系数输入页仍保留。
         registration.addGuiScreenHandler(FactorScreen.class,
                 screen -> JeiGuiProperties.of(screen, screen));
     }
