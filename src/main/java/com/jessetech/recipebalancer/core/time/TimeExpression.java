@@ -1,5 +1,7 @@
 package com.jessetech.recipebalancer.core.time;
 
+import com.jessetech.recipebalancer.core.util.J8;
+
 import java.math.BigDecimal;
 import java.util.Locale;
 
@@ -17,7 +19,7 @@ public final class TimeExpression {
     }
 
     public static double evaluate(String expression) {
-        if (expression == null || expression.isBlank()) {
+        if (expression == null || J8.isBlank(expression)) {
             throw new IllegalArgumentException("表达式不能为空");
         }
         if (expression.length() > MAX_LENGTH) {

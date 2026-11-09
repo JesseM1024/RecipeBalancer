@@ -1,5 +1,7 @@
 package com.jessetech.recipebalancer.mc.itemmap;
 
+import com.jessetech.recipebalancer.core.util.J8;
+
 import com.jessetech.recipebalancer.core.model.Recipe;
 import com.jessetech.recipebalancer.mc.io.WorkspaceSession;
 
@@ -33,7 +35,7 @@ public final class ProductIndex {
 
     /** @return 最小配方序号；配方库不产出该物质时返回 -1。 */
     public int indexOf(String key) {
-        if (key == null || key.isBlank()) {
+        if (key == null || J8.isBlank(key)) {
             return -1;
         }
         return byProduct.getOrDefault(normalize(key), -1);
@@ -62,7 +64,7 @@ public final class ProductIndex {
         try {
             return new ProductIndex(WorkspaceSession.store().loadDraft("autosave").recipes());
         } catch (RuntimeException e) {
-            return new ProductIndex(List.of());
+            return new ProductIndex(J8.list());
         }
     }
 

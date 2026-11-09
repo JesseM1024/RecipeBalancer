@@ -1,5 +1,7 @@
 package com.jessetech.recipebalancer.core;
 
+import com.jessetech.recipebalancer.core.util.J8;
+
 import com.jessetech.recipebalancer.core.model.Recipe;
 import com.jessetech.recipebalancer.core.model.RecipePattern;
 import org.junit.jupiter.api.Test;
@@ -16,7 +18,7 @@ class RecipePatternTest {
 
     @Test
     void loadsRecipeAndConvertsSecondsToTicks() {
-        Recipe recipe = new Recipe(Map.of("ore", 2.0), Map.of("ingot", 1.0), 1.5, "minecraft:furnace");
+        Recipe recipe = new Recipe(J8.map("ore", 2.0), J8.map("ingot", 1.0), 1.5, "minecraft:furnace");
         RecipePattern pattern = new RecipePattern();
         pattern.load(recipe);
 
@@ -56,7 +58,7 @@ class RecipePatternTest {
             products.put("item" + i, 1.0);
         }
         RecipePattern pattern = new RecipePattern();
-        pattern.load(new Recipe(Map.of(), products, 1.0, "x"));
+        pattern.load(new Recipe(J8.map(), products, 1.0, "x"));
         assertTrue(pattern.truncated());
         assertEquals(RecipePattern.MAX_OUTPUTS, pattern.outputCount());
         assertTrue(pattern.hasContent());

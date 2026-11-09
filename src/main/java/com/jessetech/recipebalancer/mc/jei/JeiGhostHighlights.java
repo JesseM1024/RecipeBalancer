@@ -1,5 +1,7 @@
 package com.jessetech.recipebalancer.mc.jei;
 
+import com.jessetech.recipebalancer.core.util.J8;
+
 import com.jessetech.recipebalancer.mc.ui.Draw;
 import net.minecraft.client.renderer.Rect2i;
 
@@ -24,19 +26,19 @@ public final class JeiGhostHighlights {
     private static final int HOVER_COLOR = 0x804CC959;
 
     /** 目标区域（绝对屏幕坐标，18×18 一格）。 */
-    private static volatile List<Rect2i> areas = List.of();
+    private static volatile List<Rect2i> areas = J8.list();
 
     private JeiGhostHighlights() {
     }
 
     /** 拖拽开始：记下本次可投放的所有目标区域。 */
     public static void begin(List<Rect2i> rects) {
-        areas = rects == null || rects.isEmpty() ? List.of() : List.copyOf(rects);
+        areas = rects == null || rects.isEmpty() ? J8.list() : J8.listCopy(rects);
     }
 
     /** 拖拽结束（投放/取消/关闭界面）。 */
     public static void end() {
-        areas = List.of();
+        areas = J8.list();
     }
 
     public static boolean active() {

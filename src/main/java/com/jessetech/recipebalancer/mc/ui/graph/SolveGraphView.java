@@ -1,5 +1,7 @@
 package com.jessetech.recipebalancer.mc.ui.graph;
 
+import com.jessetech.recipebalancer.core.util.J8;
+
 import com.jessetech.recipebalancer.core.model.Constants;
 import com.jessetech.recipebalancer.core.model.Recipe;
 import com.jessetech.recipebalancer.core.model.SolveResult;
@@ -262,14 +264,14 @@ public final class SolveGraphView {
     }
 
     public SolveGraphView(SolveResult result, List<Recipe> recipes) {
-        this(result, recipes, Map.of(), false);
+        this(result, recipes, J8.map(), false);
     }
 
     public SolveGraphView(SolveResult result, List<Recipe> recipes,
                           Map<String, Double> targets, boolean inventoryEnabled) {
         this.result = result;
         this.recipes = recipes;
-        this.targets = targets == null ? Map.of() : new LinkedHashMap<>(targets);
+        this.targets = targets == null ? J8.map() : new LinkedHashMap<>(targets);
         this.inventoryEnabled = inventoryEnabled;
         GraphLayoutConfig.Settings settings = GraphLayoutConfig.current();
         this.nodeGap = settings.nodeGap();
@@ -288,7 +290,7 @@ public final class SolveGraphView {
         nameLanguage = code;
         for (GNode node : nodes) {
             node.displayName = ItemKeyMapper.displayName(node.key);
-            node.initial = node.key.isBlank() ? "?" : shortInitial(node.displayName);
+            node.initial = node.J8.isBlank(key) ? "?" : shortInitial(node.displayName);
             node.label = null;
         }
     }
@@ -297,7 +299,7 @@ public final class SolveGraphView {
         Set<String> external = result.externalInputs().keySet();
         Set<String> byproducts = result.finalOutputs().keySet();
         Set<String> startup = inventoryEnabled
-                ? result.bootstrapInventory().keySet() : Set.of();
+                ? result.bootstrapInventory().keySet() : J8.set();
 
         for (int index = 0; index < result.recipeRates().size(); index++) {
             double rate = result.recipeRates().get(index);
@@ -308,8 +310,8 @@ public final class SolveGraphView {
             GNode node = new GNode(true, recipe.equType(), index, null,
                     (long) Math.ceil(rate * recipe.time()));
             node.displayName = ItemKeyMapper.displayName(recipe.equType());
-            node.initial = node.key.isBlank() ? "?" : shortInitial(node.displayName);
-            node.hasIcon = !node.key.isBlank() && !ItemKeyMapper.stack(node.key).isEmpty();
+            node.initial = node.J8.isBlank(key) ? "?" : shortInitial(node.displayName);
+            node.hasIcon = !node.J8.isBlank(key) && !ItemKeyMapper.stack(node.key).isEmpty();
             recipeNodes.put(index, node);
             nodes.add(node);
         }
@@ -586,7 +588,7 @@ public final class SolveGraphView {
             state.put(start, 1);
             while (!path.isEmpty()) {
                 GNode node = path.peek();
-                List<GEdge> out = outgoing.getOrDefault(node, List.of());
+                List<GEdge> out = outgoing.getOrDefault(node, J8.list());
                 int next = cursor.pop();
                 if (next >= out.size()) {
                     state.put(node, 2);
@@ -624,7 +626,7 @@ public final class SolveGraphView {
         }
         while (!queue.isEmpty()) {
             GNode node = queue.poll();
-            for (GEdge edge : outgoing.getOrDefault(node, List.of())) {
+            for (GEdge edge : outgoing.getOrDefault(node, J8.list())) {
                 if (edge.back) {
                     continue;
                 }
@@ -863,7 +865,7 @@ public final class SolveGraphView {
             if (current >= 2) {
                 continue;
             }
-            for (GNode other : links.getOrDefault(node, List.of())) {
+            for (GNode other : links.getOrDefault(node, J8.list())) {
                 if (depth.containsKey(other)) {
                     continue;
                 }
@@ -912,7 +914,7 @@ public final class SolveGraphView {
                 double weight = entry.getValue();
                 double fx = 0;
                 double fy = 0;
-                for (GNode other : links.getOrDefault(node, List.of())) {
+                for (GNode other : links.getOrDefault(node, J8.list())) {
                     double vx = other.x - node.x;
                     double vy = other.y - node.y;
                     double dist = Math.max(1.0, Math.hypot(vx, vy));
@@ -1942,7 +1944,7 @@ public final class SolveGraphView {
     }
 
     private static String shortInitial(String name) {
-        if (name == null || name.isBlank()) {
+        if (name == null || J8.isBlank(name)) {
             return "?";
         }
         int first = name.codePointAt(0);

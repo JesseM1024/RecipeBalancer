@@ -1,5 +1,7 @@
 package com.jessetech.recipebalancer.core;
 
+import com.jessetech.recipebalancer.core.util.J8;
+
 import com.jessetech.recipebalancer.core.io.ScenarioJson;
 import com.jessetech.recipebalancer.core.model.Objective;
 import com.jessetech.recipebalancer.core.model.Recipe;
@@ -21,7 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ScenarioDraftTest {
 
     private static Recipe recipe(String equipment) {
-        return new Recipe(Map.of("a", 1.0), Map.of("b", 1.0), 1.0, equipment);
+        return new Recipe(J8.map("a", 1.0), J8.map("b", 1.0), 1.0, equipment);
     }
 
     @Test
@@ -35,9 +37,9 @@ class ScenarioDraftTest {
         draft.toggleRecipeEnabled(1);
         draft.removeRecipe(0);
 
-        assertEquals(Set.of(0, 1), draft.options().disabledRecipes());
-        assertEquals(List.of("B", "C"),
-                draft.recipes().stream().map(Recipe::equType).toList());
+        assertEquals(J8.set(0, 1), draft.options().disabledRecipes());
+        assertEquals(J8.list("B", "C"),
+                draft.recipes().stream().map(Recipe::equType).collect(java.util.stream.Collectors.toList()));
         assertFalse(draft.isRecipeEnabled(0));
         assertFalse(draft.isRecipeEnabled(1));
     }
@@ -51,7 +53,7 @@ class ScenarioDraftTest {
 
         draft.removeRecipe(0);
 
-        assertEquals(Set.of(), draft.options().disabledRecipes());
+        assertEquals(J8.set(), draft.options().disabledRecipes());
         assertEquals(1, draft.recipeCount());
     }
 
@@ -61,7 +63,7 @@ class ScenarioDraftTest {
         draft.putTarget("铁锭", 2.0);
         draft.putTarget("铜锭", 1.5);
 
-        assertEquals(List.of("铁锭", "铜锭"), List.copyOf(draft.targets().keySet()));
+        assertEquals(J8.list("铁锭", "铜锭"), J8.listCopy(draft.targets().keySet()));
         // 草稿内部每 tick；写出场景 JSON 时恢复为每秒
         assertEquals(2.0, draft.targets().get("铁锭"), 1e-12);
         assertEquals(40.0, draft.toScenario().targetProducts().get("铁锭"), 1e-12);
@@ -70,7 +72,7 @@ class ScenarioDraftTest {
         assertThrows(IllegalArgumentException.class, () -> draft.putTarget("铁锭", Double.NaN));
 
         draft.removeTarget("铁锭");
-        assertEquals(Set.of("铜锭"), draft.targets().keySet());
+        assertEquals(J8.set("铜锭"), draft.targets().keySet());
     }
 
     @Test
@@ -105,7 +107,7 @@ class ScenarioDraftTest {
     @Test
     void clearRestoresDefaults() {
         ScenarioDraft draft = ScenarioDraft.from(TestSupport.scenario("simple"));
-        draft.setOptions(new SolveOptions(Set.of("x"), Map.of("x", 1.0), Set.of(0), Set.of("y"),
+        draft.setOptions(new SolveOptions(J8.set("x"), J8.map("x", 1.0), J8.set(0), J8.set("y"),
                 Objective.RECIPES, false, false, true));
 
         draft.clear();

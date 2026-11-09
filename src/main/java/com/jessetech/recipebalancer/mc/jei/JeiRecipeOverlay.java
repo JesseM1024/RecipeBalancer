@@ -1,5 +1,7 @@
 package com.jessetech.recipebalancer.mc.jei;
 
+import com.jessetech.recipebalancer.core.util.J8;
+
 import com.jessetech.recipebalancer.RecipeBalancerMod;
 import com.jessetech.recipebalancer.core.model.RecipePattern;
 import com.jessetech.recipebalancer.mc.i18n.Lang;
@@ -61,7 +63,7 @@ public final class JeiRecipeOverlay {
     private static int cachedX = Integer.MIN_VALUE;
     private static int cachedY = Integer.MIN_VALUE;
     private static long cachedAt;
-    private static List<Rect2i> cachedRects = List.of();
+    private static List<Rect2i> cachedRects = J8.list();
 
     private JeiRecipeOverlay() {
     }
@@ -202,7 +204,7 @@ public final class JeiRecipeOverlay {
             Object slotsHolder = invoke(layout, "getRecipeSlots");
             Object view = slotsHolder == null ? null : invoke(slotsHolder, "getView");
             List<JeiSlots.Slot> slots = view instanceof IRecipeSlotsView slotsView
-                    ? JeiSlots.fromView(slotsView) : List.of();
+                    ? JeiSlots.fromView(slotsView) : J8.list();
             if (slots.isEmpty()) {
                 // 取不到槽位就不画按钮，避免点出一个空样板
                 continue;

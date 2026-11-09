@@ -1,5 +1,7 @@
 package com.jessetech.recipebalancer.core.solve;
 
+import com.jessetech.recipebalancer.core.util.J8;
+
 import com.jessetech.recipebalancer.core.bootstrap.PerfectCycleBootstrapper;
 import com.jessetech.recipebalancer.core.detect.CyclicDeficitDetector;
 import com.jessetech.recipebalancer.core.detect.RawDetector;
@@ -119,9 +121,9 @@ public final class Balancer {
         MaterialMatrix matrix = MaterialMatrix.build(recipes, items);
 
         // ---- 自动检测原料 / 自增殖种子 ----
-        Set<String> inferredRaw = options.autoDetectRaw() ? RawDetector.detect(matrix) : Set.of();
+        Set<String> inferredRaw = options.autoDetectRaw() ? RawDetector.detect(matrix) : J8.set();
         Map<String, Double> inferredSeed = options.autoDetectSeed()
-                ? SeedDetector.detect(recipes) : Map.of();
+                ? SeedDetector.detect(recipes) : J8.map();
 
         // ---- 库存 = 种子 ∪ 用户库存；目标 += 库存（P0-A：与 s 抵消）----
         Map<String, Double> inventory = new LinkedHashMap<>(inferredSeed);
@@ -168,7 +170,7 @@ public final class Balancer {
         Set<String> banned = new LinkedHashSet<>();
         Set<String> extraAllowed = new LinkedHashSet<>();
         double[] rates = new double[recipes.size()];
-        List<String> externalItems = List.of();
+        List<String> externalItems = J8.list();
         double[] externalValues = new double[0];
         Map<String, Double> externalInputs = new LinkedHashMap<>();
         boolean solved = false;
@@ -249,7 +251,7 @@ public final class Balancer {
         }
 
         // ---- 完美循环启动投料（可选；只依赖活跃配方 + 外部输入）----
-        Map<String, Double> bootstrap = Map.of();
+        Map<String, Double> bootstrap = J8.map();
         if (options.autoBootstrap()) {
             bootstrap = PerfectCycleBootstrapper.detect(recipes, boxed(rates), externalInputs.keySet());
         }
@@ -303,8 +305,8 @@ public final class Balancer {
                                        Map<String, Double> inferredSeed,
                                        CyclicDeficitDetector.Cycles cycles,
                                        String message) {
-        return new SolveResult(List.of(), Map.of(), Map.of(), Map.of(), Map.of(), 0,
-                inferredRaw, inferredSeed, Map.of(),
+        return new SolveResult(J8.list(), J8.map(), J8.map(), J8.map(), J8.map(), 0,
+                inferredRaw, inferredSeed, J8.map(),
                 cycles.deficits(), cycles.cycles(), false, message);
     }
 

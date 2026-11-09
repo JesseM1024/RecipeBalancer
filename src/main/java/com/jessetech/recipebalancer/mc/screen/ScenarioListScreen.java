@@ -1,5 +1,7 @@
 package com.jessetech.recipebalancer.mc.screen;
 
+import com.jessetech.recipebalancer.core.util.J8;
+
 import com.jessetech.recipebalancer.core.io.ScenarioStore;
 import com.jessetech.recipebalancer.core.model.Scenario;
 import com.jessetech.recipebalancer.core.model.ScenarioDraft;
@@ -33,8 +35,8 @@ public final class ScenarioListScreen extends RbScreen implements JeiPanelScreen
     private final ScenarioDraft draft;
     private final String currentName;
     /** 目录里的全部工作区；names 是筛选后实际显示的列表。 */
-    private List<String> allNames = List.of();
-    private List<String> names = List.of();
+    private List<String> allNames = J8.list();
+    private List<String> names = J8.list();
     private int selected = -1;
     private double scroll;
     private String status = "";
@@ -78,7 +80,7 @@ public final class ScenarioListScreen extends RbScreen implements JeiPanelScreen
         nameBox = new EditBox(font, panelX + 8, panelY + PANEL_H - 52, 150, 18,
                 Lang.c("配方集名"));
         nameBox.setMaxLength(48);
-        nameBox.setValue(currentName.isBlank() ? WorkspaceSession.DEFAULT_NAME : currentName);
+        nameBox.setValue(J8.isBlank(currentName) ? WorkspaceSession.DEFAULT_NAME : currentName);
         addRenderableWidget(nameBox);
 
         addRenderableWidget(Buttons.builder(Lang.c("存储为"), b -> saveCurrent())

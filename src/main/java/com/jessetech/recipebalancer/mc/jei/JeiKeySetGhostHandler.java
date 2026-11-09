@@ -1,5 +1,7 @@
 package com.jessetech.recipebalancer.mc.jei;
 
+import com.jessetech.recipebalancer.core.util.J8;
+
 import com.jessetech.recipebalancer.mc.screen.KeySetScreen;
 import mezz.jei.api.gui.handlers.IGhostIngredientHandler;
 import net.minecraft.client.renderer.Rect2i;
@@ -22,14 +24,14 @@ public final class JeiKeySetGhostHandler implements IGhostIngredientHandler<KeyS
     public <I> List<Target<I>> getTargets(KeySetScreen screen, I ingredient, boolean doStart) {
         JeiIngredientMapper.Mapped mapped = JeiGhostHandler.map(ingredient);
         if (mapped == null) {
-            return List.of();
+            return J8.list();
         }
         int[] grid = screen.ghostGrid();
         if (grid == null || grid.length < 4) {
-            return List.of();
+            return J8.list();
         }
         if (doStart) {
-            JeiGhostHighlights.begin(List.of(new Rect2i(grid[0], grid[1], grid[2], grid[3])));
+            JeiGhostHighlights.begin(J8.list(new Rect2i(grid[0], grid[1], grid[2], grid[3])));
         }
         List<Target<I>> targets = new ArrayList<>();
         targets.add(new Target<I>() {

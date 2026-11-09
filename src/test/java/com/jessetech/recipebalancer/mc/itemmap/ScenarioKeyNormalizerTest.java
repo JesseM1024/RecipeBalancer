@@ -1,5 +1,7 @@
 package com.jessetech.recipebalancer.mc.itemmap;
 
+import com.jessetech.recipebalancer.core.util.J8;
+
 import com.jessetech.recipebalancer.core.model.Recipe;
 import com.jessetech.recipebalancer.core.model.Scenario;
 import com.jessetech.recipebalancer.core.model.SolveOptions;
@@ -29,7 +31,7 @@ class ScenarioKeyNormalizerTest {
         Map<String, Double> targets = new LinkedHashMap<>();
         targets.put(chinese, 1.0);
         Scenario normalized = ScenarioKeyNormalizer.normalize(
-                new Scenario(List.of(recipe), targets, SolveOptions.defaults()));
+                new Scenario(J8.list(recipe), targets, SolveOptions.defaults()));
 
         // 目标键优先作为代表，配方产物键应被改写为同一个 key。
         assertEquals(chinese, normalized.recipes().get(0).productList().keySet().iterator().next());

@@ -1,5 +1,7 @@
 package com.jessetech.recipebalancer.core;
 
+import com.jessetech.recipebalancer.core.util.J8;
+
 import com.jessetech.recipebalancer.core.detect.CyclicDeficitDetector;
 import com.jessetech.recipebalancer.core.detect.RawDetector;
 import com.jessetech.recipebalancer.core.matrix.MaterialMatrix;
@@ -42,7 +44,7 @@ class InvariantsTest {
         assertTrue(result.success(), name + ": " + result.message());
 
         // ---- 净物流恒等式：net = A·x + ext − target（库存是催化式语义，在 b 与 s 中抵消）----
-        List<String> items = MaterialMatrix.collectItems(scenario.recipes(), scenario.targetProducts(), Map.of());
+        List<String> items = MaterialMatrix.collectItems(scenario.recipes(), scenario.targetProducts(), J8.map());
         MaterialMatrix matrix = MaterialMatrix.build(scenario.recipes(), items);
         double[][] a = matrix.matrix();
         double[] x = new double[scenario.recipes().size()];
@@ -102,7 +104,7 @@ class InvariantsTest {
         SolveResult result = Balancer.solve(scenario);
         assertTrue(result.success(), name + ": " + result.message());
 
-        List<String> items = MaterialMatrix.collectItems(scenario.recipes(), scenario.targetProducts(), Map.of());
+        List<String> items = MaterialMatrix.collectItems(scenario.recipes(), scenario.targetProducts(), J8.map());
         MaterialMatrix matrix = MaterialMatrix.build(scenario.recipes(), items);
         Set<String> allowed = new LinkedHashSet<>(scenario.options().rawMaterials());
         allowed.addAll(RawDetector.detect(matrix));
@@ -121,7 +123,7 @@ class InvariantsTest {
         Scenario base = TestSupport.scenario("simple");
         SolveOptions defaults = base.options();
         SolveOptions withInventory = new SolveOptions(defaults.rawMaterials(),
-                Map.of("圆石", 100.0, "铁锭", 50.0), defaults.disabledRecipes(),
+                J8.map("圆石", 100.0, "铁锭", 50.0), defaults.disabledRecipes(),
                 defaults.allowedExternalCycInputs(), defaults.objective(),
                 defaults.autoDetectRaw(), defaults.autoDetectSeed(), defaults.autoBootstrap());
 

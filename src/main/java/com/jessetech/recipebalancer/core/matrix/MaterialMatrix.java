@@ -1,5 +1,7 @@
 package com.jessetech.recipebalancer.core.matrix;
 
+import com.jessetech.recipebalancer.core.util.J8;
+
 import com.jessetech.recipebalancer.core.model.Recipe;
 
 import java.util.Collections;
@@ -44,7 +46,7 @@ public final class MaterialMatrix {
         }
         all.addAll(targetProducts.keySet());
         all.addAll(inventory.keySet());
-        return List.copyOf(all);
+        return J8.listCopy(all);
     }
 
     public static MaterialMatrix build(List<Recipe> recipes, List<String> items) {
@@ -62,7 +64,7 @@ public final class MaterialMatrix {
                 a[row(index, entry.getKey())][j] -= entry.getValue();
             }
         }
-        return new MaterialMatrix(List.copyOf(items), Collections.unmodifiableMap(index),
+        return new MaterialMatrix(J8.listCopy(items), Collections.unmodifiableMap(index),
                 a, recipes.size());
     }
 

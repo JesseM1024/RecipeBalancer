@@ -10,6 +10,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -47,7 +48,7 @@ public final class DirectedGraph<N> {
 
     public Set<N> neighbors(N node) {
         Set<N> out = adjacency.get(node);
-        return out == null ? Set.of() : Collections.unmodifiableSet(out);
+        return out == null ? Collections.<N>emptySet() : Collections.unmodifiableSet(out);
     }
 
     public int nodeCount() {
@@ -131,7 +132,7 @@ public final class DirectedGraph<N> {
                     }
                 }
             }
-            generations.add(List.copyOf(thisGeneration));
+            generations.add(Collections.unmodifiableList(new ArrayList<>(thisGeneration)));
         }
         if (!indegree.isEmpty()) {
             throw new IllegalStateException("Graph contains a cycle or graph changed during iteration");
@@ -148,7 +149,46 @@ public final class DirectedGraph<N> {
         }
     }
 
-    public record Edge<N>(N from, N to) {
+    /** 一条有向边（1.16.5 线是 Java 8，不能写 record）。 */
+    public static final class Edge<N> {
+
+        private final N from;
+        private final N to;
+
+        public Edge(N from, N to) {
+            this.from = from;
+            this.to = to;
+        }
+
+        public N from() {
+            return from;
+        }
+
+        public N to() {
+            return to;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) {
+                return true;
+            }
+            if (!(o instanceof Edge)) {
+                return false;
+            }
+            Edge<?> other = (Edge<?>) o;
+            return Objects.equals(from, other.from) && Objects.equals(to, other.to);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(from, to);
+        }
+
+        @Override
+        public String toString() {
+            return "Edge[from=" + from + ", to=" + to + "]";
+        }
     }
 
     private static final class Tarjan<N> {

@@ -40,7 +40,7 @@ public final class ScenarioKeyNormalizer {
                         remap(recipe.sourceList(), representatives),
                         remap(recipe.productList(), representatives),
                         recipe.time(), recipe.equType()))
-                .toList();
+                .collect(java.util.stream.Collectors.toList());
         Map<String, Double> targets = remap(scenario.targetProducts(), representatives);
         return new Scenario(recipes, targets, scenario.options());
     }

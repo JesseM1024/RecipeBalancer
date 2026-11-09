@@ -1,5 +1,7 @@
 package com.jessetech.recipebalancer.mc.jei;
 
+import com.jessetech.recipebalancer.core.util.J8;
+
 import com.jessetech.recipebalancer.RecipeBalancerMod;
 import mezz.jei.api.ingredients.ITypedIngredient;
 import mezz.jei.api.runtime.IJeiRuntime;
@@ -56,7 +58,7 @@ final class JeiBookmarkReader {
             for (Object typed : typedIngredients(source)) {
                 if (typed instanceof ITypedIngredient<?> ingredient) {
                     JeiIngredientMapper.Mapped mapped = JeiIngredientMapper.of(ingredient);
-                    if (mapped != null && !mapped.key().isBlank()) {
+                    if (mapped != null && !J8.isBlank(mapped.key())) {
                         keys.add(mapped.key());
                     }
                 }

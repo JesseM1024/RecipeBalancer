@@ -1,5 +1,7 @@
 package com.jessetech.recipebalancer.core;
 
+import com.jessetech.recipebalancer.core.util.J8;
+
 import com.jessetech.recipebalancer.core.io.SchemaException;
 import com.jessetech.recipebalancer.core.io.ScenarioStore;
 import com.jessetech.recipebalancer.core.model.Recipe;
@@ -33,7 +35,7 @@ class ScenarioStoreTest {
         assertTrue(Files.isRegularFile(saved));
         assertEquals("默认场景.json", saved.getFileName().toString());
         assertTrue(store.exists("默认场景"));
-        assertEquals(List.of("默认场景"), store.names());
+        assertEquals(J8.list("默认场景"), store.names());
 
         Scenario loaded = store.load("默认场景");
         assertEquals(scenario.recipes(), loaded.recipes());
@@ -42,7 +44,7 @@ class ScenarioStoreTest {
 
         assertTrue(store.delete("默认场景"));
         assertFalse(store.exists("默认场景"));
-        assertEquals(List.of(), store.names());
+        assertEquals(J8.list(), store.names());
     }
 
     @Test
@@ -53,7 +55,7 @@ class ScenarioStoreTest {
         store.save("a", scenario);
         store.save("c", scenario);
 
-        assertEquals(List.of("a", "b", "c"), store.names());
+        assertEquals(J8.list("a", "b", "c"), store.names());
     }
 
     @Test
@@ -78,7 +80,7 @@ class ScenarioStoreTest {
         ScenarioStore store = new ScenarioStore(directory);
         // 0.001 tick = 0.00005 秒；不能因为 JSON/展示四舍五入变成 0
         ScenarioDraft draft = ScenarioDraft.blank();
-        draft.addRecipe(new Recipe(Map.of("ore", 1.0), Map.of("ingot", 1.0),
+        draft.addRecipe(new Recipe(J8.map("ore", 1.0), J8.map("ingot", 1.0),
                 0.00005, "furnace"));
         store.save("autosave", draft.toScenario());
 
@@ -100,7 +102,7 @@ class ScenarioStoreTest {
 
         // 有配方但目标还没填（用户报告的场景）
         ScenarioDraft draft = ScenarioDraft.blank();
-        draft.addRecipe(new Recipe(Map.of("ore", 1.0), Map.of("ingot", 1.0), 1.0, "furnace"));
+        draft.addRecipe(new Recipe(J8.map("ore", 1.0), J8.map("ingot", 1.0), 1.0, "furnace"));
         store.save("autosave", draft.toScenario());
 
         Scenario loaded = store.loadDraft("autosave");

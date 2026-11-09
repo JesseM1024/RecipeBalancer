@@ -1,5 +1,7 @@
 package com.jessetech.recipebalancer.mc.itemmap;
 
+import com.jessetech.recipebalancer.core.util.J8;
+
 import com.jessetech.recipebalancer.mc.i18n.Lang;
 import com.jessetech.recipebalancer.mc.ui.Chat;
 import com.jessetech.recipebalancer.mc.ui.Draw;
@@ -157,7 +159,7 @@ public final class ItemKeyMapper {
 
     /** key 是否为已知物质（注册表物品或非物品 ingredient）；否则按自定义物质处理。 */
     public static boolean isKnown(String key) {
-        if (key == null || key.isBlank()) {
+        if (key == null || J8.isBlank(key)) {
             return false;
         }
         return IngredientKey.isIngredientKey(key) || exists(key);
@@ -189,7 +191,7 @@ public final class ItemKeyMapper {
             return cached;
         }
         String resolved = hook.displayName(key);
-        if (resolved == null || resolved.isBlank()) {
+        if (resolved == null || J8.isBlank(resolved)) {
             return IngredientKey.displayName(key);
         }
         INGREDIENT_NAME_CACHE.put(cacheKey, resolved);
@@ -219,14 +221,14 @@ public final class ItemKeyMapper {
     public static List<String> findMatches(String raw, int limit) {
         String value = raw == null ? "" : raw.trim();
         if (value.isEmpty()) {
-            return List.of();
+            return J8.list();
         }
         if (IngredientKey.isIngredientKey(value)) {
-            return List.of(value);
+            return J8.list(value);
         }
         String normalized = normalize(value);
         if (!normalized.isEmpty() && exists(normalized)) {
-            return List.of(normalized);
+            return J8.list(normalized);
         }
         List<String> byName = new ArrayList<>();
         for (ResourceLocation id : ForgeRegistries.ITEMS.getKeys()) {
@@ -236,9 +238,9 @@ public final class ItemKeyMapper {
             }
         }
         if (byName.size() <= limit) {
-            return List.copyOf(byName);
+            return J8.listCopy(byName);
         }
-        return List.copyOf(byName.subList(0, limit));
+        return J8.listCopy(byName.subList(0, limit));
     }
 
     /** 结果报告中的可读名称：物品名 + 药水效果（含时长）；非物品用显示名。 */
@@ -261,7 +263,7 @@ public final class ItemKeyMapper {
         List<String> effects = new ArrayList<>();
         for (int i = 1; i < tooltip.size(); i++) {
             String line = tooltip.get(i).getString();
-            if (!line.isBlank()) {
+            if (!J8.isBlank(line)) {
                 effects.add(line);
             }
         }
@@ -333,37 +335,38 @@ public final class ItemKeyMapper {
         float r;
         float g;
         float b;
+        // 1.16.5 线是 Java 8：不能用 switch 表达式的箭头语法
         switch (i % 6) {
-            case 0 -> {
+            case 0:
                 r = brightness;
                 g = t;
                 b = p;
-            }
-            case 1 -> {
+                break;
+            case 1:
                 r = q;
                 g = brightness;
                 b = p;
-            }
-            case 2 -> {
+                break;
+            case 2:
                 r = p;
                 g = brightness;
                 b = t;
-            }
-            case 3 -> {
+                break;
+            case 3:
                 r = p;
                 g = q;
                 b = brightness;
-            }
-            case 4 -> {
+                break;
+            case 4:
                 r = t;
                 g = p;
                 b = brightness;
-            }
-            default -> {
+                break;
+            default:
                 r = brightness;
                 g = p;
                 b = q;
-            }
+                break;
         }
         int rgb = ((int) (r * 255) << 16) | ((int) (g * 255) << 8) | (int) (b * 255);
         return 0xFF000000 | rgb;
@@ -420,7 +423,7 @@ public final class ItemKeyMapper {
 
     /** 紧凑数量文本：过长时等比缩小，避免像 100000 一样溢出格子。 */
     private static void renderAmount(Draw graphics, Font font, String amount, int x, int y) {
-        if (amount == null || amount.isBlank()) {
+        if (amount == null || J8.isBlank(amount)) {
             return;
         }
         int width = font.width(amount);

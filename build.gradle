@@ -1,10 +1,22 @@
-plugins {
-    id 'java-library'
-    // 1.18.2 分支：MDG 主插件只支持 NeoForge 1.20.2+，1.18.2 没有 NeoForge，
-    // 走同一家官方的 legacy 插件（官方支持 Forge 1.17–1.20.1）。
-    id 'net.neoforged.moddev.legacyforge' version '2.0.147'
-    id 'idea'
+// ===========================================================================
+//  RecipeBalancer · MC 1.16.5 + Forge 36.2.x
+//
+//  为什么不是 MDG：ModDevGradle 的 legacy 插件官方支持范围是 Forge 1.17–1.20.1，
+//  1.16.5 不在内。这一代只能用 ForgeGradle 5（配套 Gradle 7.6，见 wrapper 配置）。
+// ===========================================================================
+buildscript {
+    repositories {
+        maven { url = 'https://maven.minecraftforge.net' }
+        mavenCentral()
+    }
+    dependencies {
+        classpath group: 'net.minecraftforge.gradle', name: 'ForgeGradle', version: '5.1.+', changing: true
+    }
 }
+
+apply plugin: 'net.minecraftforge.gradle'
+apply plugin: 'java-library'
+apply plugin: 'idea'
 
 version = mod_version
 group = mod_group_id
@@ -13,8 +25,13 @@ base {
     archivesName = mod_id
 }
 
-// 1.18.2 对应 Java 17
-java.toolchain.languageVersion = JavaLanguageVersion.of(17)
+// 1.16.5 是 Java 8 世代：这一行同时是「语法上限」——record / switch 箭头 /
+// isBlank / 模式匹配在编译期就会被拦下来（移植时必须降到 Java 8 子集）。
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(8)
+    }
+}
 
 sourceSets.main.resources {
     srcDir('src/generated/resources')
@@ -22,75 +39,70 @@ sourceSets.main.resources {
     exclude('src/generated/**/.cache')
 }
 
-repositories {
-    // MDG legacy 插件已自动带上 Minecraft / Forge 仓库，本分支无第三方 mod 依赖。
-    mavenCentral()
+// ---------------------------------------------------------------------------
+// 移植期门禁：`gradlew test -PcoreOnly`
+//
+// 只编译 core（以及 core 的测试），用来单独验证「算法在 Java 8 下的结果与 1.18.2 一致」——
+// mc 层还没移完时也能跑金标准对拍。正常构建/发布**不加**这个参数，产物不受影响。
+// ---------------------------------------------------------------------------
+if (project.hasProperty('coreOnly')) {
+    sourceSets.main.java.exclude 'com/jessetech/recipebalancer/mc/**'
+    sourceSets.main.java.exclude 'com/jessetech/recipebalancer/RecipeBalancerMod.java'
+    sourceSets.test.java.exclude 'com/jessetech/recipebalancer/mc/**'
 }
 
-legacyForge {
-    // 1.18.2 线：Forge 本体（这一代没有 NeoForge）。
-    // 2.0.147 里这三个是 enable { } 块上的三选一属性：
-    //   forgeVersion（Forge 线）/ neoForgeVersion（NeoForge 1.20.1）/ mcpVersion（原版线）。
-    enable {
-        forgeVersion = project.forge_version
-    }
+repositories {
+    mavenCentral()
+    maven { url = 'https://maven.minecraftforge.net' }
+}
 
-    // 本项目是【纯客户端】模组（@Mod 无 dist 参数，构造时检查 FMLEnvironment.dist），
-    // 因此只声明 client 运行配置 —— 服务端/数据生成配置对本项目无意义。
+minecraft {
+    // 1.16.5 的官方推荐映射（MCP snapshot）。这一代还没有 Mojang official 映射。
+    mappings channel: 'snapshot', version: '20210309-1.16.5'
+
+    // 纯客户端模组：只声明 client 运行配置（服务端/数据生成配置对本项目无意义）。
     runs {
         client {
-            client()
-        }
-        configureEach {
-            // 各版本线独立 run 目录，切分支互不串味：
-            // 本分支（1.18.2）用 1_18_2_forge/，1.20.1 线用 1_20_1_neo/。
-            gameDirectory = project.file('1_18_2_forge')
-            systemProperty 'forge.logging.markers', 'REGISTRIES'
-            logLevel = org.slf4j.event.Level.DEBUG
-        }
-    }
+            // 各版本线独立 run 目录，切分支互不串味
+            workingDirectory project.file('1_16_5_forge')
+            property 'forge.logging.markers', 'REGISTRIES'
+            property 'forge.logging.console.level', 'debug'
 
-    mods {
-        "${mod_id}" {
-            sourceSet(sourceSets.main)
+            mods {
+                "${mod_id}" {
+                    source sourceSets.main
+                }
+            }
         }
     }
 }
 
 configurations {
-    runtimeClasspath.extendsFrom localRuntime
-    // 只用于“解包进模组 jar”的库；不参与 mod 依赖声明
+    // 只用于「解包进模组 jar」的库；不参与 mod 依赖声明。
+    // 1.16.5 没有 JarJar，commons-math3 直接解包进产物 jar（与本仓库其它分支一致）。
     shaded
-    // jeiModern 源码集专用：高版本 JEI（10.x）才有的 API
-    jeiModernCompile
-}
-
-// legacy 线专用：1.18.2 生产环境是 SRG 映射，本地依赖的 mod jar 也需要
-// 从 SRG 重映射到官方映射后才能参与编译/运行（本项目管理内无 mod 依赖，属预防性配置）。
-obfuscation {
-    createRemappingConfiguration(configurations.localRuntime)
 }
 
 dependencies {
+    minecraft "net.minecraftforge:forge:${forge_version}"
+
     // ------------------------------------------------------------------
-    // JEI（1.18.2 只有 Forge 侧有；可选依赖）。
+    // JEI（1.16.5 只有 Forge 侧有；可选依赖）。
     //
-    // 编译基线故意选最老的 9.4.1.113：只允许使用该版本就存在的 API，
-    // 这样同一份代码在 9.4 ~ 10.81 全区间可加载。更高版本才有的能力
-    // （IRecipeButtonControllerFactory / IRecipeCategoryDecorator / IClickableIngredientFactory）
-    // 一律走 mc/jei/JeiCapabilities 的运行期探测，不在主源码集里编译期引用。
+    // 编译基线故意选最老的 7.6.1.75：只允许使用该版本就存在的 API，
+    // 这样同一份代码在 7.6.1 ~ 7.8.1 全区间可加载。更高版本才有的能力
+    // 一律走运行期探测，不在主源码集里编译期引用。
     //
     // compileOnly：JEI 的类不进入产物 jar，未装 JEI 时由能力探测短路。
     // dev 的 runClient 不能用来验证 JEI（JEI 的 config 注册在 userdev 会抛异常），
-    // 带 JEI 的验证统一放实机实例（1.18.2-Forge）。
+    // 带 JEI 的验证统一放实机实例（1.16.5-Forge）。
     // ------------------------------------------------------------------
     compileOnly files("libs/jei-api/jei-${jei_baseline_version}.jar")
-    jeiModernCompile files("libs/jei-api/jei-${jei_verify_version}.jar")
 
     // ------------------------------------------------------------------
     // LP 求解器：Apache Commons Math（纯 Java simplex）。
     // implementation：dev 运行期 classpath；
-    // shaded：构建时把类**直接解包进模组 jar**（不依赖 JarJar/嵌套 jar）。
+    // shaded：构建时把类**直接解包进模组 jar**。
     // ------------------------------------------------------------------
     implementation 'org.apache.commons:commons-math3:3.6.1'
     shaded 'org.apache.commons:commons-math3:3.6.1'
@@ -109,24 +121,9 @@ dependencies {
     testImplementation platform("org.junit:junit-bom:${junit_version}")
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
-}
 
-// ---------------------------------------------------------------------------
-// jeiModern 源码集：只放「JEI 10.x 才有」的实现（官方配方页按钮 API、装饰器）。
-//
-// 为什么单独一个源码集：9.x 没有 IRecipeButtonControllerFactory / IRecipeCategoryDecorator，
-// 这些类若编译进主源码集会让整个插件编译不过；放进独立源码集后用 10.81 编译，
-// 运行时由 JeiCapabilities 探测决定是否加载（9.x 上这些类永远不会被 Class.forName 到）。
-// ---------------------------------------------------------------------------
-sourceSets {
-    jeiModern {
-        java.srcDir 'src/jeiModern/java'
-        // 平台依赖沿用主源码集，但把「编译基线 JEI」剔除，换成高版本 JEI
-        compileClasspath = sourceSets.main.output + configurations.jeiModernCompile +
-                configurations.compileClasspath.filter {
-                    !it.name.startsWith('jei-1.18.2-')
-                }
-    }
+    // 只用于 @Nullable 注解（CLASS 保留，不进产物）。FG5 不像 MDG 会自动带进来。
+    compileOnly 'org.jetbrains:annotations:23.0.0'
 }
 
 // 把 shaded 库的 class 直接并入模组 jar；排除 META-INF 避免签名/清单冲突。
@@ -135,13 +132,9 @@ tasks.named('jar') {
         exclude 'META-INF/**'
         duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     }
-    // jeiModern（10.x 专属）只进产物 jar，老版本 JEI 上不会被加载。
-    // 不能挂进 sourceSets.main.output —— 那会让 compileJeiModernJava 与 classes 互相依赖。
-    dependsOn 'compileJeiModernJava'
-    from sourceSets.jeiModern.output
 }
 
-// 纯 JVM 测试：不依赖 runClient / MDG 的 dev 运行时。
+// 纯 JVM 测试：不依赖 runClient / FG5 的 dev 运行时。
 tasks.named('test') {
     useJUnitPlatform()
     finalizedBy 'deployToTestInstance'
@@ -158,12 +151,12 @@ tasks.named('test') {
 //（CI / 没有该实例的环境不会失败）。复制前先删掉旧的 recipebalancer-*.jar。
 // ---------------------------------------------------------------------------
 tasks.register('deployToTestInstance', Copy) {
-    // legacy 线在 jar 之后还有一遍 reobfJar（SRG 重映射），它才是 build/libs 里的最终产物；
+    // FG5 在 jar 之后还有一遍 reobfJar（SRG 重映射），它才是 build/libs 里的最终产物；
     // 只依赖 jar 会触发 Gradle 的「隐式依赖」校验错误。
     dependsOn tasks.matching { it.name in ['jar', 'reobfJar'] }
     onlyIf {
         def instance = project.findProperty('test_instance_dir')
-        instance != null && !instance.toString().isBlank() && project.file(instance).isDirectory()
+        instance != null && !instance.toString().trim().isEmpty() && project.file(instance).isDirectory()
     }
     from layout.buildDirectory.file("libs/${mod_id}-${mod_version}.jar")
     into { project.file("${project.findProperty('test_instance_dir')}/mods") }
@@ -187,9 +180,6 @@ tasks.register('deployToTestInstance', Copy) {
 // 产出非法 UTF-8 文件 → FML 解析 mods.toml 时抛
 //   MalformedInputException: Input length = 2
 // → 游戏报 "File ... is not a valid mod file"
-//
-//（1.20.1 及以前世代元数据文件名是 META-INF/mods.toml，
-//  neoforge.mods.toml 是 1.20.4+ 的名字。）
 // ---------------------------------------------------------------------------
 var generateModMetadata = tasks.register('generateModMetadata', ProcessResources) {
     filteringCharset = 'UTF-8'
@@ -212,14 +202,13 @@ var generateModMetadata = tasks.register('generateModMetadata', ProcessResources
     into 'build/generated/sources/modMetadata'
 }
 sourceSets.main.resources.srcDir generateModMetadata
-legacyForge.ideSyncTask generateModMetadata
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
 }
 
 // 让运行任务的子进程输出直接接到 Gradle 控制台。
-// 否则游戏崩溃时只会显示"退出码非零"，子进程的 stderr 会被吞掉。
+// 否则游戏崩溃时只会显示「退出码非零」，子进程的 stderr 会被吞掉。
 tasks.matching { it.name in ['runClient'] }.configureEach {
     standardOutput = System.out
     errorOutput = System.err

@@ -1,5 +1,7 @@
 package com.jessetech.recipebalancer.mc.jei;
 
+import com.jessetech.recipebalancer.core.util.J8;
+
 import com.jessetech.recipebalancer.mc.itemmap.IngredientKey;
 import com.jessetech.recipebalancer.mc.itemmap.ItemKeyMapper;
 import mezz.jei.api.constants.VanillaTypes;
@@ -97,7 +99,7 @@ public final class JeiIngredientMapper {
                 return null;
             }
             String name = helper.getDisplayName(ingredient);
-            return name == null || name.isBlank() ? null : name;
+            return name == null || J8.isBlank(name) ? null : name;
         } catch (RuntimeException | LinkageError e) {
             return null;
         }
@@ -111,7 +113,7 @@ public final class JeiIngredientMapper {
 
     /** 按类型标识找回已注册的 {@code IIngredientType}。 */
     static Optional<IIngredientType<?>> findType(IIngredientManager manager, String typeId) {
-        if (manager == null || typeId == null || typeId.isBlank()) {
+        if (manager == null || typeId == null || J8.isBlank(typeId)) {
             return Optional.empty();
         }
         for (IIngredientType<?> candidate : manager.getRegisteredIngredientTypes()) {

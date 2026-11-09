@@ -1,5 +1,7 @@
 package com.jessetech.recipebalancer.mc.screen;
 
+import com.jessetech.recipebalancer.core.util.J8;
+
 import com.jessetech.recipebalancer.core.model.Recipe;
 import com.jessetech.recipebalancer.core.model.SolveResult;
 import com.jessetech.recipebalancer.mc.i18n.Lang;
@@ -34,7 +36,7 @@ public final class SolveScreen extends RbScreen implements JeiPanelScreen {
     private final List<Recipe> recipes;
     private final Map<String, Double> targets;
     private final boolean inventoryEnabled;
-    private List<FormattedCharSequence> lines = List.of();
+    private List<FormattedCharSequence> lines = J8.list();
     private SolveGraphView graph;
     private boolean graphMode;
     private boolean graphDragging;
@@ -85,11 +87,11 @@ public final class SolveScreen extends RbScreen implements JeiPanelScreen {
             ">>副产物产出",
     };
 
-    private static Map<String, Integer> titleColors = Map.of();
+    private static Map<String, Integer> titleColors = J8.map();
     private static String titleColorsLanguage;
 
     public SolveScreen(Screen parent, String report, boolean success) {
-        this(parent, report, null, List.of(), Map.of(), false, success);
+        this(parent, report, null, J8.list(), J8.map(), false, success);
     }
 
     public SolveScreen(Screen parent, String report, SolveResult result,
@@ -99,8 +101,8 @@ public final class SolveScreen extends RbScreen implements JeiPanelScreen {
         this.parent = parent;
         this.report = report;
         this.result = result;
-        this.recipes = recipes == null ? List.of() : recipes;
-        this.targets = targets == null ? Map.of() : Map.copyOf(targets);
+        this.recipes = recipes == null ? J8.list() : recipes;
+        this.targets = targets == null ? J8.map() : J8.mapCopy(targets);
         this.inventoryEnabled = inventoryEnabled;
         this.success = success;
     }
@@ -217,7 +219,7 @@ public final class SolveScreen extends RbScreen implements JeiPanelScreen {
             for (String key : BROWN_TITLES) {
                 built.put(Lang.t(key), TITLE_BROWN);
             }
-            titleColors = Map.copyOf(built);
+            titleColors = J8.mapCopy(built);
             titleColorsLanguage = language;
         }
         return titleColors.getOrDefault(title, 0);

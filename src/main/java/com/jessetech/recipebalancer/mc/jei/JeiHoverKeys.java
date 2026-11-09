@@ -1,5 +1,7 @@
 package com.jessetech.recipebalancer.mc.jei;
 
+import com.jessetech.recipebalancer.core.util.J8;
+
 import com.jessetech.recipebalancer.mc.itemmap.IngredientKey;
 import com.jessetech.recipebalancer.mc.itemmap.ItemKeyMapper;
 import com.jessetech.recipebalancer.mc.screen.BalancerScreen;
@@ -29,7 +31,7 @@ public final class JeiHoverKeys {
             return null;
         }
         BalancerScreen.HoveredKey hovered = screen.jeiHoveredKey(mouseX, mouseY);
-        if (hovered == null || hovered.key() == null || hovered.key().isBlank()) {
+        if (hovered == null || hovered.key() == null || J8.isBlank(hovered.key())) {
             return null;
         }
         return hovered;

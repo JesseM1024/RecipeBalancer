@@ -27,7 +27,7 @@ import java.util.TreeSet;
  */
 public final class TextReporter {
 
-    private static final String RULE = "=".repeat(60);
+    private static final String RULE = com.jessetech.recipebalancer.core.util.J8.repeat("=", 60);
 
     private TextReporter() {
     }
@@ -215,7 +215,30 @@ public final class TextReporter {
         return String.format(Locale.ROOT, "%.3f", value);
     }
 
-    private record MachineDetail(int recipeId, double parallel, long required) {
+    /** 机器数明细（1.16.5 线是 Java 8，不能写 record）。 */
+    private static final class MachineDetail {
+
+        private final int recipeId;
+        private final double parallel;
+        private final long required;
+
+        MachineDetail(int recipeId, double parallel, long required) {
+            this.recipeId = recipeId;
+            this.parallel = parallel;
+            this.required = required;
+        }
+
+        int recipeId() {
+            return recipeId;
+        }
+
+        double parallel() {
+            return parallel;
+        }
+
+        long required() {
+            return required;
+        }
     }
 
     private static long ceilToLong(double value) {

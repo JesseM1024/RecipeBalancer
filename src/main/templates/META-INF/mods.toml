@@ -24,7 +24,7 @@ and bootstrap inventory support.
 
 # 纯客户端模组：依赖只在客户端校验。
 # 服务端即使未安装本模组也不会报错（配合主类的 FMLEnvironment.dist 检查）。
-# 1.18.2 为 Forge 血统：依赖字段用 mandatory=true（type="required" 为 20.2+ 写法）；
+# 1.16.5 为 Forge 血统：依赖字段用 mandatory=true（type="required" 为 20.2+ 写法）；
 # 平台依赖 modId 为 "forge"（这一代没有 NeoForge）。
 [[dependencies.${mod_id}]]
     modId="forge"

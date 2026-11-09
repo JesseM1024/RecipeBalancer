@@ -1,6 +1,7 @@
 package com.jessetech.recipebalancer.core.io;
 
 import com.jessetech.recipebalancer.core.model.Scenario;
+import com.jessetech.recipebalancer.core.util.J8;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -42,7 +43,7 @@ public final class ScenarioStore {
 
     public List<String> names() {
         if (!Files.isDirectory(directory)) {
-            return List.of();
+            return J8.list();
         }
         List<String> names = new ArrayList<>();
         try (Stream<Path> stream = Files.list(directory)) {
@@ -66,7 +67,7 @@ public final class ScenarioStore {
         Path path = pathFor(rawName);
         try {
             Files.createDirectories(directory);
-            Files.writeString(path, ScenarioJson.dump(scenario), StandardCharsets.UTF_8);
+            Files.write(path, ScenarioJson.dump(scenario).getBytes(StandardCharsets.UTF_8));
         } catch (IOException e) {
             throw new UncheckedIOException("保存场景失败: " + path, e);
         }

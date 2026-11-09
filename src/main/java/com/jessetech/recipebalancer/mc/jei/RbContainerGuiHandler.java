@@ -1,5 +1,7 @@
 package com.jessetech.recipebalancer.mc.jei;
 
+import com.jessetech.recipebalancer.core.util.J8;
+
 import com.jessetech.recipebalancer.mc.screen.BalancerScreen;
 import mezz.jei.api.gui.handlers.IGuiContainerHandler;
 import mezz.jei.api.ingredients.ITypedIngredient;
@@ -36,7 +38,7 @@ public final class RbContainerGuiHandler implements IGuiContainerHandler<Balance
             return null;
         }
         BalancerScreen.HoveredKey hovered = screen.jeiHoveredKey(mouseX, mouseY);
-        if (hovered == null || hovered.key() == null || hovered.key().isBlank()) {
+        if (hovered == null || hovered.key() == null || J8.isBlank(hovered.key())) {
             return null;
         }
         return JeiHoverKeys.typed(hovered.key())

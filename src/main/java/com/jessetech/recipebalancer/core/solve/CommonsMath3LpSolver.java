@@ -71,10 +71,15 @@ public final class CommonsMath3LpSolver implements LpSolver {
     }
 
     private static Relationship toRelationship(Relation relation) {
-        return switch (relation) {
-            case LE -> Relationship.LEQ;
-            case GE -> Relationship.GEQ;
-            case EQ -> Relationship.EQ;
-        };
+        // 1.16.5 线是 Java 8：不能用 switch 表达式（箭头语法）
+        switch (relation) {
+            case LE:
+                return Relationship.LEQ;
+            case GE:
+                return Relationship.GEQ;
+            case EQ:
+            default:
+                return Relationship.EQ;
+        }
     }
 }

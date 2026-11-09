@@ -1,5 +1,7 @@
 package com.jessetech.recipebalancer.core.model;
 
+import com.jessetech.recipebalancer.core.util.J8;
+
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -111,7 +113,7 @@ public final class RecipePattern {
     }
 
     private static void put(String[] keys, double[] amounts, int index, String key, double amount) {
-        if (index < 0 || index >= keys.length || key == null || key.isBlank() || !(amount > 0)) {
+        if (index < 0 || index >= keys.length || key == null || J8.isBlank(key) || !(amount > 0)) {
             return;
         }
         if (key.equals(keys[index])) {
@@ -234,7 +236,7 @@ public final class RecipePattern {
     }
 
     public boolean hasContent() {
-        if (!equipmentKey.isBlank()) {
+        if (!J8.isBlank(equipmentKey)) {
             return true;
         }
         return maxInputIndex() >= 0 || maxOutputIndex() >= 0;
@@ -242,7 +244,7 @@ public final class RecipePattern {
 
     /** 生成 core 配方；时间从 tick 转回秒。 */
     public Recipe toRecipe() {
-        if (equipmentKey.isBlank()) {
+        if (J8.isBlank(equipmentKey)) {
             throw new IllegalArgumentException("请先标记设备");
         }
         if (!(timeTicks > 0)) {

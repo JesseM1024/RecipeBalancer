@@ -1,5 +1,7 @@
 package com.jessetech.recipebalancer.core.bootstrap;
 
+import com.jessetech.recipebalancer.core.util.J8;
+
 import com.jessetech.recipebalancer.core.graph.DirectedGraph;
 import com.jessetech.recipebalancer.core.model.Constants;
 import com.jessetech.recipebalancer.core.model.Recipe;
@@ -40,15 +42,15 @@ public final class PerfectCycleBootstrapper {
     public static Map<String, Double> detect(List<Recipe> recipes,
                                              List<Double> recipeRates,
                                              Set<String> externalInputs) {
-        Set<String> external = externalInputs == null ? Set.of() : externalInputs;
+        Set<String> external = externalInputs == null ? J8.set() : externalInputs;
         List<Integer> active = activeRecipes(recipes, recipeRates);
         if (active.isEmpty()) {
-            return Map.of();
+            return J8.map();
         }
 
         Set<String> seeds = new LinkedHashSet<>(selectSeedItems(recipes, active, external));
         if (seeds.isEmpty()) {
-            return Map.of();
+            return J8.map();
         }
 
         Requirement requirement = startupRequirements(recipes, active, recipeRates, seeds, external);
@@ -272,7 +274,7 @@ public final class PerfectCycleBootstrapper {
                 if (seeds.contains(item) || external.contains(item)) {
                     continue;
                 }
-                for (int producer : producers.getOrDefault(item, List.of())) {
+                for (int producer : producers.getOrDefault(item, J8.list())) {
                     if (producer != index) {
                         dependency.addEdge(producer, index);
                     }
@@ -346,10 +348,50 @@ public final class PerfectCycleBootstrapper {
         return batches * batch;
     }
 
-    private record Requirement(Map<String, Double> required, Set<String> extra) {
+    /** 一次投料需求（1.16.5 线是 Java 8，不能写 record）。 */
+    private static final class Requirement {
+
+        private final Map<String, Double> required;
+        private final Set<String> extra;
+
+        Requirement(Map<String, Double> required, Set<String> extra) {
+            this.required = required;
+            this.extra = extra;
+        }
+
+        Map<String, Double> required() {
+            return required;
+        }
+
+        Set<String> extra() {
+            return extra;
+        }
     }
 
-    private record Best(int size, double total, List<String> nodes) implements Comparable<Best> {
+    /** 候选起始环（1.16.5 线是 Java 8，不能写 record）。 */
+    private static final class Best implements Comparable<Best> {
+
+        private final int size;
+        private final double total;
+        private final List<String> nodes;
+
+        Best(int size, double total, List<String> nodes) {
+            this.size = size;
+            this.total = total;
+            this.nodes = nodes;
+        }
+
+        int size() {
+            return size;
+        }
+
+        double total() {
+            return total;
+        }
+
+        List<String> nodes() {
+            return nodes;
+        }
 
         @Override
         public int compareTo(Best other) {

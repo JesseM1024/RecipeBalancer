@@ -1,5 +1,7 @@
 package com.jessetech.recipebalancer.mc.screen;
 
+import com.jessetech.recipebalancer.core.util.J8;
+
 import com.jessetech.recipebalancer.mc.i18n.Lang;
 import com.jessetech.recipebalancer.mc.itemmap.ItemKeyMapper;
 import com.jessetech.recipebalancer.mc.jei.JeiBookmarks;
@@ -148,7 +150,7 @@ public final class KeySetScreen extends RbScreen implements JeiPanelScreen {
     }
 
     private void addKey(String key, boolean custom) {
-        if (key == null || key.isBlank()) {
+        if (key == null || J8.isBlank(key)) {
             return;
         }
         if (entries.contains(key)) {
@@ -223,7 +225,7 @@ public final class KeySetScreen extends RbScreen implements JeiPanelScreen {
 
     /** 解析输入：唯一精确命中返回该 key；无命中返回原文（自定义物质）；多义返回 null。 */
     private String resolveUnique(String raw) {
-        if (raw == null || raw.isBlank()) {
+        if (raw == null || J8.isBlank(raw)) {
             return null;
         }
         List<String> matches = ItemKeyMapper.findMatches(raw, 4);
@@ -356,13 +358,13 @@ public final class KeySetScreen extends RbScreen implements JeiPanelScreen {
         int slot = gridSlotAt(mouseX, mouseY);
         if (slot >= 0 && slot < entries.size()) {
             String key = entries.get(slot);
-            graphics.renderComponentTooltip(font, List.of(
+            graphics.renderComponentTooltip(font, J8.list(
                     Chat.literal(ItemKeyMapper.displayName(key)),
                     Chat.literal(ItemKeyMapper.registryName(key))
                             .withStyle(ChatFormatting.GRAY)), mouseX, mouseY);
         } else if (slot >= 0) {
             graphics.renderComponentTooltip(font,
-                    List.of(Lang.c("空格：左键/中键自定义物质")), mouseX, mouseY);
+                    J8.list(Lang.c("空格：左键/中键自定义物质")), mouseX, mouseY);
         }
     }
 
@@ -458,7 +460,7 @@ public final class KeySetScreen extends RbScreen implements JeiPanelScreen {
 
     /** JEI 拖进来的物料：追加到清单末尾（已存在则只提示）。 */
     public void addGhostKey(String key) {
-        if (key == null || key.isBlank()) {
+        if (key == null || J8.isBlank(key)) {
             return;
         }
         if (entries.contains(key)) {

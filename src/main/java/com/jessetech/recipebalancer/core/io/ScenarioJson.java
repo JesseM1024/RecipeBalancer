@@ -6,6 +6,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParseException;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
+import com.jessetech.recipebalancer.core.util.J8;
 import com.jessetech.recipebalancer.core.model.Objective;
 import com.jessetech.recipebalancer.core.model.Recipe;
 import com.jessetech.recipebalancer.core.model.Scenario;
@@ -34,9 +35,9 @@ import java.util.TreeSet;
 public final class ScenarioJson {
 
     private static final List<String> REQUIRED_RECIPE_KEYS =
-            List.of("sourceList", "productList", "time", "equType");
+            J8.list("sourceList", "productList", "time", "equType");
 
-    private static final Set<String> KNOWN_OPTIONS = Set.of(
+    private static final Set<String> KNOWN_OPTIONS = J8.set(
             "raw_materials", "initial_inventory", "disabled_recipes",
             "allowed_external_cyc_inputs", "objective",
             "auto_detect_raw", "auto_detect_seed", "auto_bootstrap");
@@ -46,7 +47,7 @@ public final class ScenarioJson {
 
     public static Scenario load(Path path) {
         try {
-            return load(Files.readString(path, StandardCharsets.UTF_8));
+            return load(new String(Files.readAllBytes(path), StandardCharsets.UTF_8));
         } catch (IOException e) {
             throw new UncheckedIOException("读取场景失败: " + path, e);
         }
@@ -62,7 +63,7 @@ public final class ScenarioJson {
      */
     public static Scenario loadDraft(Path path) {
         try {
-            return loadDraft(Files.readString(path, StandardCharsets.UTF_8));
+            return loadDraft(new String(Files.readAllBytes(path), StandardCharsets.UTF_8));
         } catch (IOException e) {
             throw new UncheckedIOException("读取草稿失败: " + path, e);
         }
@@ -126,14 +127,14 @@ public final class ScenarioJson {
             if (requireNonEmpty) {
                 throw new SchemaException("recipes 必须为非空列表");
             }
-            return List.of();
+            return J8.list();
         }
         JsonArray array = element.getAsJsonArray();
         if (array.isEmpty()) {
             if (requireNonEmpty) {
                 throw new SchemaException("recipes 必须为非空列表");
             }
-            return List.of();
+            return J8.list();
         }
 
         List<Recipe> recipes = new ArrayList<>(array.size());
@@ -197,7 +198,7 @@ public final class ScenarioJson {
         }
 
         Set<String> rawMaterials = readStringSet(options, "raw_materials");
-        Map<String, Double> initialInventory = Map.of();
+        Map<String, Double> initialInventory = J8.map();
         if (options.has("initial_inventory")) {
             JsonElement element = options.get("initial_inventory");
             if (!element.isJsonObject()) {
@@ -226,7 +227,7 @@ public final class ScenarioJson {
 
     private static Set<String> readStringSet(JsonObject options, String key) {
         if (!options.has(key)) {
-            return Set.of();
+            return J8.set();
         }
         JsonElement element = options.get(key);
         if (!element.isJsonArray()) {
@@ -244,7 +245,7 @@ public final class ScenarioJson {
 
     private static Set<Integer> readIntSet(JsonObject options, String key) {
         if (!options.has(key)) {
-            return Set.of();
+            return J8.set();
         }
         JsonElement element = options.get(key);
         if (!element.isJsonArray()) {

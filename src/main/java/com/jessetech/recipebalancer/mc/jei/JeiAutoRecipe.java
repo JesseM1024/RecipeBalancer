@@ -1,5 +1,7 @@
 package com.jessetech.recipebalancer.mc.jei;
 
+import com.jessetech.recipebalancer.core.util.J8;
+
 import com.jessetech.recipebalancer.core.model.RecipePattern;
 import com.jessetech.recipebalancer.mc.itemmap.ItemKeyMapper;
 import com.jessetech.recipebalancer.mc.screen.AutoRecipeHooks;
@@ -69,7 +71,7 @@ public final class JeiAutoRecipe implements AutoRecipeHooks.Hook {
     private static List<Found> find(String key) {
         List<Found> result = new ArrayList<>();
         IJeiRuntime runtime = JeiIngredientMapper.runtime();
-        if (runtime == null || key == null || key.isBlank()) {
+        if (runtime == null || key == null || J8.isBlank(key)) {
             return result;
         }
         IFocus<ItemStack> focus = focus(runtime, key);

@@ -1,5 +1,7 @@
 package com.jessetech.recipebalancer.mc.io;
 
+import com.jessetech.recipebalancer.core.util.J8;
+
 import com.jessetech.recipebalancer.RecipeBalancerMod;
 import com.jessetech.recipebalancer.core.io.ScenarioStore;
 import net.minecraftforge.fml.loading.FMLPaths;
@@ -46,7 +48,7 @@ public final class WorkspaceSession {
 
     /** 文件名清洗；空名字回退到默认工作区名。 */
     public static String nameOf(String raw) {
-        if (raw == null || raw.isBlank()) {
+        if (raw == null || J8.isBlank(raw)) {
             return DEFAULT_NAME;
         }
         return ScenarioStore.sanitize(raw);
@@ -87,7 +89,7 @@ public final class WorkspaceSession {
             List<Path> files;
             try (Stream<Path> stream = Files.list(legacy)) {
                 files = stream.filter(path -> path.getFileName().toString().endsWith(".json"))
-                        .toList();
+                        .collect(java.util.stream.Collectors.toList());
             }
             int copied = 0;
             for (Path source : files) {

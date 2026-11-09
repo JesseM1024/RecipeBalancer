@@ -1,5 +1,7 @@
 package com.jessetech.recipebalancer.mc.itemmap;
 
+import com.jessetech.recipebalancer.core.util.J8;
+
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.Locale;
@@ -49,13 +51,13 @@ public final class IngredientKey {
 
     public static String displayName(String key) {
         String name = decodePart(key, 3);
-        return name.isBlank() ? uniqueId(key) : name;
+        return J8.isBlank(name) ? uniqueId(key) : name;
     }
 
     public static String describe(String key) {
         String type = typeUid(key);
         String uid = uniqueId(key);
-        return type.isBlank() ? uid : type + ":" + uid;
+        return J8.isBlank(type) ? uid : type + ":" + uid;
     }
 
     public static String shortLabel(String key) {
@@ -64,7 +66,7 @@ public final class IngredientKey {
 
     /** 用外部解析出的名称生成短标签（语言切换后名称会变，不能只看 key 里的固化名）。 */
     public static String shortLabelOf(String name) {
-        if (name == null || name.isBlank()) {
+        if (name == null || J8.isBlank(name)) {
             return "?";
         }
         int first = name.codePointAt(0);

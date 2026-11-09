@@ -1,5 +1,7 @@
 package com.jessetech.recipebalancer.mc.screen;
 
+import com.jessetech.recipebalancer.core.util.J8;
+
 import com.jessetech.recipebalancer.RecipeBalancerMod;
 import com.jessetech.recipebalancer.core.io.ScenarioStore;
 import com.jessetech.recipebalancer.core.model.Objective;
@@ -471,7 +473,7 @@ public final class BalancerScreen extends RbContainerScreen implements JeiPanelS
                 AeStyle.MUTED, false);
         drawTargets(graphics, mouseX, mouseY);
 
-        String libraryCount = libraryQuery.isBlank() ? String.valueOf(draft.recipeCount())
+        String libraryCount = J8.isBlank(libraryQuery) ? String.valueOf(draft.recipeCount())
                 : libraryView.size() + "/" + draft.recipeCount();
         graphics.drawString(font, Lang.t("配方库 (%s)", libraryCount), contentX,
                 libraryLabelY, AeStyle.MUTED, false);
@@ -660,7 +662,7 @@ public final class BalancerScreen extends RbContainerScreen implements JeiPanelS
                 } else {
                     renderSlotIcon(graphics, font, productKey, x, y, null);
                 }
-                if (!recipe.equType().isBlank()) {
+                if (!J8.isBlank(recipe.equType())) {
                     ItemStack equipment = ItemKeyMapper.stack(recipe.equType());
                     // 设备标记统一按 translate(x+10,y+10) + scale(0.5) 的变换画在右下角
                     PoseStack pose = graphics.pose();
@@ -729,7 +731,7 @@ public final class BalancerScreen extends RbContainerScreen implements JeiPanelS
         if ((allFields || libFilterFields[1]) && matchesKeys(recipe.productList().keySet(), query)) {
             return true;
         }
-        return (allFields || libFilterFields[2]) && !recipe.equType().isBlank()
+        return (allFields || libFilterFields[2]) && !J8.isBlank(recipe.equType())
                 && matchesKey(recipe.equType(), query);
     }
 
@@ -889,7 +891,7 @@ public final class BalancerScreen extends RbContainerScreen implements JeiPanelS
         // 设备/耗时标签在各自槽位的“后方”（右侧），时间值画在槽位内部
         graphics.drawString(font, Lang.t("设备"), equipmentX + SLOT + 2, encodingY + 5,
                 AeStyle.MUTED, false);
-        if (!pattern.equipmentKey().isBlank()) {
+        if (!J8.isBlank(pattern.equipmentKey())) {
             renderSlotIcon(graphics, font, pattern.equipmentKey(), equipmentX, encodingY, null);
         }
 
@@ -1024,7 +1026,7 @@ public final class BalancerScreen extends RbContainerScreen implements JeiPanelS
         }
 
         if (inside(mouseX, mouseY, equipmentX, encodingY, SLOT, SLOT)) {
-            if (pattern.equipmentKey().isBlank()) {
+            if (J8.isBlank(pattern.equipmentKey())) {
                 graphics.renderTooltip(font, Lang.c("设备标记：左键放置手持物品 / 中键自定义"),
                         mouseX, mouseY);
             } else {
@@ -1033,7 +1035,7 @@ public final class BalancerScreen extends RbContainerScreen implements JeiPanelS
             return;
         }
         if (inside(mouseX, mouseY, equipmentX, encodingY + 20, SLOT, SLOT)) {
-            List<Component> lines = List.of(
+            List<Component> lines = J8.list(
                     Lang.c("耗时 %s", TimeExpression.formatTicks(pattern.timeTicks())),
                     Lang.c("精确: %s", TimeExpression.formatExactTicks(pattern.timeTicks()))
                             .withStyle(style -> style.withColor(0xFF808080)),
@@ -1128,7 +1130,7 @@ public final class BalancerScreen extends RbContainerScreen implements JeiPanelS
                 solveButton, rawListButton, externalInputButton};
         for (IconButton button : buttons) {
             if (button != null && button.isMouseOver(mouseX, mouseY)) {
-                graphics.renderComponentTooltip(font, List.of(button.tooltipText()),
+                graphics.renderComponentTooltip(font, J8.list(button.tooltipText()),
                         mouseX, mouseY);
                 return true;
             }
@@ -1343,7 +1345,7 @@ public final class BalancerScreen extends RbContainerScreen implements JeiPanelS
     }
 
     private void openTargetAmount(String key, double amount) {
-        boolean adding = key == null || key.isBlank();
+        boolean adding = key == null || J8.isBlank(key);
         if (adding && draft.targets().size() >= MAX_TARGETS) {
             status = Lang.t("目标最多 %s 个", MAX_TARGETS);
             return;
@@ -1415,7 +1417,7 @@ public final class BalancerScreen extends RbContainerScreen implements JeiPanelS
         if (button == 1) {
             // 右键：该物质在 JEI 里只有一种配方就自动撰写并写入配方集，
             // 有多种（如红石粉：合成 + 各种机器处理）只打开 JEI 配方页
-            if (key != null && !key.isBlank()) {
+            if (key != null && !J8.isBlank(key)) {
                 autoWriteFromJei(key);
             }
             return;
@@ -1793,7 +1795,7 @@ public final class BalancerScreen extends RbContainerScreen implements JeiPanelS
             }
         }
         if (inside(mouseX, mouseY, equipmentX, encodingY, SLOT, SLOT)
-                && !pattern.equipmentKey().isBlank()) {
+                && !J8.isBlank(pattern.equipmentKey())) {
             return hovered(pattern.equipmentKey(), equipmentX, encodingY);
         }
         int target = targetSlotAt(mouseX, mouseY);
@@ -1831,7 +1833,7 @@ public final class BalancerScreen extends RbContainerScreen implements JeiPanelS
     }
 
     private static HoveredKey hovered(String key, int x, int y) {
-        return key == null || key.isBlank() ? null : new HoveredKey(key, x, y, SLOT, SLOT);
+        return key == null || J8.isBlank(key) ? null : new HoveredKey(key, x, y, SLOT, SLOT);
     }
 
     public void applyGhost(GhostKind kind, int index, String key) {
@@ -1839,7 +1841,7 @@ public final class BalancerScreen extends RbContainerScreen implements JeiPanelS
     }
 
     public void applyGhost(GhostKind kind, int index, String key, double amount) {
-        if (key == null || key.isBlank()) {
+        if (key == null || J8.isBlank(key)) {
             return;
         }
         double value = amount > 0 ? amount : 1.0;

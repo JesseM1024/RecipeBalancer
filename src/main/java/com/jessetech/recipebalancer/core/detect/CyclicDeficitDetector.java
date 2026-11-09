@@ -1,5 +1,7 @@
 package com.jessetech.recipebalancer.core.detect;
 
+import com.jessetech.recipebalancer.core.util.J8;
+
 import com.jessetech.recipebalancer.core.graph.DirectedGraph;
 import com.jessetech.recipebalancer.core.model.Constants;
 import com.jessetech.recipebalancer.core.model.Recipe;
@@ -9,6 +11,7 @@ import com.jessetech.recipebalancer.core.solve.LpSolver.LpResult;
 import com.jessetech.recipebalancer.core.solve.LpSolver.Relation;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -40,7 +43,23 @@ public final class CyclicDeficitDetector {
      * @param deficits 亏损物质（可外部补充）
      * @param cycles   发生亏损的环（每个环的全部物质，按 SCC 去重）
      */
-    public record Cycles(Set<String> deficits, List<Set<String>> cycles) {
+    public static final class Cycles {
+
+        private final Set<String> deficits;
+        private final List<Set<String>> cycles;
+
+        public Cycles(Set<String> deficits, List<Set<String>> cycles) {
+            this.deficits = deficits;
+            this.cycles = cycles;
+        }
+
+        public Set<String> deficits() {
+            return deficits;
+        }
+
+        public List<Set<String>> cycles() {
+            return cycles;
+        }
     }
 
     public static Set<String> detect(List<Recipe> recipes,
@@ -53,7 +72,8 @@ public final class CyclicDeficitDetector {
     public static Cycles detectCycles(List<Recipe> recipes,
                                       Set<String> allowedExternalInputs,
                                       LpSolver solver) {
-        Set<String> allowed = allowedExternalInputs == null ? Set.of() : allowedExternalInputs;
+        Set<String> allowed = allowedExternalInputs == null
+                ? Collections.<String>emptySet() : allowedExternalInputs;
         boolean restricted = !allowed.isEmpty();
 
         DirectedGraph<String> graph = new DirectedGraph<>();
@@ -111,10 +131,10 @@ public final class CyclicDeficitDetector {
             detectInCycle(recipes, internalRecipes, cyclicItems, allowed, restricted, solver, deficits);
             if (deficits.size() > before) {
                 // 只记录真的亏损的环，作为报告参考
-                cycles.add(Set.copyOf(scc));
+                cycles.add(J8.setCopy(scc));
             }
         }
-        return new Cycles(Set.copyOf(deficits), List.copyOf(cycles));
+        return new Cycles(J8.setCopy(deficits), J8.listCopy(cycles));
     }
 
     private static void detectInCycle(List<Recipe> recipes,

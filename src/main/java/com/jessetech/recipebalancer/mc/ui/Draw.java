@@ -1,5 +1,7 @@
 package com.jessetech.recipebalancer.mc.ui;
 
+import com.jessetech.recipebalancer.core.util.J8;
+
 import com.mojang.blaze3d.platform.GlStateManager;
 import com.mojang.blaze3d.platform.Lighting;
 import com.mojang.blaze3d.platform.Window;
@@ -189,7 +191,7 @@ public final class Draw {
     }
 
     public void renderTooltip(Font font, Component line, int mouseX, int mouseY) {
-        renderComponentTooltip(font, List.of(line), mouseX, mouseY);
+        renderComponentTooltip(font, J8.list(line), mouseX, mouseY);
     }
 
     public void renderComponentTooltip(Font font, List<Component> lines, int mouseX, int mouseY) {

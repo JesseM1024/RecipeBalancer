@@ -49,7 +49,7 @@ public final class JeiSlots {
                 if (slot == null || slot.isEmpty()) {
                     continue;
                 }
-                List<ITypedIngredient<?>> ingredients = slot.getAllIngredients().toList();
+                List<ITypedIngredient<?>> ingredients = slot.getAllIngredients().collect(java.util.stream.Collectors.toList());
                 if (ingredients.isEmpty()) {
                     continue;
                 }

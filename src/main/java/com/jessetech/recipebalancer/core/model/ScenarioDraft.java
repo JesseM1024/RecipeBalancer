@@ -1,5 +1,7 @@
 package com.jessetech.recipebalancer.core.model;
 
+import com.jessetech.recipebalancer.core.util.J8;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -104,7 +106,7 @@ public final class ScenarioDraft {
     }
 
     public void putTarget(String item, double amount) {
-        if (item == null || item.isBlank()) {
+        if (item == null || J8.isBlank(item)) {
             throw new IllegalArgumentException("目标物品不能为空");
         }
         if (!(amount > 0) || Double.isInfinite(amount)) {

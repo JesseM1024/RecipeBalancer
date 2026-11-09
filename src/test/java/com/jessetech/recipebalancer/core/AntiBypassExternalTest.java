@@ -1,5 +1,7 @@
 package com.jessetech.recipebalancer.core;
 
+import com.jessetech.recipebalancer.core.util.J8;
+
 import com.jessetech.recipebalancer.core.model.Objective;
 import com.jessetech.recipebalancer.core.model.Recipe;
 import com.jessetech.recipebalancer.core.model.Scenario;
@@ -35,20 +37,20 @@ class AntiBypassExternalTest {
     @Test
     void intermediateWithProducerIsNotPurchased() {
         Recipe chlorination = recipe(
-                new LinkedHashMap<>(Map.of("TiO2", 1.0, "Cl2", 2.0, "C", 1.0)),
-                new LinkedHashMap<>(Map.of("TiCl4", 1.0, "CO2", 1.0)), 1.0, "chemical_oxidizer");
+                new LinkedHashMap<>(J8.map("TiO2", 1.0, "Cl2", 2.0, "C", 1.0)),
+                new LinkedHashMap<>(J8.map("TiCl4", 1.0, "CO2", 1.0)), 1.0, "chemical_oxidizer");
         Recipe reduction = recipe(
-                new LinkedHashMap<>(Map.of("TiCl4", 1.0, "Mg", 2.0)),
-                new LinkedHashMap<>(Map.of("Ti", 1.0, "MgCl2", 2.0)), 1.0, "chemical_reaction");
+                new LinkedHashMap<>(J8.map("TiCl4", 1.0, "Mg", 2.0)),
+                new LinkedHashMap<>(J8.map("Ti", 1.0, "MgCl2", 2.0)), 1.0, "chemical_reaction");
         Recipe electrolysis = recipe(
-                new LinkedHashMap<>(Map.of("MgCl2", 3.0)),
-                new LinkedHashMap<>(Map.of("Mg", 3.0, "Cl2", 1.3)), 1.0, "electrolytic_separator");
+                new LinkedHashMap<>(J8.map("MgCl2", 3.0)),
+                new LinkedHashMap<>(J8.map("Mg", 3.0, "Cl2", 1.3)), 1.0, "electrolytic_separator");
 
-        SolveOptions options = new SolveOptions(Set.of(), Map.of(), Set.of(), Set.of(),
+        SolveOptions options = new SolveOptions(J8.set(), J8.map(), J8.set(), J8.set(),
                 Objective.MACHINE, true, true, false);
         SolveResult result = Balancer.solve(new Scenario(
-                List.of(chlorination, reduction, electrolysis),
-                new LinkedHashMap<>(Map.of("Ti", 1.0)), options));
+                J8.list(chlorination, reduction, electrolysis),
+                new LinkedHashMap<>(J8.map("Ti", 1.0)), options));
 
         assertTrue(result.success(), "有氯亏损补充应可解");
         assertFalse(result.externalInputs().containsKey("TiCl4"),
@@ -63,12 +65,13 @@ class AntiBypassExternalTest {
 
         // 文本结果里要能看到循环亏损的参考信息
         String report = TextReporter.formatPerTick(result,
-                List.of(chlorination, reduction, electrolysis));
+                J8.list(chlorination, reduction, electrolysis));
         assertTrue(report.contains(">>循环亏损物质（检测结果）"), "缺少循环亏损物质段落");
         assertTrue(report.contains(">>亏损环涉及的物质"), "缺少亏损环物质段落");
         assertTrue(report.contains("Cl2"), "亏损环里应列出 Cl2");
         try {
-            java.nio.file.Files.writeString(java.nio.file.Path.of("build/report.txt"), report);
+            java.nio.file.Files.write(java.nio.file.Paths.get("build/report.txt"),
+                    report.getBytes(java.nio.charset.StandardCharsets.UTF_8));
         } catch (java.io.IOException ignored) {
             // 仅调试用
         }

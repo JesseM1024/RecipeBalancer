@@ -1,13 +1,3 @@
-// 插件仓库：默认走 Gradle Plugin Portal。国内若解析慢，取消下面镜像注释。
-pluginManagement {
-    repositories {
-        // maven { url = 'https://maven.aliyun.com/repository/gradle-plugin' }
-        gradlePluginPortal()
-    }
-}
-
-plugins {
-    id 'org.gradle.toolchains.foojay-resolver-convention' version '1.0.0'
-}
-
+// ForgeGradle 5 走 buildscript 引入（不在 pluginManagement 里），
+// 这里只需要声明项目名；Java 8 工具链本机已装，不再需要 foojay 自动下载。
 rootProject.name = 'recipebalancer'

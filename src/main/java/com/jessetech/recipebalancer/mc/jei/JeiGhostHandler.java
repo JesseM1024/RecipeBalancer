@@ -1,5 +1,7 @@
 package com.jessetech.recipebalancer.mc.jei;
 
+import com.jessetech.recipebalancer.core.util.J8;
+
 import com.jessetech.recipebalancer.RecipeBalancerMod;
 import com.jessetech.recipebalancer.mc.screen.BalancerScreen;
 import mezz.jei.api.gui.handlers.IGhostIngredientHandler;
@@ -19,7 +21,7 @@ public final class JeiGhostHandler implements IGhostIngredientHandler<BalancerSc
     public <I> List<Target<I>> getTargets(BalancerScreen screen, I ingredient, boolean doStart) {
         JeiIngredientMapper.Mapped mapped = map(ingredient);
         if (mapped == null) {
-            return List.of();
+            return J8.list();
         }
         List<Target<I>> targets = new ArrayList<>();
         List<Rect2i> areas = new ArrayList<>();

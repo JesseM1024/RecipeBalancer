@@ -34,9 +34,20 @@ final class TestSupport {
             if (in == null) {
                 throw new IllegalStateException("缺少测试资源: " + resource);
             }
-            return new String(in.readAllBytes(), StandardCharsets.UTF_8);
+            // 1.16.5 线是 Java 8：没有 InputStream.readAllBytes()
+            return new String(readAll(in), StandardCharsets.UTF_8);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
+    }
+
+    private static byte[] readAll(InputStream in) throws IOException {
+        java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+        byte[] buffer = new byte[8192];
+        int read;
+        while ((read = in.read(buffer)) != -1) {
+            out.write(buffer, 0, read);
+        }
+        return out.toByteArray();
     }
 }
