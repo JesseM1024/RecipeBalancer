@@ -46,6 +46,9 @@ public final class JeiRecipeOverlay {
     private static boolean installed;
     private static boolean warned;
 
+    /** 上一次打过高亮诊断的命中项（避免刷屏）。 */
+    private static Hit lastLoggedHit;
+
     /** 当前屏幕的按钮位置与配方（每帧最多重算一次，屏幕/配方变了才刷新）。 */
     private static Screen cachedScreen;
     private static long cachedAt;
@@ -60,8 +63,14 @@ public final class JeiRecipeOverlay {
             return;
         }
         installed = true;
-        MinecraftForge.EVENT_BUS.addListener(JeiRecipeOverlay::onDraw);
-        MinecraftForge.EVENT_BUS.addListener(JeiRecipeOverlay::onMouseClicked);
+        // LOWEST：让本监听器在 JEI 画完物品面板之后再执行，否则按钮与提示会被
+        // JEI 的物品列表盖住（1.16.5 的 Screen 没有「延迟 tooltip」队列可用）。
+        MinecraftForge.EVENT_BUS.addListener(
+                net.minecraftforge.eventbus.api.EventPriority.LOWEST, false,
+                JeiRecipeOverlay::onDraw);
+        MinecraftForge.EVENT_BUS.addListener(
+                net.minecraftforge.eventbus.api.EventPriority.LOWEST, false,
+                JeiRecipeOverlay::onMouseClicked);
         RecipeBalancerMod.LOGGER.info("[RecipeBalancer] JEI 配方页叠加层：已注册（1.16.5 / 7.x）");
     }
 
@@ -99,9 +108,35 @@ public final class JeiRecipeOverlay {
     /** 悬停时把「配方库能自产」的槽位标蓝（配色与 1.20.1 / 1.18.2 严格一致）。 */
     private static void drawCraftableHighlights(MatrixStack pose, Hit hit) {
         ProductIndex index = ProductIndex.current();
-        for (JeiSlots.Slot slot : JeiCraftableSlots.filter(hit.slots, index)) {
+        List<JeiSlots.Slot> craftable = JeiCraftableSlots.filter(hit.slots, index);
+        // 诊断：只在「悬停目标变化」时打一行，避免刷屏；用来判断是高亮判定为空还是坐标不对
+        if (hit != lastLoggedHit) {
+            lastLoggedHit = hit;
+            RecipeBalancerMod.LOGGER.info(
+                    "[RecipeBalancer] 配方页高亮诊断: 槽位 {} 个, 有矩形 {} 个, 可自产 {} 个,"
+                            + " 配方库可用={}",
+                    hit.slots.size(), countWithRect(hit.slots), craftable.size(),
+                    index != null);
+            if (!craftable.isEmpty()) {
+                JeiSlots.Slot first = craftable.get(0);
+                RecipeBalancerMod.LOGGER.info(
+                        "[RecipeBalancer] 首个高亮矩形: ({},{} {}x{})",
+                        first.x(), first.y(), first.width(), first.height());
+            }
+        }
+        for (JeiSlots.Slot slot : craftable) {
             JeiHighlightOverlay.draw(pose, JeiSlots.absolute(slot));
         }
+    }
+
+    private static int countWithRect(List<JeiSlots.Slot> slots) {
+        int count = 0;
+        for (JeiSlots.Slot slot : slots) {
+            if (slot.hasRect()) {
+                count++;
+            }
+        }
+        return count;
     }
 
     /** 自绘一行提示（Screen 的 tooltip 方法是 protected，这里按原版样式手画）。 */
@@ -211,11 +246,13 @@ public final class JeiRecipeOverlay {
      */
     private static int[] place(Rectangle2d rect, List<JeiSlots.Slot> slots, Screen screen) {
         int size = JeiButtonSkin.SIZE;
+        // 与 1.20.1 / 1.18.2 一致：优先贴在配方**右侧下方**（JEI 自己的侧边按钮也在那一带），
+        // 放不下再沿右侧上移，最后才退到配方内部右下/右上。
         int[][] candidates = {
+                {rect.getX() + rect.getWidth() + 2, rect.getY() + rect.getHeight() - size},
+                {rect.getX() + rect.getWidth() + 2, rect.getY() + (rect.getHeight() - size) / 2},
+                {rect.getX() + rect.getWidth() - size - 1, rect.getY() + rect.getHeight() - size - 1},
                 {rect.getX() + rect.getWidth() - size - 1, rect.getY() + 1},
-                {rect.getX() + rect.getWidth() + 2, rect.getY()},
-                {rect.getX() - size - 2, rect.getY()},
-                {rect.getX() + 1, rect.getY() + 1},
         };
         for (int[] at : candidates) {
             if (at[0] < 0 || at[1] < 0 || at[0] + size > screen.width

@@ -75,6 +75,35 @@ public final class RecipeBalancerMod {
             LOGGER.info("[RecipeBalancer] commons-math3 可用");
         } catch (Throwable t) {
             LOGGER.error("[RecipeBalancer] commons-math3 不可用，求解会失败", t);
+            diagnoseMath3();
+        }
+    }
+
+    /**
+     * 求解库不可用时打印定位信息：
+     * <ul>
+     *   <li>模组 jar 的实际位置（确认游戏加载的是哪一个文件）；</li>
+     *   <li>模组类的 define 加载器；</li>
+     *   <li>同一个 jar 内的 {@code .class} 是否能作为资源被看到 ——
+     *       资源能读到却 {@code Class.forName} 失败，说明是类加载/转换层的问题；
+     *       资源也读不到，说明 jar 没被加进类加载器（打包/替换时机问题）。</li>
+     * </ul>
+     */
+    private static void diagnoseMath3() {
+        try {
+            java.security.CodeSource source =
+                    RecipeBalancerMod.class.getProtectionDomain().getCodeSource();
+            LOGGER.error("[RecipeBalancer] 诊断: 模组位置={}, 类加载器={}",
+                    source == null ? "?" : source.getLocation(),
+                    RecipeBalancerMod.class.getClassLoader().getClass().getName());
+            String resource = "org/apache/commons/math3/optim/linear/SimplexSolver.class";
+            ClassLoader loader = RecipeBalancerMod.class.getClassLoader();
+            LOGGER.error("[RecipeBalancer] 诊断: loader.getResource={}",
+                    loader.getResource(resource));
+            LOGGER.error("[RecipeBalancer] 诊断: contextClassLoader.getResource={}",
+                    Thread.currentThread().getContextClassLoader().getResource(resource));
+        } catch (Throwable t) {
+            LOGGER.error("[RecipeBalancer] 诊断失败", t);
         }
     }
 

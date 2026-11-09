@@ -79,16 +79,22 @@ public final class JeiSlots {
         }
         try {
             RecipeLayout<?> typed = (RecipeLayout<?>) layout;
-            addGroup(slots, typed.getItemStacks(), true);
-            addGroup(slots, typed.getFluidStacks(), false);
+            addGroup(slots, typed.getItemStacks());
+            addGroup(slots, typed.getFluidStacks());
         } catch (RuntimeException | LinkageError e) {
             // 布局结构异常时返回已解析的部分
         }
         return slots;
     }
 
-    private static <T> void addGroup(List<Slot> slots, IGuiIngredientGroup<T> group,
-                                     boolean input) {
+    /**
+     * 收集一个分组里的槽位。
+     *
+     * <p>输入/输出<b>必须逐槽位问 {@code GuiIngredient#isInput()}</b>：
+     * 物品组里既有原料也有产物（合成配方的产物就在同一组），
+     * 一律当输入会导致「产物落到原料区、输出为空」。
+     */
+    private static <T> void addGroup(List<Slot> slots, IGuiIngredientGroup<T> group) {
         if (group == null) {
             return;
         }
@@ -110,8 +116,21 @@ public final class JeiSlots {
                     rect == null ? -1 : rect.getY(),
                     rect == null ? 0 : rect.getWidth(),
                     rect == null ? 0 : rect.getHeight(),
-                    input,
+                    isInput(ingredient),
                     new ArrayList<Object>(all)));
+        }
+    }
+
+    /** 7.x 的输入/输出在实现类上是 {@code isInput()}（公共接口没有）。 */
+    private static boolean isInput(Object ingredient) {
+        try {
+            java.lang.reflect.Method method = ingredient.getClass().getMethod("isInput");
+            method.setAccessible(true);
+            Object value = method.invoke(ingredient);
+            return value instanceof Boolean && (Boolean) value;
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            // 取不到就按输入处理：宁可多一个原料，也不要丢产物
+            return true;
         }
     }
 
