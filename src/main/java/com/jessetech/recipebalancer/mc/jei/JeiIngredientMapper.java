@@ -35,10 +35,33 @@ public final class JeiIngredientMapper {
                         }
                     });
 
+    /** 已提示过的「同 key 不同配料」碰撞，避免刷屏。 */
+    private static final java.util.Set<String> COLLIDED =
+            java.util.Collections.synchronizedSet(new java.util.HashSet<String>());
+
     static void remember(String key, ITypedIngredient<?> typed) {
-        if (key != null && typed != null) {
-            KEY_CACHE.put(key, typed);
+        if (key == null || typed == null) {
+            return;
         }
+        ITypedIngredient<?> existing = KEY_CACHE.get(key);
+        if (existing != null && existing != typed && !sameIngredient(existing, typed)) {
+            // 同一个 key 对应了不同配料：该配料的 uid 不含 NBT（Create 药水流体即如此）。
+            // 此时**保留先缓存的**，否则「编码一个新配方」会把它顶掉，
+            // 老配方当场变成新配料的图标 —— 即「写一个新的，老的就不能正确显示」。
+            if (COLLIDED.add(key)) {
+                com.jessetech.recipebalancer.RecipeBalancerMod.LOGGER.warn(
+                        "[RecipeBalancer] 配料 key 碰撞（uid 不含 NBT），保留首次缓存: {}", key);
+            }
+            return;
+        }
+        KEY_CACHE.put(key, typed);
+    }
+
+    /** 两个 typed 是否描述同一个配料（比较底层对象内容，避免不同实例造成误判）。 */
+    private static boolean sameIngredient(ITypedIngredient<?> a, ITypedIngredient<?> b) {
+        Object first = a.getIngredient();
+        Object second = b.getIngredient();
+        return first == second || (first != null && first.equals(second));
     }
 
     static ITypedIngredient<?> recall(String key) {
