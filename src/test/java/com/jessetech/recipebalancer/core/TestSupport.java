@@ -26,7 +26,8 @@ final class TestSupport {
     }
 
     static JsonObject golden(String name) {
-        return JsonParser.parseString(read("/golden/" + name + ".json")).getAsJsonObject();
+        // 与运行期 Gson 2.8.0 对齐：用实例 parse，而不是 2.8.6+ 的静态 parseString
+        return new JsonParser().parse(read("/golden/" + name + ".json")).getAsJsonObject();
     }
 
     static String read(String resource) {

@@ -109,11 +109,14 @@ dependencies {
 
     // ------------------------------------------------------------------
     // Gson：core/io 场景 JSON 序列化。
-    // compileOnly：运行期由 Minecraft 自带 Gson 提供，避免版本冲突；
-    // testImplementation：纯 JVM 测试不启动游戏，必须自己带到 classpath。
+    //
+    // 编译基线直接锁「1.16.5 运行期自带的那一份」（libs/gson/gson-2.8.0.jar）：
+    // 用更高版本（例如 2.10）编译会悄悄引用 2.8.6+ 才有的静态方法
+    // （JsonParser.parseString），运行期就是 NoSuchMethodError —— 这个坑已经踩过一次。
+    // compileOnly：运行期由 Minecraft 提供；testImplementation：纯 JVM 测试自己带。
     // ------------------------------------------------------------------
-    compileOnly "com.google.code.gson:gson:${gson_version}"
-    testImplementation "com.google.code.gson:gson:${gson_version}"
+    compileOnly files("libs/gson/gson-${gson_version}.jar")
+    testImplementation files("libs/gson/gson-${gson_version}.jar")
 
     // ------------------------------------------------------------------
     // JUnit 5：core/ 金标准对拍（不启动游戏、不加载 MC 类）。

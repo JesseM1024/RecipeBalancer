@@ -73,7 +73,12 @@ class GoldenParityTest {
     private static void assertMapEquals(String scenario, String field, JsonObject ref,
                                         Map<String, Double> actual) {
         JsonObject expected = ref.getAsJsonObject(field);
-        assertEquals(expected.keySet(), actual.keySet(), scenario + "." + field + " 物品集合");
+        // Gson 2.8.0（1.16.5 运行期自带）没有 JsonObject#keySet，从 entrySet 收集
+        Set<String> expectedKeys = new LinkedHashSet<>();
+        for (Map.Entry<String, JsonElement> entry : expected.entrySet()) {
+            expectedKeys.add(entry.getKey());
+        }
+        assertEquals(expectedKeys, actual.keySet(), scenario + "." + field + " 物品集合");
         for (Map.Entry<String, JsonElement> entry : expected.entrySet()) {
             assertEquals(entry.getValue().getAsDouble(), actual.get(entry.getKey()), ABS_TOL,
                     scenario + "." + field + "[" + entry.getKey() + "]");

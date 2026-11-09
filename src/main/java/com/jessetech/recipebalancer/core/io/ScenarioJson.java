@@ -76,7 +76,9 @@ public final class ScenarioJson {
     private static Scenario parse(String json, boolean completeScenario) {
         JsonElement root;
         try {
-            root = JsonParser.parseString(json);
+            // 1.16.5 自带 Gson 2.8.0：没有静态的 JsonParser.parseString（2.8.6 才加），
+            // 只能用实例方法。该 API 在 2.8.0 ~ 2.11 全区间可用（新版本只是标记为弃用）。
+            root = new JsonParser().parse(json);
         } catch (JsonParseException e) {
             throw new SchemaException("场景 JSON 解析失败", e);
         }
@@ -102,7 +104,8 @@ public final class ScenarioJson {
         if (!targetsElement.isJsonObject()) {
             throw new SchemaException("target_products 必须为对象");
         }
-        if (completeScenario && targetsElement.getAsJsonObject().isEmpty()) {
+        // Gson 2.8.0（1.16.5 自带）没有 JsonObject#isEmpty，用 size() 判断
+        if (completeScenario && targetsElement.getAsJsonObject().size() == 0) {
             throw new SchemaException("target_products 不能为空");
         }
 
@@ -130,7 +133,8 @@ public final class ScenarioJson {
             return J8.list();
         }
         JsonArray array = element.getAsJsonArray();
-        if (array.isEmpty()) {
+        // Gson 2.8.0 没有 JsonArray#isEmpty
+        if (array.size() == 0) {
             if (requireNonEmpty) {
                 throw new SchemaException("recipes 必须为非空列表");
             }
@@ -191,7 +195,11 @@ public final class ScenarioJson {
     }
 
     private static SolveOptions parseOptions(JsonObject options) {
-        Set<String> unknown = new TreeSet<>(options.keySet());
+        // Gson 2.8.0 没有 JsonObject#keySet（2.8.2 才加），从 entrySet 自己收集
+        Set<String> unknown = new TreeSet<>();
+        for (Map.Entry<String, JsonElement> entry : options.entrySet()) {
+            unknown.add(entry.getKey());
+        }
         unknown.removeAll(KNOWN_OPTIONS);
         if (!unknown.isEmpty()) {
             throw new SchemaException("未知 options 键: " + unknown);
