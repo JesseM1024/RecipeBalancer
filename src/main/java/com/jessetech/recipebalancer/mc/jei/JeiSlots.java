@@ -143,6 +143,19 @@ public final class JeiSlots {
             if (all == null || all.isEmpty()) {
                 continue;
             }
+            // 候选顺序影响导入时取到的数量：JEI 槽位可能同时给出多个候选
+            // （同一流体的不同 amount / 不同 NBT），把「当前显示的那个」排到最前，
+            // 这样编码出来的数量就是玩家在配方页看到的数字。
+            List<Object> ordered = new ArrayList<>(all.size() + 1);
+            T displayed = ingredient.getDisplayedIngredient();
+            if (displayed != null) {
+                ordered.add(displayed);
+            }
+            for (T candidate : all) {
+                if (candidate != displayed) {
+                    ordered.add(candidate);
+                }
+            }
             Rectangle2d rect = rectOf(ingredient);
             // 7.x 的槽位矩形是**配方局部坐标**（绘制时靠 MatrixStack 平移），
             // 必须加上 RecipeLayout 的原点才是屏幕绝对坐标，否则高亮会画到左上角。
@@ -152,7 +165,7 @@ public final class JeiSlots {
                     rect == null ? 0 : rect.getWidth(),
                     rect == null ? 0 : rect.getHeight(),
                     isInput(ingredient),
-                    new ArrayList<Object>(all)));
+                    ordered));
         }
     }
 

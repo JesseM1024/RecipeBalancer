@@ -86,9 +86,13 @@ public final class JeiIngredientMapper {
                     uniqueId, name);
             // 诊断（每种配料只打一次）：确认 JEI 给的原始数量与换算是否正确
             if (LOGGED.add(name)) {
+                // toString 里对流体会带 amount（FluidStack{...Amount=250}），
+                // 用于核对「JEI 显示的数量」与「我们读到的数量」是否一致
                 RecipeBalancerMod.LOGGER.info(
-                        "[RecipeBalancer] 配料数量: {} type={} 原始={} -> {} B, uniqueId={}",
-                        name, manager.getIngredientType(ingredient), rawAmount, amount, uniqueId);
+                        "[RecipeBalancer] 配料数量: {} class={} 原始={} -> {} B,"
+                                + " uniqueId={}, 实例={}",
+                        name, ingredient.getClass().getSimpleName(), rawAmount, amount,
+                        uniqueId, ingredient);
             }
             return new Mapped(key, amount, name);
         } catch (RuntimeException | LinkageError e) {
