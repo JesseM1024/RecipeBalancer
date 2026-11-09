@@ -1,5 +1,6 @@
 package com.jessetech.recipebalancer.mc.jei;
 
+import com.jessetech.recipebalancer.RecipeBalancerMod;
 import com.jessetech.recipebalancer.core.util.J8;
 import com.jessetech.recipebalancer.mc.itemmap.IngredientKey;
 import com.jessetech.recipebalancer.mc.itemmap.ItemKeyMapper;
@@ -24,6 +25,10 @@ import java.util.Optional;
  * </ul>
  */
 public final class JeiIngredientMapper {
+
+    /** 已打过数量诊断的配料名（避免刷屏）。 */
+    private static final java.util.Set<String> LOGGED =
+            java.util.Collections.synchronizedSet(new java.util.HashSet<String>());
 
     /** 一个可持久化的配料：key + 数量 + 显示名（record 在 Java 8 上不可用）。 */
     public static final class Mapped {
@@ -79,6 +84,12 @@ public final class JeiIngredientMapper {
             double amount = rawAmount > 0 ? rawAmount / 1000.0 : 1.0;
             String key = IngredientKey.encode(typeId(manager.getIngredientType(ingredient)),
                     uniqueId, name);
+            // 诊断（每种配料只打一次）：确认 JEI 给的原始数量与换算是否正确
+            if (LOGGED.add(name)) {
+                RecipeBalancerMod.LOGGER.info(
+                        "[RecipeBalancer] 配料数量: {} type={} 原始={} -> {} B, uniqueId={}",
+                        name, manager.getIngredientType(ingredient), rawAmount, amount, uniqueId);
+            }
             return new Mapped(key, amount, name);
         } catch (RuntimeException | LinkageError e) {
             return null;

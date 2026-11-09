@@ -194,11 +194,73 @@ public final class Draw {
         renderComponentTooltip(font, lines, mouseX, mouseY);
     }
 
+    /** tooltip 单行最大宽度（像素）：超过就自动折行，避免长英文提示跑到屏幕外。 */
+    private static final int TOOLTIP_MAX_WIDTH = 220;
+
     public void renderComponentTooltip(FontRenderer font, List<ITextComponent> lines,
                                        int mouseX, int mouseY) {
-        if (tooltips != null) {
-            tooltips.renderComponentTooltip(pose, lines, font, mouseX, mouseY);
+        if (tooltips == null) {
+            return;
         }
+        tooltips.renderComponentTooltip(pose, expand(font, lines), font, mouseX, mouseY);
+    }
+
+    /**
+     * 把 tooltip 展开成「每个元素一行」：拆掉组件里的 {@code \n} 并按宽度折行。
+     *
+     * <p>1.16.5 的 {@code renderToolTip} 只认「行列表」，组件内部的换行符会被当成
+     * 普通字符画成一个方块；所以换行必须在进入渲染前处理掉。
+     */
+    private static List<ITextComponent> expand(FontRenderer font, List<ITextComponent> lines) {
+        List<ITextComponent> out = new java.util.ArrayList<>(lines.size() + 4);
+        for (ITextComponent line : lines) {
+            String text = line.getString();
+            if (text.indexOf('\n') < 0) {
+                out.addAll(wrap(font, text));
+                continue;
+            }
+            for (String part : text.split("\n", -1)) {
+                out.addAll(wrap(font, part));
+            }
+        }
+        return out;
+    }
+
+    /** 按像素宽度贪心折行：优先在空格处断，超长单词按字符断。 */
+    private static List<ITextComponent> wrap(FontRenderer font, String text) {
+        List<ITextComponent> out = new java.util.ArrayList<>(2);
+        if (font.getStringWidth(text) <= TOOLTIP_MAX_WIDTH) {
+            out.add(Chat.literal(text));
+            return out;
+        }
+        StringBuilder current = new StringBuilder();
+        for (String word : text.split(" ")) {
+            String candidate = current.length() == 0 ? word : current + " " + word;
+            if (font.getStringWidth(candidate) <= TOOLTIP_MAX_WIDTH) {
+                current.setLength(0);
+                current.append(candidate);
+                continue;
+            }
+            if (current.length() > 0) {
+                out.add(Chat.literal(current.toString()));
+                current.setLength(0);
+            }
+            // 单个词本身就超宽（长 ID / 无空格的中文）：按字符切
+            while (font.getStringWidth(word) > TOOLTIP_MAX_WIDTH) {
+                int cut = 1;
+                while (cut < word.length()
+                        && font.getStringWidth(word.substring(0, cut + 1)) <= TOOLTIP_MAX_WIDTH) {
+                    cut++;
+                }
+                out.add(Chat.literal(word.substring(0, cut)));
+                word = word.substring(cut);
+            }
+            current.append(word);
+        }
+        if (current.length() > 0) {
+            out.add(Chat.literal(current.toString()));
+        }
+        return out;
     }
 
     // ------------------------------------------------------------------

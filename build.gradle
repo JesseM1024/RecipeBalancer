@@ -129,11 +129,16 @@ dependencies {
     compileOnly 'org.jetbrains:annotations:23.0.0'
 }
 
-// 把 shaded 库的 class 直接并入模组 jar；排除 META-INF 避免签名/清单冲突。
+// math3 以「jar 内嵌套 jar」的形式随包附带（不是解包合并）。
+//
+// 为什么不像其它分支那样解包合并：1.16.5 的 modlauncher 把 org.apache.* 当成
+// 游戏库命名空间，模组 jar 里同包的类只能作为资源看到、Class.forName 会 CNFE
+// （实测 getResource 能拿到 modjar://.../SimplexSolver.class，但类加载不出来）。
+// 嵌套 jar + 独立的 URLClassLoader 可以绕开这条限制，且求解代码与高版本完全同一份。
 tasks.named('jar') {
-    from({ configurations.shaded.collect { zipTree(it) } }) {
-        exclude 'META-INF/**'
-        duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    from(configurations.shaded) {
+        into 'recipebalancer/lib'
+        rename { 'math3.jar' }
     }
 }
 

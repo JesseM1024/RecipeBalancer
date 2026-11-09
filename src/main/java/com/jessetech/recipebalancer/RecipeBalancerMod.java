@@ -68,14 +68,13 @@ public final class RecipeBalancerMod {
         checkRuntimeDependencies();
     }
 
-    /** 启动自检：求解库是否真的在运行期 classpath 上（比点「求解」时才发现更早）。 */
+    /** 启动自检：求解库是否真的能加载（比点「求解」时才发现更早）。 */
     private static void checkRuntimeDependencies() {
-        try {
-            Class.forName("org.apache.commons.math3.optim.linear.SimplexSolver");
-            LOGGER.info("[RecipeBalancer] commons-math3 可用");
-        } catch (Throwable t) {
-            LOGGER.error("[RecipeBalancer] commons-math3 不可用，求解会失败", t);
-            diagnoseMath3();
+        if (com.jessetech.recipebalancer.core.solve.CommonsMath3LpSolver.available()) {
+            LOGGER.info("[RecipeBalancer] commons-math3 可用（jar 内嵌套库）");
+        } else {
+            LOGGER.error("[RecipeBalancer] commons-math3 不可用，求解会失败: {}",
+                    com.jessetech.recipebalancer.core.solve.CommonsMath3LpSolver.failure());
         }
     }
 

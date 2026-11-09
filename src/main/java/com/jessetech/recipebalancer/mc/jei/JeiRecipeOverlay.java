@@ -139,14 +139,58 @@ public final class JeiRecipeOverlay {
         return count;
     }
 
-    /** 自绘一行提示（Screen 的 tooltip 方法是 protected，这里按原版样式手画）。 */
+    /**
+     * 自绘提示（Screen 的 tooltip 方法是 protected，这里按原版样式手画）。
+     *
+     * <p>位置规则：默认在鼠标右下方；若右侧放不下（JEI 的物品面板就贴在屏幕右边，
+     * 画上去会被它的物品图标盖住），改为向**左**展开。文本按宽度折行。
+     */
     private static void drawTooltip(MatrixStack pose, FontRenderer font, String text,
                                     int mouseX, int mouseY) {
-        int width = font.getStringWidth(text);
+        java.util.List<String> lines = wrapText(font, text, 150);
+        int width = 0;
+        for (String line : lines) {
+            width = Math.max(width, font.getStringWidth(line));
+        }
+        int height = lines.size() * 10;
+        net.minecraft.client.MainWindow window = Minecraft.getInstance().getMainWindow();
         int x = mouseX + 12;
-        int y = mouseY - 12;
-        AbstractGui.fill(pose, x - 3, y - 3, x + width + 3, y + 11, 0xF0100010);
-        font.drawStringWithShadow(pose, text, x, y, 0xFFFFFFFF);
+        if (x + width + 6 > window.getScaledWidth()) {
+            x = mouseX - width - 12;
+        }
+        x = Math.max(4, x);
+        int y = Math.max(4, Math.min(mouseY - 12, window.getScaledHeight() - height - 6));
+        AbstractGui.fill(pose, x - 3, y - 3, x + width + 3, y + height + 3, 0xF0100010);
+        for (int i = 0; i < lines.size(); i++) {
+            font.drawStringWithShadow(pose, lines.get(i), x, y + i * 10, 0xFFFFFFFF);
+        }
+    }
+
+    /** 按像素宽度折行（提示文字很短，空格切分足够）。 */
+    private static java.util.List<String> wrapText(FontRenderer font, String text, int maxWidth) {
+        java.util.List<String> lines = new java.util.ArrayList<>(2);
+        if (font.getStringWidth(text) <= maxWidth) {
+            lines.add(text);
+            return lines;
+        }
+        StringBuilder current = new StringBuilder();
+        for (String word : text.split(" ")) {
+            String candidate = current.length() == 0 ? word : current + " " + word;
+            if (font.getStringWidth(candidate) <= maxWidth) {
+                current.setLength(0);
+                current.append(candidate);
+            } else {
+                if (current.length() > 0) {
+                    lines.add(current.toString());
+                    current.setLength(0);
+                }
+                current.append(word);
+            }
+        }
+        if (current.length() > 0) {
+            lines.add(current.toString());
+        }
+        return lines;
     }
 
     // ------------------------------------------------------------------

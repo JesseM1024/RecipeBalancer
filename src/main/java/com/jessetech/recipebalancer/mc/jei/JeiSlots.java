@@ -79,8 +79,10 @@ public final class JeiSlots {
         }
         try {
             RecipeLayout<?> typed = (RecipeLayout<?>) layout;
-            addGroup(slots, typed.getItemStacks());
-            addGroup(slots, typed.getFluidStacks());
+            int originX = typed.getPosX();
+            int originY = typed.getPosY();
+            addGroup(slots, typed.getItemStacks(), originX, originY);
+            addGroup(slots, typed.getFluidStacks(), originX, originY);
         } catch (RuntimeException | LinkageError e) {
             // 布局结构异常时返回已解析的部分
         }
@@ -94,7 +96,8 @@ public final class JeiSlots {
      * 物品组里既有原料也有产物（合成配方的产物就在同一组），
      * 一律当输入会导致「产物落到原料区、输出为空」。
      */
-    private static <T> void addGroup(List<Slot> slots, IGuiIngredientGroup<T> group) {
+    private static <T> void addGroup(List<Slot> slots, IGuiIngredientGroup<T> group,
+                                     int originX, int originY) {
         if (group == null) {
             return;
         }
@@ -111,9 +114,11 @@ public final class JeiSlots {
                 continue;
             }
             Rectangle2d rect = rectOf(ingredient);
+            // 7.x 的槽位矩形是**配方局部坐标**（绘制时靠 MatrixStack 平移），
+            // 必须加上 RecipeLayout 的原点才是屏幕绝对坐标，否则高亮会画到左上角。
             slots.add(new Slot(
-                    rect == null ? -1 : rect.getX(),
-                    rect == null ? -1 : rect.getY(),
+                    rect == null ? -1 : rect.getX() + originX,
+                    rect == null ? -1 : rect.getY() + originY,
                     rect == null ? 0 : rect.getWidth(),
                     rect == null ? 0 : rect.getHeight(),
                     isInput(ingredient),
