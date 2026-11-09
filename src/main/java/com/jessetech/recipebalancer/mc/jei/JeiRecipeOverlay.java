@@ -230,8 +230,8 @@ public final class JeiRecipeOverlay {
                             slot.width(), slot.height()));
                 }
             }
-            boolean containerLike = addTransferButton(blocked, layout);
-            int[] at = place(rect, blocked, screen, containerLike);
+            addTransferButton(blocked, layout);
+            int[] at = place(rect, blocked, screen);
             if (at == null) {
                 continue;
             }
@@ -309,35 +309,28 @@ public final class JeiRecipeOverlay {
     }
 
     /**
-     * 按钮摆位。
+     * 按钮摆位：**一律**贴配方右侧上方。
      *
-     * <p>普通配方页沿用高版本的观感：贴配方**右侧下方**。
-     * 容器屏（AE / RS 编码终端）的右下角被 JEI 转移按钮和第三方编码/书签按钮占满，
-     * 且这些按钮没有可枚举的 API，所以改为优先贴**右侧上方**（那一带通常是空的），
-     * 再依次向右下、右中、内部右上、内部右下回退。
+     * <p>右下角是各家 JEI 插件的「转移 / 编码 / 书签」按钮聚集区
+     * （JEI 自己的转移按钮、AE2 / RS 的编码按钮都在那一带），
+     * 而这些都是第三方控件、没有可枚举的 API，无法做精确避让 ——
+     * 上一版尝试只在容器屏把按钮上移，但 AE/RS 终端并没有注册 JEI 转移按钮，
+     * 检测不到「容器屏」，于是仍落在右下角重叠。
+     * 现在统一放右上（实测各终端该处为空白），再依次向右中、内部右上、右下回退。
      *
      * @return {x, y}；放不下返回 null
      */
-    private static int[] place(Rectangle2d rect, List<Rectangle2d> blocked, Screen screen,
-                               boolean containerLike) {
+    private static int[] place(Rectangle2d rect, List<Rectangle2d> blocked, Screen screen) {
         int size = JeiButtonSkin.SIZE;
         int right = rect.getX() + rect.getWidth() + 2;
         int bottom = rect.getY() + rect.getHeight() - size;
         int middle = rect.getY() + (rect.getHeight() - size) / 2;
         int top = rect.getY() + 2;
-        int[][] candidates = containerLike
-                ? new int[][]{
+        int[][] candidates = {
                 {right, top},
                 {right, middle},
                 {rect.getX() + rect.getWidth() - size - 1, rect.getY() + 1},
                 {right, bottom},
-                {rect.getX() + rect.getWidth() - size - 1, bottom - 1},
-        }
-                : new int[][]{
-                {right, bottom},
-                {right, top},
-                {right, middle},
-                {rect.getX() + rect.getWidth() - size - 1, rect.getY() + 1},
                 {rect.getX() + rect.getWidth() - size - 1, bottom - 1},
         };
         for (int[] at : candidates) {
