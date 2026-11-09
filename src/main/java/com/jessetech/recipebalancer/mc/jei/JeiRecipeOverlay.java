@@ -45,6 +45,10 @@ public final class JeiRecipeOverlay {
     private static boolean installed;
     private static boolean warned;
 
+    /** 已记录过摆位日志的（配方矩形 + 落点），避免每帧刷屏。 */
+    private static final java.util.Set<String> PLACED =
+            java.util.Collections.synchronizedSet(new java.util.HashSet<String>());
+
     /** 上一次打过高亮诊断的命中项（避免刷屏）。 */
     private static Hit lastLoggedHit;
 
@@ -226,8 +230,8 @@ public final class JeiRecipeOverlay {
                             slot.width(), slot.height()));
                 }
             }
-            addTransferButton(blocked, layout);
-            int[] at = place(rect, blocked, screen);
+            boolean containerLike = addTransferButton(blocked, layout);
+            int[] at = place(rect, blocked, screen, containerLike);
             if (at == null) {
                 continue;
             }
@@ -254,19 +258,16 @@ public final class JeiRecipeOverlay {
     }
 
     /**
-     * 按钮摆位：先试右上角内侧，再试右侧外侧、左侧外侧、左上角。
-     *
-     * @return {x, y}；放不下返回 null
-     */
-    /**
-     * 把 JEI 自己的「配方转移」按钮也记为禁区。
+     * 把 JEI 自己的「配方转移」按钮记为禁区。
      *
      * <p>AE / RS 编码终端这类容器屏上，JEI 会在配方右下角画转移按钮；
      * 我们的按钮优先位置正好落在附近，不避让就会叠在一起。
      * 7.x 的 {@code RecipeTransferButton} 是原版 {@code Widget}，坐标在 protected 字段里，
      * 只能按字段名反射；拿不到就忽略（不影响其余避让）。
+     *
+     * @return 该布局是否带可见的转移按钮（用于判断「容器屏」，从而调整优先位置）
      */
-    private static void addTransferButton(List<Rectangle2d> blocked, RecipeLayout<?> layout) {
+    private static boolean addTransferButton(List<Rectangle2d> blocked, RecipeLayout<?> layout) {
         Object button = null;
         try {
             button = layout.getClass().getMethod("getRecipeTransferButton").invoke(layout);
@@ -274,11 +275,11 @@ public final class JeiRecipeOverlay {
             // 没有这个方法（或返回 null）：该版本不画转移按钮
         }
         if (button == null) {
-            return;
+            return false;
         }
         Object visible = field(button, "visible");
         if (visible instanceof Boolean && !((Boolean) visible)) {
-            return;
+            return false;
         }
         int x = intField(button, "x");
         int y = intField(button, "y");
@@ -286,7 +287,9 @@ public final class JeiRecipeOverlay {
         int height = intField(button, "height");
         if (width > 0 && height > 0) {
             blocked.add(new Rectangle2d(x, y, width, height));
+            return true;
         }
+        return false;
     }
 
     private static int intField(Object owner, String name) {
@@ -305,15 +308,37 @@ public final class JeiRecipeOverlay {
         return -1;
     }
 
-    private static int[] place(Rectangle2d rect, List<Rectangle2d> blocked, Screen screen) {
+    /**
+     * 按钮摆位。
+     *
+     * <p>普通配方页沿用高版本的观感：贴配方**右侧下方**。
+     * 容器屏（AE / RS 编码终端）的右下角被 JEI 转移按钮和第三方编码/书签按钮占满，
+     * 且这些按钮没有可枚举的 API，所以改为优先贴**右侧上方**（那一带通常是空的），
+     * 再依次向右下、右中、内部右上、内部右下回退。
+     *
+     * @return {x, y}；放不下返回 null
+     */
+    private static int[] place(Rectangle2d rect, List<Rectangle2d> blocked, Screen screen,
+                               boolean containerLike) {
         int size = JeiButtonSkin.SIZE;
-        // 与 1.20.1 / 1.18.2 一致：优先贴在配方**右侧下方**（JEI 自己的侧边按钮也在那一带），
-        // 放不下再沿右侧上移，最后才退到配方内部右下/右上。
-        int[][] candidates = {
-                {rect.getX() + rect.getWidth() + 2, rect.getY() + rect.getHeight() - size},
-                {rect.getX() + rect.getWidth() + 2, rect.getY() + (rect.getHeight() - size) / 2},
-                {rect.getX() + rect.getWidth() - size - 1, rect.getY() + rect.getHeight() - size - 1},
+        int right = rect.getX() + rect.getWidth() + 2;
+        int bottom = rect.getY() + rect.getHeight() - size;
+        int middle = rect.getY() + (rect.getHeight() - size) / 2;
+        int top = rect.getY() + 2;
+        int[][] candidates = containerLike
+                ? new int[][]{
+                {right, top},
+                {right, middle},
                 {rect.getX() + rect.getWidth() - size - 1, rect.getY() + 1},
+                {right, bottom},
+                {rect.getX() + rect.getWidth() - size - 1, bottom - 1},
+        }
+                : new int[][]{
+                {right, bottom},
+                {right, top},
+                {right, middle},
+                {rect.getX() + rect.getWidth() - size - 1, rect.getY() + 1},
+                {rect.getX() + rect.getWidth() - size - 1, bottom - 1},
         };
         for (int[] at : candidates) {
             if (at[0] < 0 || at[1] < 0 || at[0] + size > screen.width
@@ -321,10 +346,23 @@ public final class JeiRecipeOverlay {
                 continue;
             }
             if (!overlapsAny(at[0], at[1], size, blocked)) {
+                logPlacement(rect, blocked.size(), at);
                 return at;
             }
         }
         return null;
+    }
+
+    /** 每个布局只打一次，便于排查「按钮与第三方控件重叠」这类没有 API 可查的情况。 */
+    private static void logPlacement(Rectangle2d rect, int blocked, int[] at) {
+        String key = rect.getX() + "," + rect.getY() + "," + rect.getWidth() + ","
+                + rect.getHeight() + "->" + at[0] + "," + at[1];
+        if (!PLACED.add(key)) {
+            return;
+        }
+        com.jessetech.recipebalancer.RecipeBalancerMod.LOGGER.info(
+                "[RecipeBalancer] JEI 按钮位置: 配方[{},{} {}x{}] 禁区={} -> [{},{}]",
+                rect.getX(), rect.getY(), rect.getWidth(), rect.getHeight(), blocked, at[0], at[1]);
     }
 
     private static boolean overlapsAny(int x, int y, int size, List<Rectangle2d> blocked) {
