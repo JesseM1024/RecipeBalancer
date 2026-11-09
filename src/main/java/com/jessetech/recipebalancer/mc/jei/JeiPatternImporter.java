@@ -46,11 +46,73 @@ public final class JeiPatternImporter {
         for (IRecipeSlotView slot : slots.getSlotViews(RecipeIngredientRole.OUTPUT)) {
             JeiIngredientMapper.Mapped mapped = pickIngredient(slot);
             if (mapped != null && outputIndex < RecipePattern.MAX_OUTPUTS) {
-                pattern.putOutput(outputIndex++, mapped.key(), mapped.amount());
+                pattern.putOutput(outputIndex++, mapped.key(),
+                        restoreAmount(category, slot, mapped.amount()));
             }
         }
         applyEquipment(category, slots, pattern);
         return pattern;
+    }
+
+    /**
+     * 还原 Create 的「流体可见性放大」。
+     *
+     * <p>Create 的 {@code CreateRecipeCategory#withImprovedVisibility} 把槽位数量改成
+     * {@code (int)(原量 * 0.75) + 250}（1000 是不动点），所以 JEI 槽位里 250 mB 可能是 437 mB。
+     * 逆函数：437→250、625→500、1000→1000。
+     *
+     * <p><b>Create 6.0（1.20.1 / 1.21.1）可能已改算法</b>：这里加了版本判断，
+     * 只有 Create &lt; 6.0 时才做逆运算；6.x 保持原值（若届时确认仍放大，再放开）。
+     */
+    private static double restoreAmount(IRecipeCategory<?> category, IRecipeSlotView slot,
+                                        double amount) {
+        if (amount <= 0 || !isFluidSlot(slot) || !createUsesInflation()) {
+            return amount;
+        }
+        net.minecraft.resources.ResourceLocation uid;
+        try {
+            uid = category == null ? null : category.getRecipeType().getUid();
+        } catch (RuntimeException | LinkageError e) {
+            return amount;
+        }
+        if (uid == null || !"create".equals(uid.getNamespace())) {
+            return amount;
+        }
+        double shownMb = amount * 1000.0;
+        double restoredMb = Math.ceil((shownMb - 250.0) / 0.75);
+        return restoredMb > 0 ? restoredMb / 1000.0 : amount;
+    }
+
+    private static boolean isFluidSlot(IRecipeSlotView slot) {
+        for (ITypedIngredient<?> candidate : slot.getAllIngredients().toList()) {
+            // 不绑定具体配料类型常量（1.18.2 是 VanillaTypes.FLUID，1.20.1 是 NeoForgeTypes），
+            // 按配料实现类名判断即可
+            Object ingredient = candidate == null ? null : candidate.getIngredient();
+            if (ingredient != null && ingredient.getClass().getName().contains("FluidStack")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Create &lt; 6.0（0.5.x 等）才有 withImprovedVisibility 放大；6.x 可能已改算法。 */
+    private static boolean createUsesInflation() {
+        try {
+            String version = net.minecraftforge.fml.ModList.get().getModContainerById("create")
+                    .map(container -> container.getModInfo().getVersion().toString())
+                    .orElse("");
+            int major = 0;
+            int end = 0;
+            while (end < version.length() && Character.isDigit(version.charAt(end))) {
+                end++;
+            }
+            if (end > 0) {
+                major = Integer.parseInt(version.substring(0, end));
+            }
+            return major > 0 && major < 6;
+        } catch (RuntimeException | LinkageError e) {
+            return false;
+        }
     }
 
     /** 只有合成配方保留空格（纯视觉），机器配方等一律按顺序紧排。 */
@@ -105,7 +167,8 @@ public final class JeiPatternImporter {
                 index = ys.indexOf(rect.getY()) * INPUT_COLS + xs.indexOf(rect.getX());
             }
             if (index < RecipePattern.MAX_INPUTS) {
-                pattern.putInput(index, mapped.key(), mapped.amount());
+                pattern.putInput(index, mapped.key(),
+                        restoreAmount(category, filled.get(i), mapped.amount()));
             }
         }
     }
