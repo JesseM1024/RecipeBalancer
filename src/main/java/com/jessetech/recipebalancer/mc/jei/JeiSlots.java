@@ -83,10 +83,40 @@ public final class JeiSlots {
             int originY = typed.getPosY();
             addGroup(slots, typed.getItemStacks(), originX, originY);
             addGroup(slots, typed.getFluidStacks(), originX, originY);
+            addOtherTypes(slots, typed, originX, originY);
         } catch (RuntimeException | LinkageError e) {
             // 布局结构异常时返回已解析的部分
         }
         return slots;
+    }
+
+    /**
+     * 收集物品/流体之外的配料类型（Mekanism 的 gas、AE2 的 gas 等）。
+     *
+     * <p>JEI 的槽位是按「配料类型」分组存放的：只读 {@code getItemStacks()/getFluidStacks()}
+     * 会漏掉整条配方里的化学品，于是导入后「产物为空」→ 写入时报「至少标记 1 个产物」。
+     * 7.x 提供了 {@code getRegisteredIngredientTypes()}，逐个类型取分组即可。
+     */
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private static void addOtherTypes(List<Slot> slots, RecipeLayout<?> layout,
+                                      int originX, int originY) {
+        mezz.jei.api.runtime.IJeiRuntime runtime = JeiIngredientMapper.runtime();
+        if (runtime == null) {
+            return;
+        }
+        for (mezz.jei.api.ingredients.IIngredientType<?> type
+                : runtime.getIngredientManager().getRegisteredIngredientTypes()) {
+            if (type == mezz.jei.api.constants.VanillaTypes.ITEM
+                    || type == mezz.jei.api.constants.VanillaTypes.FLUID) {
+                continue;
+            }
+            try {
+                IGuiIngredientGroup group = layout.getIngredientsGroup((mezz.jei.api.ingredients.IIngredientType) type);
+                addGroup(slots, group, originX, originY);
+            } catch (RuntimeException | LinkageError ignored) {
+                // 该类别没有定义这种配料类型，跳过
+            }
+        }
     }
 
     /**

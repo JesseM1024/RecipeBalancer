@@ -12,7 +12,6 @@ import mezz.jei.api.recipe.category.IRecipeCategory;
 import mezz.jei.gui.recipes.RecipeLayout;
 import mezz.jei.gui.recipes.RecipesGui;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.AbstractGui;
 import net.minecraft.client.gui.FontRenderer;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.renderer.Rectangle2d;
@@ -140,59 +139,20 @@ public final class JeiRecipeOverlay {
     }
 
     /**
-     * 自绘提示（Screen 的 tooltip 方法是 protected，这里按原版样式手画）。
+     * 提示直接用**游戏本体**的 tooltip 渲染（Forge {@code GuiUtils.drawHoveringText}）。
      *
-     * <p>位置规则：默认在鼠标右下方；若右侧放不下（JEI 的物品面板就贴在屏幕右边，
-     * 画上去会被它的物品图标盖住），改为向**左**展开。文本按宽度折行。
+     * <p>它内部会 {@code disableDepthTest()} 再画，因此不会被 JEI 的槽位物品（渲染在
+     * z=100 的 3D 物品）挡住；同时自带原版背景/紫色边框、屏幕边缘回退与按宽度自动换行，
+     * 不需要任何「往左偏一点」的布局规避。
      */
     private static void drawTooltip(MatrixStack pose, FontRenderer font, String text,
                                     int mouseX, int mouseY) {
-        java.util.List<String> lines = wrapText(font, text, 150);
-        int width = 0;
-        for (String line : lines) {
-            width = Math.max(width, font.getStringWidth(line));
-        }
-        int height = lines.size() * 10;
         net.minecraft.client.MainWindow window = Minecraft.getInstance().getMainWindow();
-        // JEI 的物品面板固定在屏幕右侧、并且在本监听器之后绘制，
-        // 提示画在鼠标右侧一定会被它的物品图标盖住 —— 这里固定向**左**展开。
-        int x = mouseX - width - 12;
-        if (x < 4) {
-            x = Math.min(mouseX + 12, window.getScaledWidth() - width - 6);
-        }
-        x = Math.max(4, x);
-        int y = Math.max(4, Math.min(mouseY - 12, window.getScaledHeight() - height - 6));
-        AbstractGui.fill(pose, x - 3, y - 3, x + width + 3, y + height + 3, 0xF0100010);
-        for (int i = 0; i < lines.size(); i++) {
-            font.drawStringWithShadow(pose, lines.get(i), x, y + i * 10, 0xFFFFFFFF);
-        }
-    }
-
-    /** 按像素宽度折行（提示文字很短，空格切分足够）。 */
-    private static java.util.List<String> wrapText(FontRenderer font, String text, int maxWidth) {
-        java.util.List<String> lines = new java.util.ArrayList<>(2);
-        if (font.getStringWidth(text) <= maxWidth) {
-            lines.add(text);
-            return lines;
-        }
-        StringBuilder current = new StringBuilder();
-        for (String word : text.split(" ")) {
-            String candidate = current.length() == 0 ? word : current + " " + word;
-            if (font.getStringWidth(candidate) <= maxWidth) {
-                current.setLength(0);
-                current.append(candidate);
-            } else {
-                if (current.length() > 0) {
-                    lines.add(current.toString());
-                    current.setLength(0);
-                }
-                current.append(word);
-            }
-        }
-        if (current.length() > 0) {
-            lines.add(current.toString());
-        }
-        return lines;
+        java.util.List<net.minecraft.util.text.ITextComponent> lines = new java.util.ArrayList<>(1);
+        lines.add(Chat.literal(text));
+        net.minecraftforge.fml.client.gui.GuiUtils.drawHoveringText(
+                pose, lines, mouseX, mouseY, window.getScaledWidth(), window.getScaledHeight(),
+                180, font);
     }
 
     // ------------------------------------------------------------------
