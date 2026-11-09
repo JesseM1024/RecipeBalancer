@@ -255,5 +255,7 @@
   "recipebalancer.configuration.zoomMin.tooltip": "Lower zoom limit for auto-fit and mouse wheel zooming.",
   "recipebalancer.configuration.zoomMax": "Maximum zoom",
   "recipebalancer.configuration.zoomMax.tooltip": "Upper zoom limit for auto-fit and mouse wheel zooming.",
-  "点击后打开配方编码终端": "Click to open the pattern encoding terminal"
+  "点击后打开配方编码终端": "Click to open the pattern encoding terminal",
+  "编码此配方": "Encode Recipe",
+  "JEI 未安装，快捷功能不可用": "JEI is not installed; JEI shortcuts are unavailable"
 }
