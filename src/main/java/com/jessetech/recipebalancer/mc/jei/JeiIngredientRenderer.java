@@ -83,6 +83,11 @@ public final class JeiIngredientRenderer
         }
     }
 
+    /** JEI runtime 重建时清空反查缓存。 */
+    public static void clearCache() {
+        RESOLVED.clear();
+    }
+
     /** 供 R/U 查询：把 ingredient key 还原成 JEI {@code ITypedIngredient}。 */
     public static Optional<ITypedIngredient<?>> resolveTyped(String key) {
         IJeiRuntime runtime = JeiIngredientMapper.runtime();
@@ -92,6 +97,13 @@ public final class JeiIngredientRenderer
         Optional<ITypedIngredient<?>> cached = RESOLVED.get(key);
         if (cached != null) {
             return cached;
+        }
+        // 编码时记住的对象最可靠（Create 药水流体等 uniqueId 不含完整 NBT，反查会落空）
+        ITypedIngredient<?> remembered = JeiIngredientMapper.recall(key);
+        if (remembered != null) {
+            Optional<ITypedIngredient<?>> hit = Optional.of(remembered);
+            RESOLVED.put(key, hit);
+            return hit;
         }
         Optional<ITypedIngredient<?>> resolved;
         try {

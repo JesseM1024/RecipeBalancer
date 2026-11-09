@@ -12,7 +12,10 @@ import mezz.jei.api.runtime.IJeiRuntime;
 import net.minecraft.world.item.ItemStack;
 
 import java.lang.reflect.Method;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Collections;
 
 /**
  * 把 JEI 的任意配料（物品 / 流体 / 化学品…）转成可持久化的 key + 数量。
@@ -31,6 +34,36 @@ public final class JeiIngredientMapper {
     public record Mapped(String key, double amount, String displayName) {
     }
 
+    /**
+     * key → 原始 {@link ITypedIngredient} 的会话缓存（有界 LRU，4096 条）。
+     *
+     * <p>反查靠 {@code getUniqueId}，但 Create 的药水流体等配料 uniqueId 不含完整 NBT，
+     * 反查会失败（表现为编码成自定义物质、R/U 失效）。编码时顺手记住对象本身，
+     * 渲染/悬停优先取它，不依赖 uniqueId。
+     */
+    private static final Map<String, ITypedIngredient<?>> KEY_CACHE =
+            Collections.synchronizedMap(new LinkedHashMap<>(256, 0.75f, true) {
+                @Override
+                protected boolean removeEldestEntry(Map.Entry<String, ITypedIngredient<?>> eldest) {
+                    return size() > 4096;
+                }
+            });
+
+    static void remember(String key, ITypedIngredient<?> typed) {
+        if (key != null && typed != null) {
+            KEY_CACHE.put(key, typed);
+        }
+    }
+
+    static ITypedIngredient<?> recall(String key) {
+        return key == null ? null : KEY_CACHE.get(key);
+    }
+
+    /** JEI runtime 重建时清空（旧对象不能再持有）。 */
+    public static void clearCache() {
+        KEY_CACHE.clear();
+    }
+
     private JeiIngredientMapper() {
     }
 
@@ -42,6 +75,7 @@ public final class JeiIngredientMapper {
         ItemStack stack = typed.getIngredient(VanillaTypes.ITEM).orElse(ItemStack.EMPTY);
         Mapped item = ofTypedItem(stack);
         if (item != null) {
+            remember(item.key(), typed);
             return item;
         }
         IJeiRuntime runtime = runtime();
@@ -60,6 +94,7 @@ public final class JeiIngredientMapper {
             // 非物品默认是 mB 计量；500 mB -> 0.5 B
             double amount = rawAmount > 0 ? rawAmount / 1000.0 : 1.0;
             String key = IngredientKey.encode(typeId(typed.getType()), uniqueId, name);
+            remember(key, typed);
             return new Mapped(key, amount, name);
         } catch (RuntimeException | LinkageError e) {
             return null;

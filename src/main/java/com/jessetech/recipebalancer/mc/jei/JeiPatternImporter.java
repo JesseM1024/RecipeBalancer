@@ -91,7 +91,8 @@ public final class JeiPatternImporter {
                 index = ys.indexOf(slot.y()) * INPUT_COLS + xs.indexOf(slot.x());
             }
             if (index >= 0 && index < RecipePattern.MAX_INPUTS) {
-                pattern.putInput(index, mapped.key(), mapped.amount());
+                pattern.putInput(index, mapped.key(),
+                        restoreAmount(category, slot, mapped.amount()));
             }
         }
         int outputIndex = 0;
@@ -100,13 +101,53 @@ public final class JeiPatternImporter {
             if (mapped == null || outputIndex >= RecipePattern.MAX_OUTPUTS) {
                 continue;
             }
-            pattern.putOutput(outputIndex++, mapped.key(), mapped.amount());
+            pattern.putOutput(outputIndex++, mapped.key(),
+                    restoreAmount(category, slot, mapped.amount()));
         }
         applyEquipment(category, pattern);
         return pattern;
     }
 
     /** 只有合成配方保留空格（纯视觉），机器配方等一律按顺序紧排。 */
+    /**
+     * 还原 Create 的「流体可见性放大」。
+     *
+     * <p>Create 的 {@code CreateRecipeCategory#withImprovedVisibility(FluidStack)} 把槽位里的
+     * 数量改成 {@code (int)(原量 * 0.75) + 250}（1000 是不动点），于是 JEI 槽位里的 250 mB
+     * 会显示成 437 mB。按逆函数还原：437→250、625→500、1000→1000。
+     *
+     * <p>只作用于 {@code create} 命名空间的类别与流体槽；其它模组不受影响。
+     * Create 6.0（1.20.1 / 1.21.1）可能调整过这套算法，若数值不符需按实际公式更新。
+     */
+    private static double restoreAmount(IRecipeCategory<?> category, JeiSlots.Slot slot,
+                                        double amount) {
+        if (amount <= 0 || !isFluidSlot(slot)) {
+            return amount;
+        }
+        net.minecraft.resources.ResourceLocation uid;
+        try {
+            uid = category == null ? null : category.getUid();
+        } catch (RuntimeException | LinkageError e) {
+            return amount;
+        }
+        if (uid == null || !"create".equals(uid.getNamespace())) {
+            return amount;
+        }
+        double shownMb = amount * 1000.0;
+        double restoredMb = Math.ceil((shownMb - 250.0) / 0.75);
+        return restoredMb > 0 ? restoredMb / 1000.0 : amount;
+    }
+
+    private static boolean isFluidSlot(JeiSlots.Slot slot) {
+        for (ITypedIngredient<?> candidate : slot.ingredients()) {
+            if (candidate != null
+                    && candidate.getIngredient(mezz.jei.api.constants.VanillaTypes.FLUID).isPresent()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private static boolean isCraftingRecipe(IRecipeCategory<?> category) {
         try {
             net.minecraft.resources.ResourceLocation uid = category.getUid();
