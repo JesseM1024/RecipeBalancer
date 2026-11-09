@@ -37,9 +37,14 @@ public abstract class RbScreen extends Screen implements Draw.Tooltips {
         super.render(pose, mouseX, mouseY, partialTick);
     }
 
-    /** 由 protected 提升为 public（覆写 Screen 的同签名方法，实现 {@link Draw.Tooltips}）。 */
+    /**
+     * 由 protected 提升为 public（实现 {@link Draw.Tooltips}）。
+     *
+     * <p>名字不能叫 {@code renderTooltip}：重混淆会把 MC 的同名方法改成 SRG 名，
+     * 实现方法被改名后与接口对不上 → 运行期 {@code AbstractMethodError}。
+     */
     @Override
-    public void renderTooltip(MatrixStack pose, ItemStack stack, int mouseX, int mouseY) {
+    public void renderItemTooltip(MatrixStack pose, ItemStack stack, int mouseX, int mouseY) {
         super.renderTooltip(pose, stack, mouseX, mouseY);
     }
 

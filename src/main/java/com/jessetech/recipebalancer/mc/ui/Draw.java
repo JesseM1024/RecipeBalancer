@@ -47,7 +47,15 @@ public final class Draw {
      * 因此由界面自己实现并把 {@code this} 传进来（见 {@code RbScreen}）。
      */
     public interface Tooltips {
-        void renderTooltip(MatrixStack pose, ItemStack stack, int mouseX, int mouseY);
+        /**
+         * 物品 tooltip。
+         *
+         * <p><b>名字刻意不叫 renderTooltip</b>：1.16.5 的 {@code ContainerScreen#renderTooltip}
+         * 是 MC 方法，ForgeGradle 重混淆会把它改名成 SRG（{@code func_230457_a_}），
+         * 而本接口是自己的类、不会被改名 —— 同名会导致实现方法被改名后与接口对不上，
+         * 运行期就是 {@code AbstractMethodError}。换个名字两边都保持原样。
+         */
+        void renderItemTooltip(MatrixStack pose, ItemStack stack, int mouseX, int mouseY);
 
         void renderComponentTooltip(MatrixStack pose, List<ITextComponent> lines,
                                     FontRenderer font, int mouseX, int mouseY);
@@ -176,7 +184,7 @@ public final class Draw {
 
     public void renderTooltip(FontRenderer font, ItemStack stack, int mouseX, int mouseY) {
         if (tooltips != null) {
-            tooltips.renderTooltip(pose, stack, mouseX, mouseY);
+            tooltips.renderItemTooltip(pose, stack, mouseX, mouseY);
         }
     }
 

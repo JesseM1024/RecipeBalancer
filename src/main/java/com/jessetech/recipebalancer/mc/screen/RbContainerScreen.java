@@ -33,11 +33,14 @@ public abstract class RbContainerScreen extends ContainerScreen<ClientEditorCont
 
     /**
      * tooltip 入口（1.16.5 的 {@code ContainerScreen#renderTooltip} 是 protected，
-     * 绘制辅助类调不到；这里实现成 public 的接口方法，界面代码写法与 1.20 线一致）。
+     * 绘制辅助类调不到；这里实现成 public 的接口方法）。
+     *
+     * <p>方法名不能叫 {@code renderTooltip}：那样在重混淆时会被改成 SRG 名，
+     * 与不被改名的接口方法对不上，运行期抛 {@code AbstractMethodError}。
      */
     @Override
-    public void renderTooltip(MatrixStack pose, net.minecraft.item.ItemStack stack,
-                              int mouseX, int mouseY) {
+    public void renderItemTooltip(MatrixStack pose, net.minecraft.item.ItemStack stack,
+                                  int mouseX, int mouseY) {
         super.renderTooltip(pose, stack, mouseX, mouseY);
     }
 
