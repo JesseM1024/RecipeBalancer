@@ -71,11 +71,20 @@ public final class JeiIngredientRenderer
         }
     }
 
+    /** JEI runtime 重建时清空反查缓存（本分支未缓存反查结果，保留方法供插件统一调用）。 */
+    public static void clearCache() {
+    }
+
     /** 供 R/U 查询：把 ingredient key 还原成 JEI ITypedIngredient。 */
     public static Optional<ITypedIngredient<?>> resolveTyped(String key) {
         IJeiRuntime runtime = JeiIngredientMapper.runtime();
         if (runtime == null || !IngredientKey.isIngredientKey(key)) {
             return Optional.empty();
+        }
+        // 编码时记住的对象最可靠（uniqueId 不含完整 NBT 的配料反查会落空）
+        ITypedIngredient<?> remembered = JeiIngredientMapper.recall(key);
+        if (remembered != null) {
+            return Optional.of(remembered);
         }
         try {
             IIngredientManager manager = runtime.getIngredientManager();
