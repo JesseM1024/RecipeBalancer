@@ -1,7 +1,7 @@
 package com.jessetech.recipebalancer.mc.jei;
 
-import com.mojang.blaze3d.vertex.PoseStack;
-import net.minecraft.client.gui.GuiComponent;
+import com.mojang.blaze3d.matrix.MatrixStack;
+import net.minecraft.client.gui.AbstractGui;
 
 /**
  * JEI 配方页按钮的图案：13×13，从 JEI 高版本按钮里逐像素采样得到（与 1.20.1 / main 分支同一份）。
@@ -38,7 +38,7 @@ public final class JeiButtonSkin {
     }
 
     /** 画一个完整的 13×13 按钮（图案 + 悬停白框）。 */
-    public static void draw(PoseStack pose, int x, int y, boolean hover) {
+    public static void draw(MatrixStack pose, int x, int y, boolean hover) {
         drawIcon(pose, x, y);
         if (hover) {
             drawHoverBorder(pose, x, y);
@@ -46,23 +46,23 @@ public final class JeiButtonSkin {
     }
 
     /** 只画 13×13 图案。 */
-    public static void drawIcon(PoseStack pose, int x, int y) {
+    public static void drawIcon(MatrixStack pose, int x, int y) {
         for (int row = 0; row < ICON.length; row++) {
             for (int col = 0; col < ICON[row].length; col++) {
-                GuiComponent.fill(pose, x + col, y + row, x + col + 1, y + row + 1,
+                AbstractGui.fill(pose, x + col, y + row, x + col + 1, y + row + 1,
                         ICON[row][col]);
             }
         }
     }
 
     /** 悬停时的 1px 白框：老版本 JEI 的按钮没有底板，用它提供点击反馈。 */
-    public static void drawHoverBorder(PoseStack pose, int x, int y) {
+    public static void drawHoverBorder(MatrixStack pose, int x, int y) {
         int x2 = x + SIZE;
         int y2 = y + SIZE;
         int white = 0xFFFFFFFF;
-        GuiComponent.fill(pose, x, y, x2, y + 1, white);
-        GuiComponent.fill(pose, x, y2 - 1, x2, y2, white);
-        GuiComponent.fill(pose, x, y, x + 1, y2, white);
-        GuiComponent.fill(pose, x2 - 1, y, x2, y2, white);
+        AbstractGui.fill(pose, x, y, x2, y + 1, white);
+        AbstractGui.fill(pose, x, y2 - 1, x2, y2, white);
+        AbstractGui.fill(pose, x, y, x + 1, y2, white);
+        AbstractGui.fill(pose, x2 - 1, y, x2, y2, white);
     }
 }

@@ -5,17 +5,17 @@ import com.jessetech.recipebalancer.core.util.J8;
 import com.jessetech.recipebalancer.mc.i18n.Lang;
 import com.jessetech.recipebalancer.mc.ui.Chat;
 import com.jessetech.recipebalancer.mc.ui.Draw;
-import com.mojang.blaze3d.vertex.PoseStack;
-import net.minecraft.ChatFormatting;
+import com.mojang.blaze3d.matrix.MatrixStack;
+import net.minecraft.util.text.TextFormatting;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.Font;
-import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.TagParser;
-import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.PotionItem;
-import net.minecraft.world.item.TooltipFlag;
+import net.minecraft.client.gui.FontRenderer;
+import net.minecraft.nbt.CompoundNBT;
+import net.minecraft.nbt.JsonToNBT;
+import net.minecraft.util.text.ITextComponent;
+import net.minecraft.util.ResourceLocation;
+import net.minecraft.item.ItemStack;
+import net.minecraft.item.PotionItem;
+import net.minecraft.client.util.ITooltipFlag;
 import net.minecraftforge.registries.ForgeRegistries;
 
 import java.nio.charset.StandardCharsets;
@@ -32,7 +32,7 @@ import java.util.regex.Pattern;
  * 物品身份与图标：core 里物品是字符串（registry id 或自定义名），
  * 这里负责与 {@link ItemStack} 互转，以及“未注册物品”的占位渲染。
  *
- * <p>1.18.2 没有 1.20.5+ 的数据组件（DataComponents）：带附加数据的物品
+ * <p>1.18.2 没有 1.20.5+ 的数据组件（DataITextComponents）：带附加数据的物品
  * 用整份 NBT 走 {@code stack|base64(snbt)} 保存，语义与 1.21.1 线的
  * “带 patch 才存完整 stack”一致 —— 没有 NBT 的普通物品仍然只存 registry id。
  */
@@ -49,9 +49,9 @@ public final class ItemKeyMapper {
 
     /** 非物品 ingredient 的渲染钩子；JEI 适配层（后续移植）在运行期安装，避免无 JEI 环境加载 JEI 类。 */
     public interface IngredientRenderHook {
-        boolean render(Draw graphics, Font font, String key, int x, int y, String amount);
+        boolean render(Draw graphics, FontRenderer font, String key, int x, int y, String amount);
 
-        boolean renderTooltip(Draw graphics, Font font, String key, int mouseX, int mouseY);
+        boolean renderTooltip(Draw graphics, FontRenderer font, String key, int mouseX, int mouseY);
     }
 
     /** 按当前语言取 ingredient 显示名的钩子；返回 null 表示解析不了，回退到固化名。 */
@@ -100,7 +100,7 @@ public final class ItemKeyMapper {
             return id.toString();
         }
         try {
-            CompoundTag tag = single.save(new CompoundTag());
+            CompoundNBT tag = single.write(new CompoundNBT());
             String encoded = Base64.getUrlEncoder().withoutPadding()
                     .encodeToString(tag.toString().getBytes(StandardCharsets.UTF_8));
             return STACK_PREFIX + encoded;
@@ -118,11 +118,11 @@ public final class ItemKeyMapper {
         if (id.startsWith(STACK_PREFIX)) {
             return STACK_CACHE.computeIfAbsent(id, ItemKeyMapper::decodeStack);
         }
-        ResourceLocation location = ResourceLocation.tryParse(id);
+        ResourceLocation location = ResourceLocation.tryCreate(id);
         if (location == null) {
             return ItemStack.EMPTY;
         }
-        net.minecraft.world.item.Item item = ForgeRegistries.ITEMS.getValue(location);
+        net.minecraft.item.Item item = ForgeRegistries.ITEMS.getValue(location);
         return item == null ? ItemStack.EMPTY : new ItemStack(item);
     }
 
@@ -130,8 +130,8 @@ public final class ItemKeyMapper {
         try {
             String snbt = new String(Base64.getUrlDecoder()
                     .decode(key.substring(STACK_PREFIX.length())), StandardCharsets.UTF_8);
-            CompoundTag tag = TagParser.parseTag(snbt);
-            ItemStack stack = ItemStack.of(tag);
+            CompoundNBT tag = JsonToNBT.getTagFromJson(snbt);
+            ItemStack stack = ItemStack.read(tag);
             if (stack.isEmpty()) {
                 return ItemStack.EMPTY;
             }
@@ -171,7 +171,7 @@ public final class ItemKeyMapper {
         }
         ItemStack stack = stack(key);
         if (!stack.isEmpty()) {
-            return stack.getHoverName().getString();
+            return stack.getDisplayName().getString();
         }
         return normalize(key);
     }
@@ -232,7 +232,7 @@ public final class ItemKeyMapper {
         }
         List<String> byName = new ArrayList<>();
         for (ResourceLocation id : ForgeRegistries.ITEMS.getKeys()) {
-            String name = new ItemStack(ForgeRegistries.ITEMS.getValue(id)).getHoverName().getString();
+            String name = new ItemStack(ForgeRegistries.ITEMS.getValue(id)).getDisplayName().getString();
             if (name.equalsIgnoreCase(value) || id.toString().equalsIgnoreCase(value)) {
                 byName.add(id.toString());
             }
@@ -252,14 +252,14 @@ public final class ItemKeyMapper {
         if (stack.isEmpty()) {
             return registryName(key);
         }
-        String name = stack.getHoverName().getString();
+        String name = stack.getDisplayName().getString();
         if (!(stack.getItem() instanceof PotionItem)) {
             return name;
         }
         // 直接用物品自身的 tooltip：Lingering 会按 0.25 时长因子、Splash 按原版规则显示
         Minecraft minecraft = Minecraft.getInstance();
-        List<Component> tooltip = stack.getTooltipLines(
-                minecraft == null ? null : minecraft.player, TooltipFlag.Default.NORMAL);
+        List<ITextComponent> tooltip = stack.getTooltip(
+                minecraft == null ? null : minecraft.player, ITooltipFlag.TooltipFlags.NORMAL);
         List<String> effects = new ArrayList<>();
         for (int i = 1; i < tooltip.size(); i++) {
             String line = tooltip.get(i).getString();
@@ -378,7 +378,7 @@ public final class ItemKeyMapper {
      *
      * @param amount 右下角数量文本；null/空 = 不画
      */
-    public static void renderIcon(Draw graphics, Font font, String key, int x, int y, String amount) {
+    public static void renderIcon(Draw graphics, FontRenderer font, String key, int x, int y, String amount) {
         String id = normalize(key);
         if (id.isEmpty()) {
             return;
@@ -393,7 +393,7 @@ public final class ItemKeyMapper {
             graphics.fill(x + 1, y + 1, x + 17, y + 2, 0x40FFFFFF);
             graphics.fill(x + 1, y + 16, x + 17, y + 17, 0x60000000);
             String label = shortLabel(id);
-            graphics.drawString(font, label, x + 9 - font.width(label) / 2, y + 5,
+            graphics.drawString(font, label, x + 9 - font.getStringWidth(label) / 2, y + 5,
                     0xFF101010, false);
             renderAmount(graphics, font, amount, x, y);
             return;
@@ -409,28 +409,28 @@ public final class ItemKeyMapper {
         graphics.fill(x + 1, y + 1, x + 17, y + 2, 0x40FFFFFF);
         graphics.fill(x + 1, y + 16, x + 17, y + 17, 0x60000000);
         String label = shortLabel(id);
-        int textX = x + 9 - font.width(label) / 2;
+        int textX = x + 9 - font.getStringWidth(label) / 2;
         int textY = y + 5;
         graphics.drawString(font, label, textX, textY, 0xFF101010, false);
         renderAmount(graphics, font, amount, x, y);
     }
 
     /** 渲染钩子复用：在 18px 槽内画数量文本。 */
-    public static void renderAmountOverlay(Draw graphics, Font font, String amount,
+    public static void renderAmountOverlay(Draw graphics, FontRenderer font, String amount,
                                            int x, int y) {
         renderAmount(graphics, font, amount, x, y);
     }
 
     /** 紧凑数量文本：过长时等比缩小，避免像 100000 一样溢出格子。 */
-    private static void renderAmount(Draw graphics, Font font, String amount, int x, int y) {
+    private static void renderAmount(Draw graphics, FontRenderer font, String amount, int x, int y) {
         if (amount == null || J8.isBlank(amount)) {
             return;
         }
-        int width = font.width(amount);
+        int width = font.getStringWidth(amount);
         int maxWidth = 14;
         // 抬高 z，避免数量文字被物品图标/槽位盖住
-        PoseStack pose = graphics.pose();
-        pose.pushPose();
+        MatrixStack pose = graphics.pose();
+        pose.push();
         pose.translate(0, 0, 200);
         if (width <= maxWidth) {
             graphics.drawString(font, amount, x + 17 - width, y + 9, 0xFFFFFFFF, true);
@@ -440,10 +440,10 @@ public final class ItemKeyMapper {
             pose.scale(scale, scale, 1.0f);
             graphics.drawString(font, amount, 0, 0, 0xFFFFFFFF, true);
         }
-        pose.popPose();
+        pose.pop();
     }
 
-    public static void renderTooltip(Draw graphics, Font font, String key, int mouseX, int mouseY) {
+    public static void renderTooltip(Draw graphics, FontRenderer font, String key, int mouseX, int mouseY) {
         String id = normalize(key);
         if (id.isEmpty()) {
             return;
@@ -454,7 +454,7 @@ public final class ItemKeyMapper {
             graphics.renderTooltip(font, stack, mouseX, mouseY);
             return;
         }
-        List<Component> lines = new ArrayList<>();
+        List<ITextComponent> lines = new ArrayList<>();
         if (IngredientKey.isIngredientKey(id)) {
             IngredientRenderHook hook = ingredientRenderHook;
             if (hook != null && hook.renderTooltip(graphics, font, id, mouseX, mouseY)) {
@@ -462,14 +462,14 @@ public final class ItemKeyMapper {
             }
             lines.add(Chat.literal(ingredientDisplayName(id)));
             lines.add(Chat.literal(IngredientKey.describe(id))
-                    .withStyle(ChatFormatting.GRAY));
+                    .mergeStyle(TextFormatting.GRAY));
             lines.add(Lang.c("非物品 ingredient；数量单位 B（500 mB = 0.5）")
-                    .withStyle(ChatFormatting.DARK_GRAY));
+                    .mergeStyle(TextFormatting.DARK_GRAY));
         } else {
-            lines.add(Chat.literal(shortLabel(id)).withStyle(ChatFormatting.GOLD));
-            lines.add(Chat.literal(id).withStyle(ChatFormatting.GRAY));
+            lines.add(Chat.literal(shortLabel(id)).mergeStyle(TextFormatting.GOLD));
+            lines.add(Chat.literal(id).mergeStyle(TextFormatting.GRAY));
             lines.add(Lang.c("当前整合包未找到此物品（占位显示）")
-                    .withStyle(ChatFormatting.DARK_GRAY));
+                    .mergeStyle(TextFormatting.DARK_GRAY));
         }
         graphics.renderComponentTooltip(font, lines, mouseX, mouseY);
     }

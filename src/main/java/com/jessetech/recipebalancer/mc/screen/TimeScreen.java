@@ -7,11 +7,11 @@ import com.jessetech.recipebalancer.mc.ui.AeStyle;
 import com.jessetech.recipebalancer.mc.ui.Buttons;
 import com.jessetech.recipebalancer.mc.ui.Chat;
 import com.jessetech.recipebalancer.mc.ui.Draw;
-import com.mojang.blaze3d.vertex.PoseStack;
-import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.components.EditBox;
-import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.network.chat.Component;
+import com.mojang.blaze3d.matrix.MatrixStack;
+import net.minecraft.client.gui.widget.button.Button;
+import net.minecraft.client.gui.widget.TextFieldWidget;
+import net.minecraft.client.gui.screen.Screen;
+import net.minecraft.util.text.ITextComponent;
 
 import java.util.function.DoubleConsumer;
 
@@ -22,7 +22,7 @@ public final class TimeScreen extends RbScreen implements JeiPanelScreen {
     private final DoubleConsumer callback;
     private double ticks;
     private TimeUnit unit;
-    private EditBox expressionBox;
+    private TextFieldWidget expressionBox;
     private Button unitButton;
     private String status = "";
 
@@ -45,28 +45,28 @@ public final class TimeScreen extends RbScreen implements JeiPanelScreen {
         panelX = (width - PANEL_W) / 2;
         panelY = (height - PANEL_H) / 2;
 
-        expressionBox = new EditBox(font, panelX + 8, panelY + 28, 150, 18,
+        expressionBox = new TextFieldWidget(font, panelX + 8, panelY + 28, 150, 18,
                 Lang.c("耗时表达式"));
-        expressionBox.setMaxLength(128);
-        expressionBox.setValue(TimeExpression.formatEditableNumber(unit.fromTicks(ticks)));
-        addRenderableWidget(expressionBox);
+        expressionBox.setMaxStringLength(128);
+        expressionBox.setText(TimeExpression.formatEditableNumber(unit.fromTicks(ticks)));
+        addButton(expressionBox);
 
-        unitButton = addRenderableWidget(Buttons.builder(Chat.literal(unit.label()), b -> cycleUnit())
+        unitButton = addButton(Buttons.builder(Chat.literal(unit.label()), b -> cycleUnit())
                 .bounds(panelX + 164, panelY + 27, 64, 20).build());
 
         // 取消左、确定右
-        addRenderableWidget(Buttons.builder(Lang.c("取消"), b -> cancel())
+        addButton(Buttons.builder(Lang.c("取消"), b -> cancel())
                 .bounds(panelX + 8, panelY + PANEL_H - 28, 104, 20).build());
-        addRenderableWidget(Buttons.builder(Lang.c("确定"), b -> confirm())
+        addButton(Buttons.builder(Lang.c("确定"), b -> confirm())
                 .bounds(panelX + PANEL_W - 112, panelY + PANEL_H - 28, 104, 20).build());
 
-        setInitialFocus(expressionBox);
+        setListener(expressionBox);
     }
 
     private void cycleUnit() {
         double preserved = ticks;
         try {
-            preserved = TimeExpression.toTicks(expressionBox.getValue(), unit);
+            preserved = TimeExpression.toTicks(expressionBox.getText(), unit);
         } catch (RuntimeException ignored) {
             // 当前表达式不合法时只切单位，不清空输入
         }
@@ -74,17 +74,17 @@ public final class TimeScreen extends RbScreen implements JeiPanelScreen {
         UnitPreferences.setTimeUnit(unit);
         if (preserved > 0) {
             ticks = preserved;
-            expressionBox.setValue(TimeExpression.formatEditableNumber(unit.fromTicks(ticks)));
+            expressionBox.setText(TimeExpression.formatEditableNumber(unit.fromTicks(ticks)));
         }
         unitButton.setMessage(Chat.literal(unit.label()));
     }
 
     private void confirm() {
         try {
-            double result = TimeExpression.toTicks(expressionBox.getValue(), unit);
+            double result = TimeExpression.toTicks(expressionBox.getText(), unit);
             UnitPreferences.setTimeUnit(unit);
             callback.accept(result);
-            minecraft.setScreen(parent);
+            minecraft.displayGuiScreen(parent);
         } catch (RuntimeException e) {
             // 内层消息也走语言文件（core 抛出的固定文案同时也是语言键）
             status = Lang.t("表达式无效: %s", Lang.t(String.valueOf(e.getMessage())));
@@ -92,11 +92,11 @@ public final class TimeScreen extends RbScreen implements JeiPanelScreen {
     }
 
     private void cancel() {
-        minecraft.setScreen(parent);
+        minecraft.displayGuiScreen(parent);
     }
 
     @Override
-    public void renderBackground(PoseStack pose) {
+    public void renderBackground(MatrixStack pose) {
         Draw graphics = new Draw(pose, this);
         graphics.fill(0, 0, width, height, 0xB0101010);
         AeStyle.panel(graphics, panelX, panelY, PANEL_W, PANEL_H);
@@ -106,13 +106,13 @@ public final class TimeScreen extends RbScreen implements JeiPanelScreen {
     }
 
     @Override
-    public void render(PoseStack pose, int mouseX, int mouseY, float partialTick) {
+    public void render(MatrixStack pose, int mouseX, int mouseY, float partialTick) {
         Draw graphics = new Draw(pose, this);
         super.render(pose, mouseX, mouseY, partialTick);
 
         String preview;
         try {
-            double result = TimeExpression.toTicks(expressionBox.getValue(), unit);
+            double result = TimeExpression.toTicks(expressionBox.getText(), unit);
             preview = "= " + TimeExpression.formatExactTicks(result)
                     + "  (" + TimeExpression.formatTicks(result) + ")";
         } catch (RuntimeException e) {
@@ -140,11 +140,12 @@ public final class TimeScreen extends RbScreen implements JeiPanelScreen {
         return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
+    /**
+     * 1.16.5 的 {@code Minecraft#displayGuiScreen(newScreen)} 会回调<b>旧屏</b>的
+     * {@code onClose()}，所以这里只能做收尾、绝不能再切屏，否则会无限递归。
+     */
     @Override
     public void onClose() {
-        if (minecraft != null) {
-            minecraft.setScreen(parent);
-        }
     }
 
     @Override

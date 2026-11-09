@@ -1,59 +1,48 @@
 package com.jessetech.recipebalancer.mc.jei;
 
 import com.jessetech.recipebalancer.core.util.J8;
-
 import com.jessetech.recipebalancer.mc.itemmap.IngredientKey;
 import com.jessetech.recipebalancer.mc.itemmap.ItemKeyMapper;
 import com.jessetech.recipebalancer.mc.screen.BalancerScreen;
-import mezz.jei.api.constants.VanillaTypes;
-import mezz.jei.api.ingredients.ITypedIngredient;
-import mezz.jei.api.runtime.IJeiRuntime;
-import net.minecraft.client.Minecraft;
-import net.minecraft.world.item.ItemStack;
-
-import java.util.Optional;
+import net.minecraft.item.ItemStack;
 
 /**
- * 「编码主界面鼠标下是哪个物质」→ JEI 配料。
+ * 悬停槽位 → JEI 配料（1.16.5 / JEI 7.x）。
  *
- * <p>9.x 与 10.x 都提供 {@code IGlobalGuiHandler#getIngredientUnderMouse(double, double)}
- * （返回裸配料），R/U/A 由 {@link JeiHoverHandler} 调到这里取配料。
+ * <p>7.x 的 {@code IGuiContainerHandler#getIngredientUnderMouse} 返回的是
+ * <b>裸配料对象</b>（{@code ItemStack} / {@code FluidStack} / …），
+ * 不再是 9.x 的 {@code IClickableIngredient}。所以这里把界面给的 key
+ * 还原成 JEI 认识的对象即可：
+ * <ul>
+ *   <li>物品：{@link ItemKeyMapper#stack(String)}；</li>
+ *   <li>流体/化学品等：交给 {@link JeiIngredientRenderer} 从 JEI 配料表里反查。</li>
+ * </ul>
  */
 public final class JeiHoverKeys {
 
     private JeiHoverKeys() {
     }
 
-    /** 当前界面是编码主界面时，返回鼠标下的槽位与其 ingredient key；否则 null。 */
-    public static BalancerScreen.HoveredKey hovered(double mouseX, double mouseY) {
-        Minecraft minecraft = Minecraft.getInstance();
-        if (minecraft == null || !(minecraft.screen instanceof BalancerScreen screen)) {
+    /** 把 ingredient key 还原成 JEI 能识别的裸配料对象；解析不了返回 null。 */
+    public static Object ingredient(String key) {
+        if (key == null || J8.isBlank(key)) {
             return null;
         }
-        BalancerScreen.HoveredKey hovered = screen.jeiHoveredKey(mouseX, mouseY);
-        if (hovered == null || hovered.key() == null || J8.isBlank(hovered.key())) {
-            return null;
+        if (!IngredientKey.isIngredientKey(key)) {
+            ItemStack stack = ItemKeyMapper.stack(key);
+            return stack.isEmpty() ? null : stack;
         }
-        return hovered;
+        return JeiIngredientRenderer.resolveIngredient(key);
     }
 
-    /** 物品走 ItemStack 还原；流体 / 化学品等走模组的 ingredient key 还原。 */
-    public static Optional<ITypedIngredient<?>> typed(String key) {
-        if (IngredientKey.isIngredientKey(key)) {
-            return JeiIngredientRenderer.resolveTyped(key);
-        }
-        ItemStack stack = ItemKeyMapper.stack(key);
-        if (stack.isEmpty()) {
-            return Optional.empty();
-        }
-        IJeiRuntime runtime = JeiIngredientMapper.runtime();
-        if (runtime == null) {
-            return Optional.empty();
-        }
-        try {
-            return Optional.ofNullable(runtime.createTypedIngredient(VanillaTypes.ITEM, stack));
-        } catch (RuntimeException | LinkageError e) {
-            return Optional.empty();
-        }
+    /** 当前语言下的显示名（用于提示/日志）；解析不了返回 null。 */
+    public static String displayName(String key) {
+        return JeiIngredientRenderer.displayNameOf(key);
+    }
+
+    /** 取界面当前的悬停槽位（没有则 null）。 */
+    public static BalancerScreen.HoveredKey hovered(BalancerScreen screen, double mouseX,
+                                                    double mouseY) {
+        return screen == null ? null : screen.jeiHoveredKey(mouseX, mouseY);
     }
 }

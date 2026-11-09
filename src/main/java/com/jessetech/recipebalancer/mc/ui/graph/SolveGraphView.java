@@ -13,11 +13,11 @@ import com.jessetech.recipebalancer.mc.itemmap.ItemKeyMapper;
 import com.jessetech.recipebalancer.mc.ui.AeStyle;
 import com.jessetech.recipebalancer.mc.ui.Chat;
 import com.jessetech.recipebalancer.mc.ui.Draw;
-import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.math.Matrix4f;
-import net.minecraft.ChatFormatting;
-import net.minecraft.client.gui.Font;
-import net.minecraft.network.chat.Component;
+import com.mojang.blaze3d.matrix.MatrixStack;
+import net.minecraft.util.math.vector.Matrix4f;
+import net.minecraft.util.text.TextFormatting;
+import net.minecraft.client.gui.FontRenderer;
+import net.minecraft.util.text.ITextComponent;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -290,7 +290,7 @@ public final class SolveGraphView {
         nameLanguage = code;
         for (GNode node : nodes) {
             node.displayName = ItemKeyMapper.displayName(node.key);
-            node.initial = node.J8.isBlank(key) ? "?" : shortInitial(node.displayName);
+            node.initial = J8.isBlank(node.key) ? "?" : shortInitial(node.displayName);
             node.label = null;
         }
     }
@@ -310,8 +310,8 @@ public final class SolveGraphView {
             GNode node = new GNode(true, recipe.equType(), index, null,
                     (long) Math.ceil(rate * recipe.time()));
             node.displayName = ItemKeyMapper.displayName(recipe.equType());
-            node.initial = node.J8.isBlank(key) ? "?" : shortInitial(node.displayName);
-            node.hasIcon = !node.J8.isBlank(key) && !ItemKeyMapper.stack(node.key).isEmpty();
+            node.initial = J8.isBlank(node.key) ? "?" : shortInitial(node.displayName);
+            node.hasIcon = !J8.isBlank(node.key) && !ItemKeyMapper.stack(node.key).isEmpty();
             recipeNodes.put(index, node);
             nodes.add(node);
         }
@@ -1064,7 +1064,7 @@ public final class SolveGraphView {
         panY = mouseY - worldY * zoom;
     }
 
-    public void render(Draw graphics, Font font, int areaX, int areaY,
+    public void render(Draw graphics, FontRenderer font, int areaX, int areaY,
                        int areaW, int areaH) {
         lastAreaX = areaX;
         lastAreaY = areaY;
@@ -1095,7 +1095,7 @@ public final class SolveGraphView {
         boolean showRecipeIcons = zoom > RECIPE_ICON_ZOOM;
         boolean showMaterialIcons = zoom >= MATERIAL_ICON_ZOOM;
 
-        graphics.pose().pushPose();
+        graphics.pose().push();
         graphics.pose().translate(areaX + panX, areaY + panY, 0);
         graphics.pose().scale((float) zoom, (float) zoom, 1.0f);
         drawEdges(graphics, font, viewMinX, viewMaxX, viewMinY, viewMaxY, showEdgeLabels);
@@ -1109,7 +1109,7 @@ public final class SolveGraphView {
         // 悬停高亮：黄灰相间的描边 + 顶层的名称/流量字幕（带 50% 白底）
         drawHoverOutline(graphics);
         drawHoverCaption(graphics, font);
-        graphics.pose().popPose();
+        graphics.pose().pop();
         graphics.disableScissor();
         // 节点图标走独立缓冲；先 flush 再画图例，避免图标盖住图例。
         graphics.flush();
@@ -1121,14 +1121,14 @@ public final class SolveGraphView {
     }
 
     /** 实时显示缩放比例和当前可见世界范围。 */
-    private void drawCameraHud(Draw graphics, Font font,
+    private void drawCameraHud(Draw graphics, FontRenderer font,
                                int areaX, int areaY, int areaW) {
         String zoomText = Math.round(zoom * 100.0) + "%";
         long viewWidth = Math.round(areaW / zoom);
         long viewHeight = Math.round(lastAreaH / zoom);
         String text = Lang.t("缩放 %s · 视野 %s×%s",
                 zoomText, viewWidth, viewHeight);
-        int x = areaX + areaW - font.width(text) - 6;
+        int x = areaX + areaW - font.getStringWidth(text) - 6;
         graphics.drawString(font, text, x, areaY + 4, AeStyle.MUTED, false);
     }
 
@@ -1141,7 +1141,7 @@ public final class SolveGraphView {
             return;
         }
         Draw.Batch batch = graphics.batch();
-        Matrix4f matrix = graphics.pose().last().pose();
+        Matrix4f matrix = graphics.pose().getLast().getMatrix();
         double scale = Math.max(0.15, zoom);
         double dash = 6.0 / scale;
         double thickness = 1.8 / scale;
@@ -1186,7 +1186,7 @@ public final class SolveGraphView {
      * 底下垫一层约 50% 不透明度的白底，文字在密集连线里也读得清。
      * 选中的节点也常驻一份字幕（与悬停互不覆盖）。
      */
-    private void drawHoverCaption(Draw graphics, Font font) {
+    private void drawHoverCaption(Draw graphics, FontRenderer font) {
         if (hoveredNode != null) {
             drawNodeCaption(graphics, font, hoveredNode);
         } else if (hoveredEdgeRef != null) {
@@ -1197,34 +1197,34 @@ public final class SolveGraphView {
         }
     }
 
-    private void drawNodeCaption(Draw graphics, Font font, GNode node) {
+    private void drawNodeCaption(Draw graphics, FontRenderer font, GNode node) {
         if (node.label == null) {
-            node.label = font.plainSubstrByWidth(node.displayName, 84);
+            node.label = font.trimStringToWidth(node.displayName, 84);
         }
         String text = node.label;
-        int width = font.width(text);
+        int width = font.getStringWidth(text);
         double y = node.y + (node.recipe ? RECIPE : MATERIAL) / 2.0 + 3;
         // 与普通标签一致的“最小字号”补偿
         float textScale = (float) Math.max(1.0, MIN_LABEL_TEXT_SCALE / zoom);
-        PoseStack pose = graphics.pose();
-        pose.pushPose();
+        MatrixStack pose = graphics.pose();
+        pose.push();
         pose.translate(node.x, y, 210);
         pose.scale(textScale, textScale, 1.0f);
         graphics.fill(-width / 2 - 2, -1, width / 2 + 2, 9, 0x80FFFFFF);
         graphics.drawString(font, text, -width / 2, 0, AeStyle.TEXT, false);
-        pose.popPose();
+        pose.pop();
     }
 
-    private void drawEdgeCaption(Draw graphics, Font font, GEdge edge) {
+    private void drawEdgeCaption(Draw graphics, FontRenderer font, GEdge edge) {
         String text = edge.label;
-        int width = font.width(text);
+        int width = font.getStringWidth(text);
         double[] anchor = edgeLabelAnchor(edge, font);
-        PoseStack pose = graphics.pose();
-        pose.pushPose();
+        MatrixStack pose = graphics.pose();
+        pose.push();
         pose.translate(anchor[0], anchor[1], 210);
         graphics.fill(-2, -1, width + 2, 9, 0x80FFFFFF);
         graphics.drawString(font, text, 0, 0, darken(edgeColor(edge)), false);
-        pose.popPose();
+        pose.pop();
     }
 
     /** 边的描边折线：先按弧线（回边/双向边）采样，再按总线三段，最后才是直线。 */
@@ -1277,7 +1277,7 @@ public final class SolveGraphView {
     }
 
     /** 鼠标悬浮：配方/物质/物流详细 tooltip。 */
-    public void renderTooltip(Draw graphics, Font font, int mouseX, int mouseY) {
+    public void renderTooltip(Draw graphics, FontRenderer font, int mouseX, int mouseY) {
         // 先清空悬停状态：鼠标移出图区时描边要立刻消失，不能残留上一帧的高亮
         hoveredNode = null;
         hoveredEdgeRef = null;
@@ -1309,11 +1309,11 @@ public final class SolveGraphView {
         GEdge edge = hoveredEdge(wx, wy);
         hoveredEdgeRef = edge;
         if (edge != null) {
-            List<Component> lines = new ArrayList<>();
+            List<ITextComponent> lines = new ArrayList<>();
             lines.add(Chat.literal(ItemKeyMapper.displayName(edge.material))
-                    .withStyle(ChatFormatting.BOLD));
+                    .mergeStyle(TextFormatting.BOLD));
             lines.add(Lang.c(nodeLabel(edge.from) + " → " + nodeLabel(edge.to))
-                    .withStyle(ChatFormatting.GRAY));
+                    .mergeStyle(TextFormatting.GRAY));
             lines.add(Lang.c("流量: %s /t",
                     TimeExpression.formatEditableNumber(edge.flow)));
             graphics.renderComponentTooltip(font, lines, mouseX, mouseY);
@@ -1374,25 +1374,25 @@ public final class SolveGraphView {
         return Math.hypot(px - (x1 + vx * t), py - (y1 + vy * t));
     }
 
-    private List<Component> recipeTooltip(GNode node) {
+    private List<ITextComponent> recipeTooltip(GNode node) {
         Recipe recipe = recipes.get(node.recipeId);
-        List<Component> lines = new ArrayList<>();
+        List<ITextComponent> lines = new ArrayList<>();
         lines.add(Lang.c("R%s · %s", node.recipeId,
-                ItemKeyMapper.displayName(recipe.equType())).withStyle(ChatFormatting.BOLD));
+                ItemKeyMapper.displayName(recipe.equType())).mergeStyle(TextFormatting.BOLD));
         double perSecond = result.recipeRates().get(node.recipeId);
         lines.add(Lang.c("设备并行: %s  设备数: %s",
                         TimeExpression.formatEditableNumber(perSecond * recipe.time()),
                         node.machines)
-                .withStyle(ChatFormatting.GRAY));
+                .mergeStyle(TextFormatting.GRAY));
         double ratePerTick = perSecond / 20.0;
         lines.add(Lang.c("运行速率: %s /t",
                 TimeExpression.formatEditableNumber(ratePerTick)));
-        lines.add(Lang.c("输入 (/t):").withStyle(ChatFormatting.GREEN));
+        lines.add(Lang.c("输入 (/t):").mergeStyle(TextFormatting.GREEN));
         for (Map.Entry<String, Double> entry : recipe.sourceList().entrySet()) {
             lines.add(Lang.c("  - %s × %s", ItemKeyMapper.displayName(entry.getKey()),
                     TimeExpression.formatEditableNumber(entry.getValue() * ratePerTick)));
         }
-        lines.add(Lang.c("输出 (/t):").withStyle(ChatFormatting.GOLD));
+        lines.add(Lang.c("输出 (/t):").mergeStyle(TextFormatting.GOLD));
         for (Map.Entry<String, Double> entry : recipe.productList().entrySet()) {
             lines.add(Lang.c("  + %s × %s", ItemKeyMapper.displayName(entry.getKey()),
                     TimeExpression.formatEditableNumber(entry.getValue() * ratePerTick)));
@@ -1400,12 +1400,12 @@ public final class SolveGraphView {
         return lines;
     }
 
-    private List<Component> materialTooltip(GNode node) {
-        List<Component> lines = new ArrayList<>();
+    private List<ITextComponent> materialTooltip(GNode node) {
+        List<ITextComponent> lines = new ArrayList<>();
         lines.add(Chat.literal(ItemKeyMapper.displayName(node.key))
-                .withStyle(ChatFormatting.BOLD));
+                .mergeStyle(TextFormatting.BOLD));
         lines.add(Lang.c("类别: %s", categoryLabel(node.category))
-                .withStyle(ChatFormatting.GRAY));
+                .mergeStyle(TextFormatting.GRAY));
         double produced = 0.0;
         double consumed = 0.0;
         for (GEdge edge : edges) {
@@ -1424,7 +1424,7 @@ public final class SolveGraphView {
             if (target != null) {
                 lines.add(Lang.c("目标: %s /t",
                                 TimeExpression.formatEditableNumber(target))
-                        .withStyle(ChatFormatting.LIGHT_PURPLE));
+                        .mergeStyle(TextFormatting.LIGHT_PURPLE));
             }
         }
         if (node.category == Category.INPUT) {
@@ -1432,7 +1432,7 @@ public final class SolveGraphView {
             if (amount != null) {
                 lines.add(Lang.c("外部输入: %s /t",
                                 TimeExpression.formatEditableNumber(amount / 20.0))
-                        .withStyle(ChatFormatting.GREEN));
+                        .mergeStyle(TextFormatting.GREEN));
             }
         }
         if (node.category == Category.STARTUP) {
@@ -1440,7 +1440,7 @@ public final class SolveGraphView {
             if (amount != null) {
                 lines.add(Lang.c("启动库存: %s",
                                 TimeExpression.formatEditableNumber(amount))
-                        .withStyle(ChatFormatting.RED));
+                        .mergeStyle(TextFormatting.RED));
             }
         }
         if (node.category == Category.BYPRODUCT) {
@@ -1448,7 +1448,7 @@ public final class SolveGraphView {
             if (amount != null) {
                 lines.add(Lang.c("副产物: %s /t",
                                 TimeExpression.formatEditableNumber(amount / 20.0))
-                        .withStyle(ChatFormatting.YELLOW));
+                        .mergeStyle(TextFormatting.YELLOW));
             }
         }
         return lines;
@@ -1460,16 +1460,29 @@ public final class SolveGraphView {
     }
 
     private static String categoryLabel(Category category) {
-        return Lang.t(switch (category) {
-            case INPUT -> "外部输入";
-            case STARTUP -> "启动库存";
-            case BYPRODUCT -> "副产物";
-            case TARGET -> "最终目标";
-            default -> "中间产物";
-        });
+        // 1.16.5 线是 Java 8：不能用 switch 表达式
+        String key;
+        switch (category) {
+            case INPUT:
+                key = "外部输入";
+                break;
+            case STARTUP:
+                key = "启动库存";
+                break;
+            case BYPRODUCT:
+                key = "副产物";
+                break;
+            case TARGET:
+                key = "最终目标";
+                break;
+            default:
+                key = "中间产物";
+                break;
+        }
+        return Lang.t(key);
     }
 
-    private void drawLegend(Draw graphics, Font font, int areaX, int areaY) {
+    private void drawLegend(Draw graphics, FontRenderer font, int areaX, int areaY) {
         int x = areaX + 4;
         int y = areaY + 4;
         String[] labels = {
@@ -1482,21 +1495,21 @@ public final class SolveGraphView {
         int gap = 8;
         int total = 8;
         for (String label : labels) {
-            total += font.width(label) + gap;
+            total += font.getStringWidth(label) + gap;
         }
         // 深色半透明底；提高 z，确保节点/物品图标在其下方。
-        graphics.pose().pushPose();
+        graphics.pose().push();
         graphics.pose().translate(0, 0, 300);
         graphics.fill(x, y, x + total, y + 17, 0xC02E2E2E);
         int cursor = x + 4;
         for (int i = 0; i < labels.length; i++) {
-            int width = font.width(labels[i]);
+            int width = font.getStringWidth(labels[i]);
             graphics.drawString(font, labels[i], cursor, y + 2, 0xFFFFFFFF, false);
             // 与节点一致的色条画在文字下方。
             graphics.fill(cursor, y + 12, cursor + width, y + 15, colors[i]);
             cursor += width + gap;
         }
-        graphics.pose().popPose();
+        graphics.pose().pop();
         graphics.flush();
     }
 
@@ -1504,14 +1517,14 @@ public final class SolveGraphView {
      * 所有边/箭头合批到一个 GUI VertexConsumer，避免每条边每像素一次 fill。
      * 边标签在合批刷新后单独绘制。
      */
-    private void drawEdges(Draw graphics, Font font,
+    private void drawEdges(Draw graphics, FontRenderer font,
                            double minX, double maxX, double minY, double maxY,
                            boolean showLabels) {
         if (edges.isEmpty()) {
             return;
         }
         Draw.Batch batch = graphics.batch();
-        Matrix4f matrix = graphics.pose().last().pose();
+        Matrix4f matrix = graphics.pose().getLast().getMatrix();
         // 选中/悬停某个节点时，只把它相关的边点亮，其它边压到很淡——线太多时靠这一下看清
         // 跨多列的「总线」边先画（压在下层），相邻列的本地流线后画（在上层），
         // 这样局部工艺链一眼可见，长距离输送不会盖住它们。
@@ -1783,22 +1796,22 @@ public final class SolveGraphView {
         return false;
     }
 
-    private void drawEdgeLabel(Draw graphics, Font font, GEdge edge) {
+    private void drawEdgeLabel(Draw graphics, FontRenderer font, GEdge edge) {
         // 流量文字用该物质的本色（压深一档），和箭头同色，方便顺着线找来源
         int color = dimEdges ? fade(0xFF808080, (int) Math.round(255 * dimOpacity)) : darken(edgeColor(edge));
         double[] anchor = edgeLabelAnchor(edge, font);
         // 用 pose 平移到锚点再画 (0,0)：与悬停字幕的定位方式完全一致，
         // 否则一个取整、一个用浮点平移，会错开半像素出现"重影"
-        PoseStack pose = graphics.pose();
-        pose.pushPose();
+        MatrixStack pose = graphics.pose();
+        pose.push();
         pose.translate(anchor[0], anchor[1], 0);
         graphics.drawString(font, edge.label, 0, 0, color, false);
-        pose.popPose();
+        pose.pop();
     }
 
     /** 流量文字的左上角（世界坐标）：绘制与悬停字幕共用同一套定位。 */
-    private double[] edgeLabelAnchor(GEdge edge, Font font) {
-        int width = font.width(edge.label);
+    private double[] edgeLabelAnchor(GEdge edge, FontRenderer font) {
+        int width = font.getStringWidth(edge.label);
         if (isBusEdge(edge)) {
             double[] path = busPath(edge);
             double dir = edge.to.x >= edge.from.x ? 1.0 : -1.0;
@@ -1859,7 +1872,7 @@ public final class SolveGraphView {
         batch.addVertex(matrix, (float) x, (float) y, 0.0f).setColor(color);
     }
 
-    private void drawNode(Draw graphics, Font font, GNode node,
+    private void drawNode(Draw graphics, FontRenderer font, GNode node,
                           boolean showRecipeIcons, boolean showMaterialIcons) {
         if (node.recipe) {
             drawRecipeNode(graphics, font, node, showRecipeIcons);
@@ -1878,7 +1891,7 @@ public final class SolveGraphView {
         }
     }
 
-    private void drawRecipeNode(Draw graphics, Font font, GNode node,
+    private void drawRecipeNode(Draw graphics, FontRenderer font, GNode node,
                                 boolean showIcons) {
         int x = (int) Math.round(node.x) - RECIPE / 2;
         int y = (int) Math.round(node.y) - RECIPE / 2;
@@ -1889,28 +1902,40 @@ public final class SolveGraphView {
         graphics.drawString(font, id, x + 3, y + 3, 0xFF3A2A10, false);
         String count = "x" + TimeExpression.formatCompact((double) node.machines);
         graphics.drawString(font, count,
-                x + RECIPE / 2 - font.width(count) / 2,
+                x + RECIPE / 2 - font.getStringWidth(count) / 2,
                 y + RECIPE - 10, 0xFF3A2A10, false);
 
         if (showIcons && node.hasIcon) {
             ItemKeyMapper.renderIcon(graphics, font, node.key, x + 12, y + 12, null);
         } else {
             String initial = node.initial;
-            graphics.drawString(font, initial, x + RECIPE / 2 - font.width(initial) / 2,
+            graphics.drawString(font, initial, x + RECIPE / 2 - font.getStringWidth(initial) / 2,
                     y + 16, 0xFF3A2A10, false);
         }
         drawCenteredLabel(graphics, font, node, node.x, node.y + RECIPE / 2.0 + 3);
     }
 
-    private void drawMaterialNode(Draw graphics, Font font, GNode node,
+    private void drawMaterialNode(Draw graphics, FontRenderer font, GNode node,
                                   boolean showIcons) {
-        int color = switch (node.category) {
-            case INPUT -> INPUT;
-            case STARTUP -> STARTUP;
-            case BYPRODUCT -> BYPRODUCT;
-            case TARGET -> TARGET;
-            default -> INTERMEDIATE;
-        };
+        // 1.16.5 线是 Java 8：不能用 switch 表达式
+        int color;
+        switch (node.category) {
+            case INPUT:
+                color = INPUT;
+                break;
+            case STARTUP:
+                color = STARTUP;
+                break;
+            case BYPRODUCT:
+                color = BYPRODUCT;
+                break;
+            case TARGET:
+                color = TARGET;
+                break;
+            default:
+                color = INTERMEDIATE;
+                break;
+        }
         int x = (int) Math.round(node.x) - MATERIAL / 2;
         int y = (int) Math.round(node.y) - MATERIAL / 2;
         roundedFill(graphics, x - 1, y - 1, MATERIAL + 2, MATERIAL + 2, 5, BORDER);
@@ -1921,26 +1946,26 @@ public final class SolveGraphView {
         } else {
             String initial = node.initial;
             graphics.drawString(font, initial,
-                    x + MATERIAL / 2 - font.width(initial) / 2, y + 7,
+                    x + MATERIAL / 2 - font.getStringWidth(initial) / 2, y + 7,
                     0xFF202020, false);
         }
         drawCenteredLabel(graphics, font, node, node.x, node.y + MATERIAL / 2.0 + 3);
     }
 
-    private void drawCenteredLabel(Draw graphics, Font font, GNode node,
+    private void drawCenteredLabel(Draw graphics, FontRenderer font, GNode node,
                                    double centerX, double y) {
         if (node.label == null) {
-            node.label = font.plainSubstrByWidth(node.displayName, 84);
+            node.label = font.trimStringToWidth(node.displayName, 84);
         }
         // 整张图按 zoom 缩放；这里反向补偿，使屏幕上字号不小于 50%（缩得再小也不再变小）。
         float textScale = (float) Math.max(1.0, MIN_LABEL_TEXT_SCALE / zoom);
-        PoseStack pose = graphics.pose();
-        pose.pushPose();
+        MatrixStack pose = graphics.pose();
+        pose.push();
         pose.translate(centerX, y, 0);
         pose.scale(textScale, textScale, 1.0f);
-        graphics.drawString(font, node.label, Math.round(-font.width(node.label) / 2.0f), 0,
+        graphics.drawString(font, node.label, Math.round(-font.getStringWidth(node.label) / 2.0f), 0,
                 AeStyle.TEXT, false);
-        pose.popPose();
+        pose.pop();
     }
 
     private static String shortInitial(String name) {

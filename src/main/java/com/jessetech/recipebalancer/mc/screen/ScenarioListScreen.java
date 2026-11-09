@@ -11,11 +11,11 @@ import com.jessetech.recipebalancer.mc.itemmap.ScenarioKeyNormalizer;
 import com.jessetech.recipebalancer.mc.ui.AeStyle;
 import com.jessetech.recipebalancer.mc.ui.Buttons;
 import com.jessetech.recipebalancer.mc.ui.Draw;
-import com.mojang.blaze3d.vertex.PoseStack;
-import net.minecraft.Util;
-import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.components.EditBox;
-import net.minecraft.client.gui.screens.Screen;
+import com.mojang.blaze3d.matrix.MatrixStack;
+import net.minecraft.util.Util;
+import net.minecraft.client.gui.widget.button.Button;
+import net.minecraft.client.gui.widget.TextFieldWidget;
+import net.minecraft.client.gui.screen.Screen;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -40,8 +40,8 @@ public final class ScenarioListScreen extends RbScreen implements JeiPanelScreen
     private int selected = -1;
     private double scroll;
     private String status = "";
-    private EditBox nameBox;
-    private EditBox filterBox;
+    private TextFieldWidget nameBox;
+    private TextFieldWidget filterBox;
 
     private int panelX = 20;
     private int panelY = 10;
@@ -67,33 +67,33 @@ public final class ScenarioListScreen extends RbScreen implements JeiPanelScreen
         scroll = 0;
 
         // 标题右侧的筛选框：只过滤列表显示，不动磁盘数据
-        String query = filterBox == null ? "" : filterBox.getValue();
-        int titleW = font.width(Lang.t("配方集"));
+        String query = filterBox == null ? "" : filterBox.getText();
+        int titleW = font.getStringWidth(Lang.t("配方集"));
         int filterX = panelX + 8 + titleW + 6;
-        filterBox = new EditBox(font, filterX, panelY + 3,
+        filterBox = new TextFieldWidget(font, filterX, panelY + 3,
                 Math.max(48, panelX + PANEL_W - 8 - filterX), 14, Lang.c("筛选"));
-        filterBox.setMaxLength(40);
+        filterBox.setMaxStringLength(40);
         filterBox.setResponder(value -> applyFilter());
-        filterBox.setValue(query);
-        addRenderableWidget(filterBox);
+        filterBox.setText(query);
+        addButton(filterBox);
 
-        nameBox = new EditBox(font, panelX + 8, panelY + PANEL_H - 52, 150, 18,
+        nameBox = new TextFieldWidget(font, panelX + 8, panelY + PANEL_H - 52, 150, 18,
                 Lang.c("配方集名"));
-        nameBox.setMaxLength(48);
-        nameBox.setValue(J8.isBlank(currentName) ? WorkspaceSession.DEFAULT_NAME : currentName);
-        addRenderableWidget(nameBox);
+        nameBox.setMaxStringLength(48);
+        nameBox.setText(J8.isBlank(currentName) ? WorkspaceSession.DEFAULT_NAME : currentName);
+        addButton(nameBox);
 
-        addRenderableWidget(Buttons.builder(Lang.c("存储为"), b -> saveCurrent())
+        addButton(Buttons.builder(Lang.c("存储为"), b -> saveCurrent())
                 .bounds(panelX + 164, panelY + PANEL_H - 53, 44, 20).build());
-        addRenderableWidget(Buttons.builder(Lang.c("删除"), b -> deleteSelected())
+        addButton(Buttons.builder(Lang.c("删除"), b -> deleteSelected())
                 .bounds(panelX + 212, panelY + PANEL_H - 53, 44, 20).build());
-        addRenderableWidget(Buttons.builder(Lang.c("返回"), b -> minecraft.setScreen(parent))
+        addButton(Buttons.builder(Lang.c("返回"), b -> minecraft.displayGuiScreen(parent))
                 .bounds(panelX + 8, panelY + PANEL_H - 27, 80, 20).build());
         // 底行中间：打开工作区文件夹（用于在文件管理器里直接复制/粘贴配方集 json）
-        addRenderableWidget(Buttons.builder(Lang.c("打开文件夹"), b -> openFolder())
+        addButton(Buttons.builder(Lang.c("打开文件夹"), b -> openFolder())
                 .bounds(panelX + 92, panelY + PANEL_H - 27, 80, 20).build());
         // 右下角：读取选中项（与右键载入等价，方便不做右键操作）
-        addRenderableWidget(Buttons.builder(Lang.c("读取"), b -> loadSelected())
+        addButton(Buttons.builder(Lang.c("读取"), b -> loadSelected())
                 .bounds(panelX + PANEL_W - 8 - 80, panelY + PANEL_H - 27, 80, 20).build());
         applyFilter();
     }
@@ -101,7 +101,7 @@ public final class ScenarioListScreen extends RbScreen implements JeiPanelScreen
     /** 按筛选框内容重建可见列表；筛选变化时清掉选中与滚动。 */
     private void applyFilter() {
         String query = filterBox == null
-                ? "" : filterBox.getValue().trim().toLowerCase(Locale.ROOT);
+                ? "" : filterBox.getText().trim().toLowerCase(Locale.ROOT);
         List<String> filtered = new ArrayList<>();
         for (String name : allNames) {
             if (query.isEmpty() || name.toLowerCase(Locale.ROOT).contains(query)) {
@@ -121,9 +121,9 @@ public final class ScenarioListScreen extends RbScreen implements JeiPanelScreen
 
     private void saveCurrent() {
         try {
-            String name = WorkspaceSession.nameOf(nameBox.getValue());
+            String name = WorkspaceSession.nameOf(nameBox.getText());
             store.save(name, ScenarioKeyNormalizer.normalize(draft.toScenario()));
-            nameBox.setValue(name);
+            nameBox.setText(name);
             // 另存后主界面跟随新名字，避免之后继续写回旧工作区
             parent.onWorkspaceNamed(name);
             reloadNames();
@@ -154,7 +154,7 @@ public final class ScenarioListScreen extends RbScreen implements JeiPanelScreen
         try {
             Files.createDirectories(directory);
             // 1.18.2 的 Util.OS 只有 openFile(File)，没有 openPath(Path)
-            Util.getPlatform().openFile(directory.toFile());
+            Util.getOSType().openFile(directory.toFile());
             status = Lang.t("已打开配方集文件夹");
         } catch (Exception e) {
             status = Lang.t("打开文件夹失败: %s", e.getMessage());
@@ -176,14 +176,14 @@ public final class ScenarioListScreen extends RbScreen implements JeiPanelScreen
             Scenario scenario = store.loadDraft(name);
             draft.loadFrom(ScenarioKeyNormalizer.normalize(scenario));
             parent.onScenarioLoaded(name);
-            minecraft.setScreen(parent);
+            minecraft.displayGuiScreen(parent);
         } catch (RuntimeException e) {
             status = Lang.t("载入失败: %s", e.getMessage());
         }
     }
 
     @Override
-    public void renderBackground(PoseStack pose) {
+    public void renderBackground(MatrixStack pose) {
         Draw graphics = new Draw(pose, this);
         graphics.fill(0, 0, width, height, 0xB0101010);
         AeStyle.panel(graphics, panelX, panelY, PANEL_W, PANEL_H);
@@ -192,7 +192,7 @@ public final class ScenarioListScreen extends RbScreen implements JeiPanelScreen
     }
 
     @Override
-    public void render(PoseStack pose, int mouseX, int mouseY, float partialTick) {
+    public void render(MatrixStack pose, int mouseX, int mouseY, float partialTick) {
         Draw graphics = new Draw(pose, this);
         super.render(pose, mouseX, mouseY, partialTick);
 
@@ -224,9 +224,9 @@ public final class ScenarioListScreen extends RbScreen implements JeiPanelScreen
         // 名称框/另存/删除上方的空白行：左边状态，右边常驻操作提示
         int infoY = panelY + PANEL_H - 68;
         String hint = Lang.t("左键选中 · 右键载入");
-        int hintW = font.width(hint);
+        int hintW = font.getStringWidth(hint);
         if (!status.isEmpty()) {
-            graphics.drawString(font, font.plainSubstrByWidth(status,
+            graphics.drawString(font, font.trimStringToWidth(status,
                             Math.max(0, PANEL_W - 16 - hintW - 4)),
                     panelX + 8, infoY, AeStyle.ACCENT, false);
         }
@@ -261,11 +261,24 @@ public final class ScenarioListScreen extends RbScreen implements JeiPanelScreen
         return super.mouseScrolled(mouseX, mouseY, delta);
     }
 
+    /**
+     * 1.16.5 的 {@code Minecraft#displayGuiScreen(newScreen)} 会回调<b>旧屏</b>的
+     * {@code onClose()}，所以这里只能做收尾、绝不能再切屏，否则会无限递归。
+     */
     @Override
     public void onClose() {
-        if (minecraft != null) {
-            minecraft.setScreen(parent);
+    }
+
+    /** ESC 返回上一级（按钮里的 displayGuiScreen 同理，都不会递归）。 */
+    @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (keyCode == 256 && modifiers == 0) {
+            if (minecraft != null) {
+                minecraft.displayGuiScreen(parent);
+            }
+            return true;
         }
+        return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
     @Override

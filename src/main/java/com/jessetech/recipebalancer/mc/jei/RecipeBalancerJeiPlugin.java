@@ -12,38 +12,27 @@ import com.jessetech.recipebalancer.mc.screen.SolveScreen;
 import com.jessetech.recipebalancer.mc.screen.TimeScreen;
 import mezz.jei.api.IModPlugin;
 import mezz.jei.api.JeiPlugin;
-import mezz.jei.api.registration.IAdvancedRegistration;
 import mezz.jei.api.registration.IGuiHandlerRegistration;
 import mezz.jei.api.runtime.IJeiRuntime;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.ResourceLocation;
 
 /**
- * RecipeBalancer 的 JEI 插件入口（1.18.2 / JEI 9.x ~ 10.x）。
+ * RecipeBalancer 的 JEI 插件入口（1.16.5 / JEI 7.6 ~ 7.8）。
  *
- * <p>JEI 只自动识别 {@code AbstractContainerScreen}，本模组全是自定义 {@code Screen}，
- * 因此要逐个注册 {@code IGuiProperties} 告诉 JEI 面板该贴在哪一侧。
+ * <p>与 1.18.2 的差异：
+ * <ul>
+ *   <li>7.x 只有一代接口，不需要按能力探测注册路径；</li>
+ *   <li>没有配方页按钮 API / 类别装饰器，按钮由 {@link JeiRecipeOverlay} 在配方页自绘；</li>
+ *   <li>{@code IGlobalGuiHandler} / {@code IGuiContainerHandler} 的悬停返回<b>裸配料对象</b>。</li>
+ * </ul>
  *
- * <p><b>版本策略</b>：本类只使用 JEI 9.4.1 就存在的 API（编译基线），
- * 更高版本才有的能力（配方页按钮 API、类别装饰器）由 {@link JeiCapabilities} 探测，
- * 实现类放在 {@code src/jeiModern} 源码集里用 10.81 编译、运行期按能力反射加载；
- * 9.x 没有这些 API，对应功能整体不可用（日志会明确说明）。
+ * <p>本类只引用 7.6.1 就存在的 API（编译基线），未装 JEI 时整类不会被加载。
  */
 @JeiPlugin
 public final class RecipeBalancerJeiPlugin implements IModPlugin {
 
     private static final ResourceLocation UID =
             new ResourceLocation("recipebalancer", "jei_plugin");
-
-    /** jeiModern 源码集里的类名（字符串引用，避免主源码集依赖新 API）。 */
-    private static final String MODERN_REGISTER =
-            "com.jessetech.recipebalancer.mc.jei.JeiModernRegister";
-
-    /** 官方配方页按钮是否已成功注册（true 时叠加层让位）。 */
-    private static volatile boolean officialRecipeButtons;
-
-    static boolean officialRecipeButtons() {
-        return officialRecipeButtons;
-    }
 
     @Override
     public ResourceLocation getPluginUid() {
@@ -59,8 +48,7 @@ public final class RecipeBalancerJeiPlugin implements IModPlugin {
         AutoRecipeHooks.set(new JeiAutoRecipe());
         RecipeBalancerMod.LOGGER.info("[RecipeBalancer] {}", JeiCapabilities.describe());
         try {
-            // 9.x 没有官方按钮 API：用客户端叠加层在配方页画「编码此配方」按钮；
-            // 10.x 有官方 API 时本层会自动让位（见 JeiRecipeOverlay#active）。
+            // 7.x 没有官方按钮 API：用客户端叠加层在配方页画「编码此配方」按钮
             JeiRecipeOverlay.install();
         } catch (Throwable t) {
             RecipeBalancerMod.LOGGER.warn("[RecipeBalancer] JEI 配方页叠加按钮安装失败: {}",
@@ -83,6 +71,7 @@ public final class RecipeBalancerJeiPlugin implements IModPlugin {
                 "com.jessetech.recipebalancer.mc.jei.JeiAutoRecipe",
                 "com.jessetech.recipebalancer.mc.jei.JeiBookmarkReader",
                 "com.jessetech.recipebalancer.mc.jei.JeiHoverKeys",
+                "com.jessetech.recipebalancer.mc.jei.JeiRecipeOverlay",
         };
         for (String name : names) {
             try {
@@ -106,7 +95,7 @@ public final class RecipeBalancerJeiPlugin implements IModPlugin {
         }
         try {
             // 主路径：一级界面已是容器界面，走 JEI 只对容器开放的 IGuiContainerHandler
-            // （额外区域 + 悬停配料，9.x 起一直可用）。
+            // （额外区域 + 悬停配料）。
             registration.addGuiContainerHandler(BalancerScreen.class,
                     new RbContainerGuiHandler());
             RecipeBalancerMod.LOGGER.info("[RecipeBalancer] JEI 容器处理器：已注册（一级界面）");
@@ -115,12 +104,9 @@ public final class RecipeBalancerJeiPlugin implements IModPlugin {
                     "[RecipeBalancer] JEI 容器处理器注册失败: {}", t.toString());
         }
         try {
-            // 兜底：若某个 JEI 构建不支持/裁掉了容器侧悬停回调，全局处理器仍能让 R/U/A 工作。
-            // 代价只是同一个界面上被查询两次（无害），换来跨版本稳定。
+            // 兜底：若某个 JEI 构建裁掉了容器侧悬停回调，全局处理器仍能让 R/U/A 工作。
             registration.addGlobalGuiHandler(new JeiHoverHandler());
-            RecipeBalancerMod.LOGGER.info(
-                    "[RecipeBalancer] JEI 悬停查询：全局处理器兜底已注册（工厂 API={}）",
-                    JeiCapabilities.supportsClickableFactory());
+            RecipeBalancerMod.LOGGER.info("[RecipeBalancer] JEI 悬停查询：容器处理器 + 全局兜底");
         } catch (Throwable t) {
             RecipeBalancerMod.LOGGER.warn("[RecipeBalancer] JEI 悬停查询不可用: {}",
                     t.toString());
@@ -130,6 +116,7 @@ public final class RecipeBalancerJeiPlugin implements IModPlugin {
             // 物料清单编辑屏（无限外部供应 / 循环亏损补充）：拖进网格即追加
             registration.addGhostIngredientHandler(KeySetScreen.class,
                     new JeiKeySetGhostHandler());
+            RecipeBalancerMod.LOGGER.info("[RecipeBalancer] JEI 拖拽录入：已注册");
         } catch (Throwable t) {
             RecipeBalancerMod.LOGGER.warn(
                     "[RecipeBalancer] JEI 拖拽录入不可用: {}", t.toString());
@@ -147,45 +134,11 @@ public final class RecipeBalancerJeiPlugin implements IModPlugin {
                 screen -> JeiGuiProperties.of(screen, screen));
         registration.addGuiScreenHandler(ScenarioListScreen.class,
                 screen -> JeiGuiProperties.of(screen, screen));
-        // 求解结果页 / 系数输入页同样要实现 IGuiProperties，否则 JEI 不认为
+        // 求解结果页 / 系数输入页同样要报 GUIPproperties，否则 JEI 不认为
         // 这些界面「有 GUI」，左侧书签面板与物品面板都不会渲染。
         registration.addGuiScreenHandler(SolveScreen.class,
                 screen -> JeiGuiProperties.of(screen, screen));
         registration.addGuiScreenHandler(FactorScreen.class,
                 screen -> JeiGuiProperties.of(screen, screen));
-    }
-
-    @Override
-    public void registerAdvanced(IAdvancedRegistration registration) {
-        // 配方页按钮：10.x 走官方 API；9.x（或官方注册失败）由客户端叠加层提供，
-        // 两条路只会启用一条，避免同一页出现两个按钮。
-        if (JeiCapabilities.supportsRecipeButtons() && registerModernButtons(registration)) {
-            officialRecipeButtons = true;
-            RecipeBalancerMod.LOGGER.info("[RecipeBalancer] JEI 配方页按钮：已注册（按钮 API，{}）",
-                    JeiCapabilities.version());
-            return;
-        }
-        officialRecipeButtons = false;
-        RecipeBalancerMod.LOGGER.info(
-                "[RecipeBalancer] JEI 配方页按钮：官方 API 不可用（{}），改用客户端叠加层",
-                JeiCapabilities.version());
-    }
-
-    /**
-     * 官方按钮 API；类或方法不存在时返回 false（9.x）。
-     *
-     * <p>实现类在 {@code src/jeiModern} 源码集（用 JEI 10.81 编译），用字符串引用，
-     * 这样主源码集不依赖新 API，老版本加载本类也不会触发 {@code NoClassDefFoundError}。
-     */
-    private static boolean registerModernButtons(IAdvancedRegistration registration) {
-        try {
-            Class<?> type = Class.forName(MODERN_REGISTER);
-            type.getMethod("register", IAdvancedRegistration.class).invoke(null, registration);
-            return true;
-        } catch (Throwable t) {
-            RecipeBalancerMod.LOGGER.debug(
-                    "[RecipeBalancer] JEI 按钮 API 可用但注册失败: {}", t.toString());
-            return false;
-        }
     }
 }

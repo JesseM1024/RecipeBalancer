@@ -1,97 +1,89 @@
 package com.jessetech.recipebalancer.mc.screen;
 
-import com.jessetech.recipebalancer.mc.ui.Draw;
-import com.mojang.blaze3d.vertex.PoseStack;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
-import net.minecraft.network.chat.Component;
-import net.minecraft.world.entity.player.Inventory;
-import net.minecraft.world.inventory.ClickType;
-import net.minecraft.world.inventory.Slot;
-import net.minecraft.world.item.ItemStack;
-
-import java.util.List;
+import com.jessetech.recipebalancer.mc.ui.Chat;
+import com.mojang.blaze3d.matrix.MatrixStack;
+import net.minecraft.client.gui.screen.inventory.ContainerScreen;
+import net.minecraft.inventory.container.ClickType;
+import net.minecraft.inventory.container.Slot;
 
 /**
- * 容器版界面基类（{@link RbScreen} 的容器对应物）。
+ * 一级界面（{@link BalancerScreen}）的容器界面基类（1.16.5 版）。
  *
- * <p>存在的理由与 {@link RbScreen} 相同：1.18.2 的 {@code Screen#renderTooltip} 是
- * {@code protected}，{@link Draw} / {@code ItemKeyMapper} / {@code SolveGraphView}
- * 调不到，这里把它提升为 public 并实现 {@link Draw.Tooltips}。
+ * <p>只用 {@link ClientEditorContainer} 这个<b>零槽位空容器</b>换取容器界面的身份，
+ * 内容仍由子类整屏自绘。为了保持「原来就是普通 Screen」的行为，这里把原版容器界面
+ * 里会发网络包 / 画多余元素的行为逐条中和：
  *
- * <p>另一个职责是<b>中和原版容器行为</b>。本模组的容器界面用的是
- * {@link ClientEditorMenu}（零槽位、纯客户端），任何落到原版槽位逻辑的点击都会变成
- * {@code gameMode.handleInventoryMouseClick(...)} —— 一个指向不存在菜单的网络包。
- * 因此这里统一：
  * <ul>
- *   <li>{@link #slotClicked} 置空：左右键拾取、Shift 快移、快捷栏交换、Q 丢弃全部失效；</li>
- *   <li>{@link #renderLabels} 置空：标题/背包名由各界面自绘；</li>
- *   <li>{@link #onClose} 只切屏，不调 {@code player.closeContainer()}（那是给玩家真实
- *       容器发的关闭包，与本界面无关）。</li>
+ *   <li>{@link #handleMouseClick} 空实现 —— 空容器没有槽位，同时吞掉「点面板外丢弃」的
+ *       {@code slotId=-999} 与快捷栏交换；</li>
+ *   <li>{@link #drawGuiContainerForegroundLayer} 空实现 —— 不画容器标题与「物品栏」标签；</li>
+ *   <li>{@link #drawGuiContainerBackgroundLayer} 空实现 —— 子类覆盖的是
+ *       {@code renderBackground(...)} / 私有 {@code drawBackground(...)}；</li>
+ *   <li>{@link #onClose} 不发关闭包 —— 1.16.5 的 {@code Minecraft#displayGuiScreen(newScreen)}
+ *       会调用<b>旧屏</b>的 {@code onClose()}，这里再发起关闭就会无限递归 → {@code StackOverflowError}。
+ *       落库/草稿等收尾由子类重写 {@code onClose} 完成，关闭动作交给 {@code closeScreen()}。</li>
  * </ul>
  */
-public abstract class RbContainerScreen extends AbstractContainerScreen<ClientEditorMenu>
-        implements Draw.Tooltips {
+public abstract class RbContainerScreen extends ContainerScreen<ClientEditorContainer>
+        implements com.jessetech.recipebalancer.mc.ui.Draw.Tooltips {
 
-    protected RbContainerScreen(Component title) {
-        super(new ClientEditorMenu(), playerInventoryOrFallback(), title);
+    protected RbContainerScreen(ClientEditorContainer container) {
+        super(container, container.playerInventory(), Chat.empty());
     }
 
     /**
-     * {@code AbstractContainerScreen} 需要一个 {@link Inventory} 取背包标题。
-     *
-     * <p>1.18.2 的 {@code Inventory} 只有 {@code Inventory(Player)} 一个构造器，
-     * 没有玩家就造不出来；而本模组的界面只可能在游戏内打开（快捷键 / JEI 按钮），
-     * 因此这里直接给出明确错误，而不是让空指针在构造器里炸得莫名其妙。
-     */
-    private static Inventory playerInventoryOrFallback() {
-        Minecraft minecraft = Minecraft.getInstance();
-        if (minecraft != null && minecraft.player != null) {
-            return minecraft.player.getInventory();
-        }
-        throw new IllegalStateException("RecipeBalancer: 没有玩家时无法创建容器界面");
-    }
-
-    /** 合成一次绘制入口；子类在 render 里用 {@code draw(pose)} 代替 new Draw(...)。 */
-    protected final Draw draw(PoseStack pose) {
-        return new Draw(pose, this);
-    }
-
-    /**
-     * 本界面没有任何真实槽位，任何点击都不允许落到原版槽位逻辑（否则会发点槽包）。
+     * tooltip 入口（1.16.5 的 {@code ContainerScreen#renderTooltip} 是 protected，
+     * 绘制辅助类调不到；这里实现成 public 的接口方法，界面代码写法与 1.20 线一致）。
      */
     @Override
-    protected void slotClicked(Slot slot, int slotId, int mouseButton, ClickType type) {
-    }
-
-    /** 标题与背包名由界面自绘，容器基类不再绘制。 */
-    @Override
-    protected void renderLabels(PoseStack pose, int mouseX, int mouseY) {
-    }
-
-    /**
-     * 关闭界面：<b>不</b>调用 {@code player.closeContainer()}。
-     *
-     * <p>那个方法会把「玩家当前容器」（背包菜单 id 0）的关闭包发给服务端，
-     * 而本界面没有服务端菜单，发这个包既无意义也可能影响其它界面。
-     */
-    @Override
-    public void onClose() {
-        if (minecraft != null) {
-            minecraft.setScreen(null);
-        }
-    }
-
-    /** 由 protected 提升为 public（覆写 Screen 的同签名方法，实现 {@link Draw.Tooltips}）。 */
-    @Override
-    public void renderTooltip(PoseStack pose, ItemStack stack, int mouseX, int mouseY) {
+    public void renderTooltip(MatrixStack pose, net.minecraft.item.ItemStack stack,
+                              int mouseX, int mouseY) {
         super.renderTooltip(pose, stack, mouseX, mouseY);
     }
 
     @Override
-    public void renderComponentTooltip(PoseStack pose, List<Component> lines, Font font,
+    public void renderComponentTooltip(MatrixStack pose,
+                                       java.util.List<net.minecraft.util.text.ITextComponent> lines,
+                                       net.minecraft.client.gui.FontRenderer font,
                                        int mouseX, int mouseY) {
-        super.renderComponentTooltip(pose, lines, mouseX, mouseY, font);
+        // 1.16.5 的 renderToolTip 收的是「视觉序」列表，这里逐行转换
+        java.util.List<net.minecraft.util.IReorderingProcessor> ordered =
+                new java.util.ArrayList<>(lines.size());
+        for (net.minecraft.util.text.ITextComponent line : lines) {
+            ordered.add(line.func_241878_f());
+        }
+        super.renderToolTip(pose, ordered, mouseX, mouseY, font);
+    }
+
+    /** 子类自己整屏自绘背景，这里保持空实现（抽象方法必须实现）。 */
+    @Override
+    protected void drawGuiContainerBackgroundLayer(MatrixStack matrixStack, float partialTicks,
+                                                   int mouseX, int mouseY) {
+    }
+
+    /** 不画容器标题与「物品栏」标签：本界面没有原版槽位。 */
+    @Override
+    protected void drawGuiContainerForegroundLayer(MatrixStack matrixStack, int mouseX, int mouseY) {
+    }
+
+    /**
+     * 空容器没有槽位，点哪里都不该发 {@code handleInventoryMouseClick}。
+     *
+     * <p>原版会在这里处理「点面板外丢弃物品」（{@code slotId == -999}）与快捷栏交换，
+     * 空实现一并吞掉。1.16.5 的入口叫 {@code handleMouseClick}（高版本是 {@code slotClicked}）。
+     */
+    @Override
+    protected void handleMouseClick(Slot slot, int slotId, int mouseButton, ClickType type) {
+    }
+
+    /**
+     * 只做「被通知关闭」：不调 {@code player.closeContainer()}，也不发起 {@code displayGuiScreen}。
+     *
+     * <p>1.16.5 里 {@code displayGuiScreen(newScreen)} 会回调旧屏的本方法，
+     * 在这里再切屏会无限递归。
+     */
+    @Override
+    public void onClose() {
+        // 收尾（落库/草稿/命名/缩放还原）由子类实现
     }
 }

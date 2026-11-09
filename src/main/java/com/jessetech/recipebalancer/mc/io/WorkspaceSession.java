@@ -59,7 +59,8 @@ public final class WorkspaceSession {
         Path path = DIRECTORY.resolve(NAME_FILE);
         try {
             if (Files.isRegularFile(path)) {
-                String raw = Files.readString(path, StandardCharsets.UTF_8).trim();
+                // 1.16.5 线是 Java 8：没有 Files.readString
+                String raw = new String(Files.readAllBytes(path), StandardCharsets.UTF_8).trim();
                 return raw.isEmpty() ? DEFAULT_NAME : ScenarioStore.sanitize(raw);
             }
         } catch (IOException | RuntimeException ignored) {
@@ -71,8 +72,8 @@ public final class WorkspaceSession {
     public static synchronized void saveName(String name) {
         try {
             Files.createDirectories(DIRECTORY);
-            Files.writeString(DIRECTORY.resolve(NAME_FILE), nameOf(name),
-                    StandardCharsets.UTF_8);
+            Files.write(DIRECTORY.resolve(NAME_FILE),
+                    nameOf(name).getBytes(StandardCharsets.UTF_8));
         } catch (IOException | RuntimeException e) {
             RecipeBalancerMod.LOGGER.warn("[RecipeBalancer] 记录当前工作区名失败", e);
         }
@@ -101,7 +102,7 @@ public final class WorkspaceSession {
                 copied++;
             }
             // 标记已迁移：之后在新目录里删掉的工作区不会被再次复制回来
-            Files.writeString(marker, "");
+            Files.write(marker, new byte[0]);
             if (copied > 0) {
                 RecipeBalancerMod.LOGGER.info("[RecipeBalancer] 已迁移 {} 个工作区到 {}",
                         copied, DIRECTORY);

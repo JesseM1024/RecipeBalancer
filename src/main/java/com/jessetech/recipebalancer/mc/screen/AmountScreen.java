@@ -9,11 +9,11 @@ import com.jessetech.recipebalancer.mc.ui.AeStyle;
 import com.jessetech.recipebalancer.mc.ui.Buttons;
 import com.jessetech.recipebalancer.mc.ui.Chat;
 import com.jessetech.recipebalancer.mc.ui.Draw;
-import com.mojang.blaze3d.vertex.PoseStack;
-import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.components.EditBox;
-import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.network.chat.Component;
+import com.mojang.blaze3d.matrix.MatrixStack;
+import net.minecraft.client.gui.widget.button.Button;
+import net.minecraft.client.gui.widget.TextFieldWidget;
+import net.minecraft.client.gui.screen.Screen;
+import net.minecraft.util.text.ITextComponent;
 
 import java.util.List;
 
@@ -38,8 +38,8 @@ public final class AmountScreen extends RbScreen implements JeiPanelScreen {
     private final boolean nonItem;
     private String status = "";
     private RateUnit rateUnit;
-    private EditBox keyBox;
-    private EditBox amountBox;
+    private TextFieldWidget keyBox;
+    private TextFieldWidget amountBox;
     private Button unitButton;
 
     public AmountScreen(Screen parent, String title, String itemKey, double amount,
@@ -78,22 +78,22 @@ public final class AmountScreen extends RbScreen implements JeiPanelScreen {
         panelY = (height - panelH) / 2;
 
         // 图标槽在注册名输入框左侧；真名/注册名放在它们下方
-        keyBox = new EditBox(font, panelX + 30, panelY + 32, panelW - 38, 18,
+        keyBox = new TextFieldWidget(font, panelX + 30, panelY + 32, panelW - 38, 18,
                 Lang.c("物品注册名"));
         // 组件物品（药水等）的 key 是 base64，可能远超 128
-        keyBox.setMaxLength(4096);
-        keyBox.setValue(itemKey);
-        addRenderableWidget(keyBox);
+        keyBox.setMaxStringLength(4096);
+        keyBox.setText(itemKey);
+        addButton(keyBox);
 
         if (amountEditable) {
             int amountWidth = rateMode ? 104 : 112;
-            amountBox = new EditBox(font, panelX + 8, panelY + 90, amountWidth, 18,
+            amountBox = new TextFieldWidget(font, panelX + 8, panelY + 90, amountWidth, 18,
                     Lang.c("用量"));
-            amountBox.setMaxLength(64);
-            amountBox.setValue(TimeExpression.formatEditableNumber(amount));
-            addRenderableWidget(amountBox);
+            amountBox.setMaxStringLength(64);
+            amountBox.setText(TimeExpression.formatEditableNumber(amount));
+            addButton(amountBox);
             if (rateMode) {
-                unitButton = addRenderableWidget(Buttons.builder(
+                unitButton = addButton(Buttons.builder(
                                 Chat.literal(rateLabel()), b -> cycleRateUnit())
                         .bounds(panelX + 116, panelY + 89, 60, 20).build());
             }
@@ -103,35 +103,35 @@ public final class AmountScreen extends RbScreen implements JeiPanelScreen {
             int buttonY = panelY + 114;
             int buttonW = 48;
             int gap = 3;
-            addRenderableWidget(Buttons.builder(Chat.literal("+1"), b -> adjust(1))
+            addButton(Buttons.builder(Chat.literal("+1"), b -> adjust(1))
                     .bounds(panelX + 8, buttonY, buttonW, 20).build());
-            addRenderableWidget(Buttons.builder(Chat.literal("+10"), b -> adjust(10))
+            addButton(Buttons.builder(Chat.literal("+10"), b -> adjust(10))
                     .bounds(panelX + 8 + (buttonW + gap), buttonY, buttonW, 20).build());
-            addRenderableWidget(Buttons.builder(Chat.literal("+100"), b -> adjust(100))
+            addButton(Buttons.builder(Chat.literal("+100"), b -> adjust(100))
                     .bounds(panelX + 8 + 2 * (buttonW + gap), buttonY, buttonW, 20).build());
-            addRenderableWidget(Buttons.builder(Chat.literal("+1000"), b -> adjust(1000))
+            addButton(Buttons.builder(Chat.literal("+1000"), b -> adjust(1000))
                     .bounds(panelX + 8 + 3 * (buttonW + gap), buttonY, buttonW, 20).build());
 
-            addRenderableWidget(Buttons.builder(Chat.literal("-1"), b -> adjust(-1))
+            addButton(Buttons.builder(Chat.literal("-1"), b -> adjust(-1))
                     .bounds(panelX + 8, buttonY + 24, buttonW, 20).build());
-            addRenderableWidget(Buttons.builder(Chat.literal("-10"), b -> adjust(-10))
+            addButton(Buttons.builder(Chat.literal("-10"), b -> adjust(-10))
                     .bounds(panelX + 8 + (buttonW + gap), buttonY + 24, buttonW, 20).build());
-            addRenderableWidget(Buttons.builder(Chat.literal("-100"), b -> adjust(-100))
+            addButton(Buttons.builder(Chat.literal("-100"), b -> adjust(-100))
                     .bounds(panelX + 8 + 2 * (buttonW + gap), buttonY + 24, buttonW, 20).build());
-            addRenderableWidget(Buttons.builder(Chat.literal("-1000"), b -> adjust(-1000))
+            addButton(Buttons.builder(Chat.literal("-1000"), b -> adjust(-1000))
                     .bounds(panelX + 8 + 3 * (buttonW + gap), buttonY + 24, buttonW, 20).build());
         }
 
         // 取消左、确定右
-        addRenderableWidget(Buttons.builder(Lang.c("取消"), b -> cancel())
+        addButton(Buttons.builder(Lang.c("取消"), b -> cancel())
                 .bounds(panelX + 8, panelY + panelH - 26, 100, 20).build());
-        addRenderableWidget(Buttons.builder(Lang.c("确定"), b -> confirm())
+        addButton(Buttons.builder(Lang.c("确定"), b -> confirm())
                 .bounds(panelX + panelW - 108, panelY + panelH - 26, 100, 20).build());
 
         if (amountEditable && amountBox != null) {
-            setInitialFocus(amountBox);
+            setListener(amountBox);
         } else {
-            setInitialFocus(keyBox);
+            setListener(keyBox);
         }
     }
 
@@ -141,14 +141,14 @@ public final class AmountScreen extends RbScreen implements JeiPanelScreen {
         }
         double perTick = amount;
         try {
-            perTick = rateUnit.toPerTick(TimeExpression.evaluate(amountBox.getValue().trim()));
+            perTick = rateUnit.toPerTick(TimeExpression.evaluate(amountBox.getText().trim()));
         } catch (RuntimeException ignored) {
             // 当前输入不合法时只切换单位显示
         }
         rateUnit = rateUnit.next();
         UnitPreferences.setRateUnit(rateUnit);
         amount = rateUnit.fromPerTick(perTick);
-        amountBox.setValue(TimeExpression.formatEditableNumber(amount));
+        amountBox.setText(TimeExpression.formatEditableNumber(amount));
         unitButton.setMessage(Chat.literal(rateLabel()));
     }
 
@@ -163,16 +163,16 @@ public final class AmountScreen extends RbScreen implements JeiPanelScreen {
         double current;
         try {
             // 用量框也支持 + - * / ^ 表达式；± 按钮基于求值结果继续调整
-            current = TimeExpression.evaluate(amountBox.getValue().trim());
+            current = TimeExpression.evaluate(amountBox.getText().trim());
         } catch (RuntimeException e) {
             current = amount;
         }
         current = Math.max(0.0, current + delta);
-        amountBox.setValue(TimeExpression.formatEditableNumber(current));
+        amountBox.setText(TimeExpression.formatEditableNumber(current));
     }
 
     private void confirm() {
-        String key = ItemKeyMapper.normalize(keyBox.getValue());
+        String key = ItemKeyMapper.normalize(keyBox.getText());
         if (key.isEmpty()) {
             status = Lang.t("物品注册名不能为空");
             return;
@@ -190,7 +190,7 @@ public final class AmountScreen extends RbScreen implements JeiPanelScreen {
         double value = 1.0;
         if (amountEditable) {
             try {
-                value = TimeExpression.evaluate(amountBox.getValue().trim());
+                value = TimeExpression.evaluate(amountBox.getText().trim());
             } catch (RuntimeException e) {
                 status = Lang.t("表达式无效: %s", Lang.t(String.valueOf(e.getMessage())));
                 return;
@@ -205,15 +205,15 @@ public final class AmountScreen extends RbScreen implements JeiPanelScreen {
             }
         }
         callback.accept(key, value);
-        minecraft.setScreen(parent);
+        minecraft.displayGuiScreen(parent);
     }
 
     private void cancel() {
-        minecraft.setScreen(parent);
+        minecraft.displayGuiScreen(parent);
     }
 
     @Override
-    public void renderBackground(PoseStack pose) {
+    public void renderBackground(MatrixStack pose) {
         Draw graphics = new Draw(pose, this);
         graphics.fill(0, 0, width, height, 0xB0101010);
         AeStyle.panel(graphics, panelX, panelY, panelW, panelH);
@@ -222,7 +222,7 @@ public final class AmountScreen extends RbScreen implements JeiPanelScreen {
     }
 
     @Override
-    public void render(PoseStack pose, int mouseX, int mouseY, float partialTick) {
+    public void render(MatrixStack pose, int mouseX, int mouseY, float partialTick) {
         Draw graphics = new Draw(pose, this);
         super.render(pose, mouseX, mouseY, partialTick);
 
@@ -230,13 +230,13 @@ public final class AmountScreen extends RbScreen implements JeiPanelScreen {
                 panelX + 8, panelY + 22, AeStyle.MUTED, false);
         AeStyle.slot(graphics, panelX + 8, panelY + 32);
 
-        String previewKey = ItemKeyMapper.normalize(keyBox.getValue());
+        String previewKey = ItemKeyMapper.normalize(keyBox.getText());
         if (!previewKey.isEmpty()) {
             ItemKeyMapper.renderIcon(graphics, font, previewKey, panelX + 8, panelY + 32, null);
             String name = ItemKeyMapper.displayName(previewKey);
-            graphics.drawString(font, font.plainSubstrByWidth(name, panelW - 16),
+            graphics.drawString(font, font.trimStringToWidth(name, panelW - 16),
                     panelX + 8, panelY + 54, AeStyle.TEXT, false);
-            graphics.drawString(font, font.plainSubstrByWidth(previewKey, panelW - 16),
+            graphics.drawString(font, font.trimStringToWidth(previewKey, panelW - 16),
                     panelX + 8, panelY + 65, AeStyle.MUTED, false);
         }
 
@@ -268,11 +268,12 @@ public final class AmountScreen extends RbScreen implements JeiPanelScreen {
         return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
+    /**
+     * 1.16.5 的 {@code Minecraft#displayGuiScreen(newScreen)} 会回调<b>旧屏</b>的
+     * {@code onClose()}，所以这里只能做收尾、绝不能再切屏，否则会无限递归。
+     */
     @Override
     public void onClose() {
-        if (minecraft != null) {
-            minecraft.setScreen(parent);
-        }
     }
 
     @Override

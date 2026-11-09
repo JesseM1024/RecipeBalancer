@@ -1,5 +1,6 @@
 package com.jessetech.recipebalancer.mc.screen;
 
+import net.minecraft.util.text.StringTextComponent;
 import com.jessetech.recipebalancer.core.util.J8;
 
 import com.jessetech.recipebalancer.core.model.Recipe;
@@ -11,12 +12,12 @@ import com.jessetech.recipebalancer.mc.ui.Buttons;
 import com.jessetech.recipebalancer.mc.ui.Chat;
 import com.jessetech.recipebalancer.mc.ui.Draw;
 import com.jessetech.recipebalancer.mc.ui.graph.SolveGraphView;
-import com.mojang.blaze3d.vertex.PoseStack;
-import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.Style;
-import net.minecraft.util.FormattedCharSequence;
+import com.mojang.blaze3d.matrix.MatrixStack;
+import net.minecraft.client.gui.widget.button.Button;
+import net.minecraft.client.gui.screen.Screen;
+import net.minecraft.util.text.ITextComponent;
+import net.minecraft.util.text.Style;
+import net.minecraft.util.IReorderingProcessor;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -36,7 +37,7 @@ public final class SolveScreen extends RbScreen implements JeiPanelScreen {
     private final List<Recipe> recipes;
     private final Map<String, Double> targets;
     private final boolean inventoryEnabled;
-    private List<FormattedCharSequence> lines = J8.list();
+    private List<IReorderingProcessor> lines = J8.list();
     private SolveGraphView graph;
     private boolean graphMode;
     private boolean graphDragging;
@@ -120,15 +121,15 @@ public final class SolveScreen extends RbScreen implements JeiPanelScreen {
         graph = success && result != null
                 ? new SolveGraphView(result, recipes, targets, inventoryEnabled) : null;
 
-        addRenderableWidget(Buttons.builder(Lang.c("返回编码"), b -> minecraft.setScreen(parent))
+        addButton(Buttons.builder(Lang.c("返回编码"), b -> minecraft.displayGuiScreen(parent))
                 .bounds(panelX + 8, panelY + panelH - 26, 100, 20).build());
-        namesButton = addRenderableWidget(Buttons.builder(namesLabel(), b -> toggleNames())
+        namesButton = addButton(Buttons.builder(namesLabel(), b -> toggleNames())
                 .bounds(panelX + 216, panelY + panelH - 26, 110, 20).build());
         namesButton.visible = !graphMode;
         if (graph != null) {
-            toggleButton = addRenderableWidget(Buttons.builder(toggleLabel(), b -> toggleView())
+            toggleButton = addButton(Buttons.builder(toggleLabel(), b -> toggleView())
                     .bounds(panelX + 112, panelY + panelH - 26, 100, 20).build());
-            layoutButton = addRenderableWidget(Buttons.builder(layoutLabel(), b -> toggleLayout())
+            layoutButton = addButton(Buttons.builder(layoutLabel(), b -> toggleLayout())
                     .bounds(panelX + 216, panelY + panelH - 26, 110, 20).build());
             layoutButton.visible = graphMode;
         }
@@ -137,12 +138,12 @@ public final class SolveScreen extends RbScreen implements JeiPanelScreen {
     /** 按当前名称口径把报告拆成可绘制的行；切换名称时整页重排。 */
     private void rebuildLines() {
         int wrapWidth = Math.max(80, panelW - 20);
-        List<FormattedCharSequence> built = new ArrayList<>();
+        List<IReorderingProcessor> built = new ArrayList<>();
         for (String raw : currentReport().split("\n", -1)) {
             if (raw.isEmpty()) {
-                built.add(FormattedCharSequence.EMPTY);
+                built.add(StringTextComponent.EMPTY.func_241878_f());
             } else {
-                built.addAll(font.split(styled(raw), wrapWidth));
+                built.addAll(font.trimStringToWidth(styled(raw), wrapWidth));
             }
         }
         lines = built;
@@ -168,7 +169,7 @@ public final class SolveScreen extends RbScreen implements JeiPanelScreen {
      */
     private static String toDisplayNames(String text) {
         Matcher matcher = REGISTRY_ID.matcher(text);
-        StringBuilder output = new StringBuilder(text.length() + 64);
+        StringBuffer output = new StringBuffer(text.length() + 64);
         while (matcher.find()) {
             String id = matcher.group();
             String name = ItemKeyMapper.exists(id) ? ItemKeyMapper.reportName(id) : id;
@@ -186,16 +187,16 @@ public final class SolveScreen extends RbScreen implements JeiPanelScreen {
         rebuildLines();
     }
 
-    private Component namesLabel() {
+    private ITextComponent namesLabel() {
         return Lang.c(showRegistryNames ? "名称: 注册名" : "名称: 显示名");
     }
 
     /** 段落标题按 {@link #titleColor(String)} 上色，其余行保持默认正文色。 */
-    private Component styled(String raw) {
+    private ITextComponent styled(String raw) {
         int color = titleColor(raw);
         return color == 0
                 ? Chat.literal(raw)
-                : Chat.literal(raw).withStyle(Style.EMPTY.withColor(color));
+                : Chat.literal(raw).mergeStyle(Chat.styleRgb(color));
     }
 
     /**
@@ -225,12 +226,12 @@ public final class SolveScreen extends RbScreen implements JeiPanelScreen {
         return titleColors.getOrDefault(title, 0);
     }
 
-    private Component toggleLabel() {
+    private ITextComponent toggleLabel() {
         return Lang.c(graphMode ? "文本输出" : "流程图");
     }
 
     /** 布局按钮：显示当前模式，点一下在分层 / 弹性之间切换。 */
-    private Component layoutLabel() {
+    private ITextComponent layoutLabel() {
         boolean force = graph != null
                 && graph.layoutMode() == SolveGraphView.LayoutMode.FORCE;
         return Lang.c(force ? "布局: 弹性" : "布局: 分层");
@@ -266,7 +267,7 @@ public final class SolveScreen extends RbScreen implements JeiPanelScreen {
     }
 
     @Override
-    public void renderBackground(PoseStack pose) {
+    public void renderBackground(MatrixStack pose) {
         Draw graphics = new Draw(pose, this);
         graphics.fill(0, 0, width, height, 0xD0101010);
         AeStyle.panel(graphics, panelX, panelY, panelW, panelH);
@@ -277,7 +278,7 @@ public final class SolveScreen extends RbScreen implements JeiPanelScreen {
     }
 
     @Override
-    public void render(PoseStack pose, int mouseX, int mouseY, float partialTick) {
+    public void render(MatrixStack pose, int mouseX, int mouseY, float partialTick) {
         Draw graphics = new Draw(pose, this);
         super.render(pose, mouseX, mouseY, partialTick);
 
@@ -288,14 +289,14 @@ public final class SolveScreen extends RbScreen implements JeiPanelScreen {
         }
         graphNodeDragging = false;
 
-        int lineHeight = font.lineHeight + 1;
+        int lineHeight = font.FONT_HEIGHT + 1;
         double maxScroll = Math.max(0, lines.size() * lineHeight - textH);
         scroll = Math.max(0, Math.min(scroll, maxScroll));
 
         graphics.enableScissor(panelX + 4, textY, panelX + panelW - 4, textY + textH);
         int y = textY + 2 - (int) scroll;
-        for (FormattedCharSequence line : lines) {
-            if (y + font.lineHeight >= textY && y <= textY + textH) {
+        for (IReorderingProcessor line : lines) {
+            if (y + font.FONT_HEIGHT >= textY && y <= textY + textH) {
                 graphics.drawString(font, line, panelX + 8, y, AeStyle.TEXT, false);
             }
             y += lineHeight;
@@ -383,15 +384,28 @@ public final class SolveScreen extends RbScreen implements JeiPanelScreen {
             }
             return true;
         }
-        scroll -= delta * (font.lineHeight + 1) * 3;
+        scroll -= delta * (font.FONT_HEIGHT + 1) * 3;
         return true;
     }
 
+    /**
+     * 1.16.5 的 {@code Minecraft#displayGuiScreen(newScreen)} 会回调<b>旧屏</b>的
+     * {@code onClose()}，所以这里只能做收尾、绝不能再切屏，否则会无限递归。
+     */
     @Override
     public void onClose() {
-        if (minecraft != null) {
-            minecraft.setScreen(parent);
+    }
+
+    /** ESC 返回上一级（按钮里的 displayGuiScreen 同理，都不会递归）。 */
+    @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (keyCode == 256 && modifiers == 0) {
+            if (minecraft != null) {
+                minecraft.displayGuiScreen(parent);
+            }
+            return true;
         }
+        return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
     @Override

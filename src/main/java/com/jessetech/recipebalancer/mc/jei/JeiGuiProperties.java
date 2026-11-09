@@ -4,7 +4,7 @@ import com.jessetech.recipebalancer.RecipeBalancerMod;
 import com.jessetech.recipebalancer.mc.screen.JeiPanelScreen;
 import mezz.jei.api.gui.handlers.IGuiProperties;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.screen.Screen;
 
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -69,13 +69,13 @@ public final class JeiGuiProperties {
             @Override
             public int getScreenWidth() {
                 return screen.width > 0 ? screen.width
-                        : Minecraft.getInstance().getWindow().getGuiScaledWidth();
+                        : Minecraft.getInstance().getMainWindow().getScaledWidth();
             }
 
             @Override
             public int getScreenHeight() {
                 return screen.height > 0 ? screen.height
-                        : Minecraft.getInstance().getWindow().getGuiScaledHeight();
+                        : Minecraft.getInstance().getMainWindow().getScaledHeight();
             }
         };
     }

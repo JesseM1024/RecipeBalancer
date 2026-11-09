@@ -3,31 +3,19 @@ package com.jessetech.recipebalancer.mc.jei;
 import com.jessetech.recipebalancer.core.model.RecipePattern;
 import com.jessetech.recipebalancer.mc.itemmap.ItemKeyMapper;
 import com.jessetech.recipebalancer.mc.itemmap.ProductIndex;
-import mezz.jei.api.gui.IRecipeLayoutDrawable;
-import mezz.jei.api.gui.ingredient.IGuiIngredient;
-import mezz.jei.api.gui.ingredient.IGuiIngredientGroup;
-import mezz.jei.api.ingredients.IIngredientType;
-import mezz.jei.api.ingredients.ITypedIngredient;
 import mezz.jei.api.recipe.category.IRecipeCategory;
 import mezz.jei.api.runtime.IJeiRuntime;
-import net.minecraft.world.item.ItemStack;
+import net.minecraft.item.ItemStack;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
-import java.util.Optional;
 
 /**
- * 把 JEI 的配方转成我们的编码样板（输入 / 输出 / 设备）。
+ * 把 JEI 的配方转成我们的编码样板（输入 / 输出 / 设备），1.16.5 / JEI 7.x 版。
  *
- * <p>两种入口：
- * <ul>
- *   <li>{@link #buildFromSlots}：从统一的槽位视图导入（9.x 叠加按钮 / 10.x 官方按钮），
- *       带矩形时保留合成配方的九宫格形状；</li>
- *   <li>{@link #build}：9.x 的备用路径，按配料分组顺序导入（分组 API 在 9.x 可用，
- *       10.x 已被废弃/裁掉，只作为兜底）。</li>
- * </ul>
+ * <p>7.x 的槽位来源是 {@code RecipeLayout} 的分组（{@link JeiSlots#fromLayout}）：
+ * 合成配方带矩形时按九宫格还原形状，机器配方或取不到矩形时按顺序紧排。
  */
 public final class JeiPatternImporter {
 
@@ -37,12 +25,7 @@ public final class JeiPatternImporter {
     private JeiPatternImporter() {
     }
 
-    /**
-     * 统一入口：槽位视图 → 编码样板。
-     *
-     * <p>合成配方按槽位矩形还原九宫格形状（与 1.20.1 行为一致）；机器配方或取不到矩形时
-     * 按顺序紧排，保证内容不丢。
-     */
+    /** 统一入口：槽位视图 → 编码样板。 */
     public static RecipePattern buildFromSlots(IRecipeCategory<?> category,
                                                List<JeiSlots.Slot> slots) {
         RecipePattern pattern = new RecipePattern();
@@ -53,10 +36,10 @@ public final class JeiPatternImporter {
         List<JeiSlots.Slot> inputs = new ArrayList<>();
         List<JeiSlots.Slot> outputs = new ArrayList<>();
         for (JeiSlots.Slot slot : slots) {
-            if (slot.role() == mezz.jei.api.recipe.RecipeIngredientRole.OUTPUT) {
-                outputs.add(slot);
-            } else if (slot.role() == mezz.jei.api.recipe.RecipeIngredientRole.INPUT) {
+            if (slot.input()) {
                 inputs.add(slot);
+            } else {
+                outputs.add(slot);
             }
         }
 
@@ -106,10 +89,16 @@ public final class JeiPatternImporter {
         return pattern;
     }
 
+    /** 一份 JEI 配方布局 → 编码样板（7.x 的布局对象是 {@code RecipeLayout}）。 */
+    public static RecipePattern build(IRecipeCategory<?> category, Object layout) {
+        List<JeiSlots.Slot> slots = JeiSlots.fromLayout(layout);
+        return buildFromSlots(category, slots);
+    }
+
     /** 只有合成配方保留空格（纯视觉），机器配方等一律按顺序紧排。 */
     private static boolean isCraftingRecipe(IRecipeCategory<?> category) {
         try {
-            net.minecraft.resources.ResourceLocation uid = category.getUid();
+            net.minecraft.util.ResourceLocation uid = category.getUid();
             return uid != null && uid.getPath().contains("crafting");
         } catch (RuntimeException | LinkageError e) {
             return false;
@@ -120,11 +109,14 @@ public final class JeiPatternImporter {
      * 该槽位有多候选（如不同木板）时，优先选配方库能自产的那种，且取配方序号最小的；
      * 没有能自产的，退回 JEI 当前展示的那个（取第一个候选）。
      */
-    public static JeiIngredientMapper.Mapped pick(List<ITypedIngredient<?>> candidates) {
+    public static JeiIngredientMapper.Mapped pick(List<Object> candidates) {
+        if (candidates == null || candidates.isEmpty()) {
+            return null;
+        }
         ProductIndex index = ProductIndex.current();
         JeiIngredientMapper.Mapped best = null;
         int bestRecipe = Integer.MAX_VALUE;
-        for (ITypedIngredient<?> candidate : candidates) {
+        for (Object candidate : candidates) {
             JeiIngredientMapper.Mapped mapped = JeiIngredientMapper.of(candidate);
             if (mapped == null) {
                 continue;
@@ -138,86 +130,11 @@ public final class JeiPatternImporter {
         if (best != null) {
             return best;
         }
-        for (ITypedIngredient<?> candidate : candidates) {
+        for (Object candidate : candidates) {
             JeiIngredientMapper.Mapped mapped = JeiIngredientMapper.of(candidate);
             if (mapped != null) {
                 return mapped;
             }
-        }
-        return null;
-    }
-
-    /**
-     * 入口：一份 JEI 配方布局 → 编码样板。
-     *
-     * <p>先尝试 10.x 的 {@code getRecipeSlotsView()}（反射调用，9.x 没有这个方法），
-     * 这样能保留九宫格形状；取不到再退回 9.x 的配料分组顺序导入。
-     *
-     * <p>9.x 的 {@code IRecipeLayoutDrawable} 没有 {@code getRecipeCategory()}，
-     * 所以类别由调用方一起传进来（催化剂查询要用）。
-     */
-    public static RecipePattern build(IRecipeCategory<?> category, IRecipeLayoutDrawable layout) {
-        RecipePattern pattern = new RecipePattern();
-        if (layout == null) {
-            return pattern;
-        }
-        RecipePattern viaSlots = buildViaSlotsView(category, layout);
-        if (viaSlots != null) {
-            return viaSlots;
-        }
-        IJeiRuntime runtime = JeiIngredientMapper.runtime();
-        if (runtime == null) {
-            return pattern;
-        }
-        int inputIndex = 0;
-        int outputIndex = 0;
-        try {
-            for (IIngredientType<?> type : runtime.getIngredientManager()
-                    .getRegisteredIngredientTypes()) {
-                IGuiIngredientGroup<?> group = layout.getIngredientsGroup(type);
-                if (group == null) {
-                    continue;
-                }
-                for (Map.Entry<Integer, ? extends IGuiIngredient<?>> entry
-                        : group.getGuiIngredients().entrySet()) {
-                    IGuiIngredient<?> slot = entry.getValue();
-                    if (slot == null || slot.getAllIngredients().isEmpty()) {
-                        continue;
-                    }
-                    JeiIngredientMapper.Mapped mapped = pick(slot);
-                    if (mapped == null) {
-                        continue;
-                    }
-                    if (slot.isInput()) {
-                        if (inputIndex < RecipePattern.MAX_INPUTS) {
-                            pattern.putInput(inputIndex++, mapped.key(), mapped.amount());
-                        }
-                    } else if (outputIndex < RecipePattern.MAX_OUTPUTS) {
-                        pattern.putOutput(outputIndex++, mapped.key(), mapped.amount());
-                    }
-                }
-            }
-        } catch (RuntimeException | LinkageError e) {
-            // 某些自定义类别的分组读不出来时保留已解析的部分
-        }
-        applyEquipment(category, pattern);
-        return pattern;
-    }
-
-    /** 10.x 才有 {@code getRecipeSlotsView()}：反射取槽位视图，取不到返回 null 走旧路径。 */
-    private static RecipePattern buildViaSlotsView(IRecipeCategory<?> category, Object layout) {
-        try {
-            java.lang.reflect.Method method = layout.getClass().getMethod("getRecipeSlotsView");
-            method.setAccessible(true);
-            Object view = method.invoke(layout);
-            if (view instanceof mezz.jei.api.gui.ingredient.IRecipeSlotsView slotsView) {
-                List<JeiSlots.Slot> slots = JeiSlots.fromView(slotsView);
-                if (!slots.isEmpty()) {
-                    return buildFromSlots(category, slots);
-                }
-            }
-        } catch (ReflectiveOperationException | RuntimeException | LinkageError ignored) {
-            // 9.x 没有这个方法，或实现类换了名字：交给下面的分组路径
         }
         return null;
     }
@@ -229,85 +146,18 @@ public final class JeiPatternImporter {
             return;
         }
         try {
-            for (Object catalyst : runtime.getRecipeManager().getRecipeCatalysts(category, true)) {
-                if (catalyst instanceof ItemStack stack && !stack.isEmpty()) {
+            for (Object catalyst : runtime.getRecipeManager().getRecipeCatalysts(category)) {
+                if (catalyst instanceof ItemStack) {
+                    ItemStack stack = (ItemStack) catalyst;
+                    if (stack.isEmpty()) {
+                        continue;
+                    }
                     pattern.setEquipmentKey(ItemKeyMapper.of(stack));
                     return;
                 }
             }
         } catch (RuntimeException | LinkageError ignored) {
-            // 没有催化剂的类别直接跳过
+            // 催化剂查不到就不填设备，编码内容本身仍然正确
         }
-    }
-
-    /**
-     * 该槽位有多候选（如不同木板）时，优先选配方库能自产的那种，且取配方序号最小的；
-     * 没有能自产的，退回 JEI 当前展示的那个。
-     */
-    public static JeiIngredientMapper.Mapped pick(IGuiIngredient<?> slot) {
-        ProductIndex index = ProductIndex.current();
-        JeiIngredientMapper.Mapped best = null;
-        int bestRecipe = Integer.MAX_VALUE;
-        for (Object candidate : slot.getAllIngredients()) {
-            JeiIngredientMapper.Mapped mapped = map(candidate, slot);
-            if (mapped == null) {
-                continue;
-            }
-            int at = index.indexOf(mapped.key());
-            if (at >= 0 && at < bestRecipe) {
-                bestRecipe = at;
-                best = mapped;
-            }
-        }
-        return best != null ? best : firstIngredient(slot);
-    }
-
-    public static JeiIngredientMapper.Mapped firstIngredient(IGuiIngredient<?> slot) {
-        Object displayed = slot.getDisplayedIngredient();
-        if (displayed != null) {
-            JeiIngredientMapper.Mapped mapped = map(displayed, slot);
-            if (mapped != null) {
-                return mapped;
-            }
-        }
-        for (Object candidate : slot.getAllIngredients()) {
-            JeiIngredientMapper.Mapped mapped = map(candidate, slot);
-            if (mapped != null) {
-                return mapped;
-            }
-        }
-        return null;
-    }
-
-    /** 9.x 的分组给的是裸配料，这里按槽位类型重新包成 {@link ITypedIngredient} 再解析。 */
-    private static JeiIngredientMapper.Mapped map(Object candidate, IGuiIngredient<?> slot) {
-        if (candidate == null) {
-            return null;
-        }
-        if (candidate instanceof ItemStack stack) {
-            return JeiIngredientMapper.ofTypedItem(stack);
-        }
-        IJeiRuntime runtime = JeiIngredientMapper.runtime();
-        if (runtime == null) {
-            return null;
-        }
-        try {
-            Optional<? extends ITypedIngredient<?>> typed = wrap(runtime, slot, candidate);
-            return typed.map(JeiIngredientMapper::of).orElse(null);
-        } catch (RuntimeException | LinkageError e) {
-            return null;
-        }
-    }
-
-    @SuppressWarnings({"rawtypes", "unchecked"})
-    private static Optional<ITypedIngredient<?>> wrap(IJeiRuntime runtime,
-                                                     IGuiIngredient<?> slot,
-                                                     Object candidate) {
-        IIngredientType rawType = slot.getIngredientType();
-        if (rawType == null) {
-            return Optional.empty();
-        }
-        ITypedIngredient<?> typed = runtime.createTypedIngredient(rawType, candidate);
-        return Optional.ofNullable(typed);
     }
 }

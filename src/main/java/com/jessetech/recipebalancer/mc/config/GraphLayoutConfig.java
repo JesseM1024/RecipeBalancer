@@ -77,9 +77,68 @@ public final class GraphLayoutConfig {
      * @param zoomMin        缩放下限
      * @param zoomMax        缩放上限
      */
-    public record Settings(double nodeGap, double edgeLength, double forceIdeal,
-                           double minEdgeLength, double edgeSaturation, double edgeOpacity,
-                           double dimOpacity, double zoomMin, double zoomMax) {
+    /** 流程图配置快照（1.16.5 线是 Java 8，不能写 record）。 */
+    public static final class Settings {
+
+        private final double nodeGap;
+        private final double edgeLength;
+        private final double forceIdeal;
+        private final double minEdgeLength;
+        private final double edgeSaturation;
+        private final double edgeOpacity;
+        private final double dimOpacity;
+        private final double zoomMin;
+        private final double zoomMax;
+
+        public Settings(double nodeGap, double edgeLength, double forceIdeal,
+                        double minEdgeLength, double edgeSaturation, double edgeOpacity,
+                        double dimOpacity, double zoomMin, double zoomMax) {
+            this.nodeGap = nodeGap;
+            this.edgeLength = edgeLength;
+            this.forceIdeal = forceIdeal;
+            this.minEdgeLength = minEdgeLength;
+            this.edgeSaturation = edgeSaturation;
+            this.edgeOpacity = edgeOpacity;
+            this.dimOpacity = dimOpacity;
+            this.zoomMin = zoomMin;
+            this.zoomMax = zoomMax;
+        }
+
+        public double nodeGap() {
+            return nodeGap;
+        }
+
+        public double edgeLength() {
+            return edgeLength;
+        }
+
+        public double forceIdeal() {
+            return forceIdeal;
+        }
+
+        public double minEdgeLength() {
+            return minEdgeLength;
+        }
+
+        public double edgeSaturation() {
+            return edgeSaturation;
+        }
+
+        public double edgeOpacity() {
+            return edgeOpacity;
+        }
+
+        public double dimOpacity() {
+            return dimOpacity;
+        }
+
+        public double zoomMin() {
+            return zoomMin;
+        }
+
+        public double zoomMax() {
+            return zoomMax;
+        }
     }
 
     /** 当前配置快照（每帧取一次，配置界面保存后立即反映）。 */

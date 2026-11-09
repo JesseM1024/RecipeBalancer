@@ -13,6 +13,11 @@ public final class JeiRuntimeHolder {
     private JeiRuntimeHolder() {
     }
 
+    /** runtime 卸载（JEI 重载/退出世界）时清空，避免持有失效对象。 */
+    public static void clear() {
+        set(null);
+    }
+
     public static void set(Object value) {
         runtime = value;
     }

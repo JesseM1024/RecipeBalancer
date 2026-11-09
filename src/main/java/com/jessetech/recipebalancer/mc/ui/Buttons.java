@@ -1,13 +1,13 @@
 package com.jessetech.recipebalancer.mc.ui;
 
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.blaze3d.matrix.MatrixStack;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiComponent;
-import net.minecraft.client.gui.components.AbstractWidget;
-import net.minecraft.client.gui.components.Button;
-import net.minecraft.network.chat.Component;
-import net.minecraft.util.Mth;
+import net.minecraft.client.gui.AbstractGui;
+import net.minecraft.client.gui.widget.Widget;
+import net.minecraft.client.gui.widget.button.Button;
+import net.minecraft.util.text.ITextComponent;
+import net.minecraft.util.math.MathHelper;
 
 /**
  * 按钮工厂。
@@ -27,7 +27,7 @@ public final class Buttons {
     /** widgets.png 里按钮行的源尺寸：200×20。 */
     private static final int BUTTON_SRC_W = 200;
     private static final int BUTTON_SRC_H = 20;
-    /** 贴图整张是 256×256（GuiComponent.blit 的默认分母）。 */
+    /** 贴图整张是 256×256（AbstractGui.blit 的默认分母）。 */
     private static final int TEX_SIZE = 256;
     /** 九宫格四角取 4px：够包住原版的圆角与 1px 边框，又不会把渐变挤变形。 */
     private static final int CORNER = 4;
@@ -35,7 +35,7 @@ public final class Buttons {
     private Buttons() {
     }
 
-    public static Builder builder(Component message, Button.OnPress onPress) {
+    public static Builder builder(ITextComponent message, Button.IPressable onPress) {
         return new Builder(message, onPress);
     }
 
@@ -44,9 +44,9 @@ public final class Buttons {
      *
      * @param v 按钮行的起始 v（46 + 状态×20，与 {@code AbstractWidget#getYImage} 一致）
      */
-    public static void drawButtonBackground(PoseStack pose, int x, int y, int width, int height, int v) {
-        RenderSystem.setShaderTexture(0, AbstractWidget.WIDGETS_LOCATION);
-        RenderSystem.setShaderColor(1.0f, 1.0f, 1.0f, 1.0f);
+    public static void drawButtonBackground(MatrixStack pose, int x, int y, int width, int height, int v) {
+        Minecraft.getInstance().getTextureManager().bindTexture(Widget.WIDGETS_LOCATION);
+        RenderSystem.color4f(1.0f, 1.0f, 1.0f, 1.0f);
         int corner = Math.min(CORNER, Math.min(width, height) / 2);
         int midW = width - corner * 2;
         int midH = height - corner * 2;
@@ -68,21 +68,21 @@ public final class Buttons {
         blit(pose, x + corner, y + corner, u0 + corner, v0 + corner, midW, midH);
     }
 
-    private static void blit(PoseStack pose, int x, int y, int u, int v, int width, int height) {
-        GuiComponent.blit(pose, x, y, 0, u, v, width, height, TEX_SIZE, TEX_SIZE);
+    private static void blit(MatrixStack pose, int x, int y, int u, int v, int width, int height) {
+        AbstractGui.blit(pose, x, y, 0, u, v, width, height, TEX_SIZE, TEX_SIZE);
     }
 
     /** 与 {@code Button.Builder} 同名同形的极简建造器。 */
     public static final class Builder {
 
-        private final Component message;
-        private final Button.OnPress onPress;
+        private final ITextComponent message;
+        private final Button.IPressable onPress;
         private int x;
         private int y;
         private int width = 150;
         private int height = 20;
 
-        private Builder(Component message, Button.OnPress onPress) {
+        private Builder(ITextComponent message, Button.IPressable onPress) {
             this.message = message;
             this.onPress = onPress;
         }
@@ -107,19 +107,19 @@ public final class Buttons {
      */
     private static final class TexturedButton extends Button {
 
-        private TexturedButton(int x, int y, int width, int height, Component message,
-                               OnPress onPress) {
+        private TexturedButton(int x, int y, int width, int height, ITextComponent message,
+                               IPressable onPress) {
             super(x, y, width, height, message, onPress);
         }
 
         @Override
-        public void renderButton(PoseStack pose, int mouseX, int mouseY, float partialTick) {
+        public void renderWidget(MatrixStack pose, int mouseX, int mouseY, float partialTick) {
             drawButtonBackground(pose, x, y, width, height,
-                    46 + getYImage(isHoveredOrFocused()) * BUTTON_SRC_H);
-            GuiComponent.drawCenteredString(pose, Minecraft.getInstance().font, getMessage(),
+                    46 + getYImage(isHovered()) * BUTTON_SRC_H);
+            AbstractGui.drawCenteredString(pose, Minecraft.getInstance().fontRenderer, getMessage(),
                     x + width / 2, y + (height - 8) / 2,
-                    getFGColor() | Mth.ceil(alpha * 255.0f) << 24);
-            if (isHoveredOrFocused()) {
+                    getFGColor() | MathHelper.ceil(alpha * 255.0f) << 24);
+            if (isHovered()) {
                 renderToolTip(pose, mouseX, mouseY);
             }
         }

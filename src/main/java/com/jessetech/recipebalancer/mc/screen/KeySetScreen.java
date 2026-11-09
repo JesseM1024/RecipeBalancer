@@ -12,13 +12,13 @@ import com.jessetech.recipebalancer.mc.ui.AeStyle;
 import com.jessetech.recipebalancer.mc.ui.Buttons;
 import com.jessetech.recipebalancer.mc.ui.Chat;
 import com.jessetech.recipebalancer.mc.ui.Draw;
-import com.mojang.blaze3d.vertex.PoseStack;
-import net.minecraft.ChatFormatting;
-import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.network.chat.Component;
-import net.minecraft.world.entity.player.Inventory;
-import net.minecraft.world.item.ItemStack;
+import com.mojang.blaze3d.matrix.MatrixStack;
+import net.minecraft.util.text.TextFormatting;
+import net.minecraft.client.gui.widget.button.Button;
+import net.minecraft.client.gui.screen.Screen;
+import net.minecraft.util.text.ITextComponent;
+import net.minecraft.entity.player.PlayerInventory;
+import net.minecraft.item.ItemStack;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -91,11 +91,11 @@ public final class KeySetScreen extends RbScreen implements JeiPanelScreen {
 
         // 半宽：左边清空（按两下确认），右边读 JEI 书签
         int halfW = (PANEL_W - 16 - 4) / 2;
-        addRenderableWidget(Buttons.builder(Lang.c("清空列表"), b -> clearWithConfirm())
+        addButton(Buttons.builder(Lang.c("清空列表"), b -> clearWithConfirm())
                 .bounds(panelX + 8, panelY + 200, halfW, 20).build());
-        addRenderableWidget(Buttons.builder(Lang.c("读取书签"), b -> addBookmarks())
+        addButton(Buttons.builder(Lang.c("读取书签"), b -> addBookmarks())
                 .bounds(panelX + 8 + halfW + 4, panelY + 200, halfW, 20).build());
-        addRenderableWidget(Buttons.builder(Lang.c("返回"), b -> minecraft.setScreen(parent))
+        addButton(Buttons.builder(Lang.c("返回"), b -> minecraft.displayGuiScreen(parent))
                 .bounds(panelX + 8, panelY + 224, PANEL_W - 16, 20).build());
         JeiScreenSupport.notifyGuiInit(this);
     }
@@ -181,7 +181,7 @@ public final class KeySetScreen extends RbScreen implements JeiPanelScreen {
     /** 点已有格：改这一格的物质（自定义输入）。 */
     private void editAt(int slot) {
         String current = entries.get(slot);
-        minecraft.setScreen(new AmountScreen(this, title, current, 1.0, false,
+        minecraft.displayGuiScreen(new AmountScreen(this, title, current, 1.0, false,
                 (newKey, ignored) -> {
                     String resolved = resolveUnique(newKey);
                     if (resolved == null) {
@@ -205,7 +205,7 @@ public final class KeySetScreen extends RbScreen implements JeiPanelScreen {
             status = Lang.t("最多 %s 个", MAX_ENTRIES);
             return;
         }
-        minecraft.setScreen(new AmountScreen(this, title, "", 1.0, false,
+        minecraft.displayGuiScreen(new AmountScreen(this, title, "", 1.0, false,
                 (newKey, ignored) -> {
                     resolveAndAdd(newKey);
                 }));
@@ -250,7 +250,7 @@ public final class KeySetScreen extends RbScreen implements JeiPanelScreen {
         if (minecraft == null || minecraft.player == null) {
             return;
         }
-        ItemStack stack = minecraft.player.getInventory().getItem(index);
+        ItemStack stack = minecraft.player.inventory.getStackInSlot(index);
         if (!stack.isEmpty()) {
             addKey(ItemKeyMapper.of(stack));
         }
@@ -311,21 +311,21 @@ public final class KeySetScreen extends RbScreen implements JeiPanelScreen {
     }
 
     @Override
-    public void renderBackground(PoseStack pose) {
+    public void renderBackground(MatrixStack pose) {
         Draw graphics = new Draw(pose, this);
         graphics.fill(0, 0, width, height, 0xB0101010);
         AeStyle.panel(graphics, panelX, panelY, PANEL_W, PANEL_H);
         AeStyle.header(graphics, panelX, panelY, PANEL_W, 20);
         graphics.drawString(font, Lang.t(title), panelX + 8, panelY + 6, AeStyle.TEXT, false);
         String count = entries.size() + "/" + MAX_ENTRIES;
-        graphics.drawString(font, count, panelX + PANEL_W - 8 - font.width(count),
+        graphics.drawString(font, count, panelX + PANEL_W - 8 - font.getStringWidth(count),
                 panelY + 6, AeStyle.MUTED, false);
         graphics.drawString(font, Lang.t("背包"), panelX + 8, panelY + 110,
                 AeStyle.MUTED, false);
     }
 
     @Override
-    public void render(PoseStack pose, int mouseX, int mouseY, float partialTick) {
+    public void render(MatrixStack pose, int mouseX, int mouseY, float partialTick) {
         Draw graphics = new Draw(pose, this);
         super.render(pose, mouseX, mouseY, partialTick);
 
@@ -347,7 +347,7 @@ public final class KeySetScreen extends RbScreen implements JeiPanelScreen {
         JeiGhostHighlights.draw(graphics, mouseX, mouseY);
 
         if (!status.isEmpty()) {
-            graphics.drawString(font, font.plainSubstrByWidth(status, PANEL_W - 16),
+            graphics.drawString(font, font.trimStringToWidth(status, PANEL_W - 16),
                     panelX + 8, panelY + 98, AeStyle.ACCENT, false);
         } else {
             graphics.drawString(font, Lang.t("左键添加 · 右键移除"),
@@ -361,7 +361,7 @@ public final class KeySetScreen extends RbScreen implements JeiPanelScreen {
             graphics.renderComponentTooltip(font, J8.list(
                     Chat.literal(ItemKeyMapper.displayName(key)),
                     Chat.literal(ItemKeyMapper.registryName(key))
-                            .withStyle(ChatFormatting.GRAY)), mouseX, mouseY);
+                            .mergeStyle(TextFormatting.GRAY)), mouseX, mouseY);
         } else if (slot >= 0) {
             graphics.renderComponentTooltip(font,
                     J8.list(Lang.c("空格：左键/中键自定义物质")), mouseX, mouseY);
@@ -370,8 +370,8 @@ public final class KeySetScreen extends RbScreen implements JeiPanelScreen {
 
     /** 背包 4 行（主背包 3 行 + 快捷栏），9 格宽度＝面板内容宽度。 */
     private void drawInventory(Draw graphics) {
-        Inventory inventory = minecraft == null || minecraft.player == null
-                ? null : minecraft.player.getInventory();
+        PlayerInventory inventory = minecraft == null || minecraft.player == null
+                ? null : minecraft.player.inventory;
         for (int row = 0; row < INV_ROWS; row++) {
             for (int col = 0; col < COLS; col++) {
                 int x = panelX + 8 + col * SLOT;
@@ -381,7 +381,7 @@ public final class KeySetScreen extends RbScreen implements JeiPanelScreen {
                     continue;
                 }
                 int index = row < 3 ? 9 + row * 9 + col : col;
-                ItemStack stack = inventory.getItem(index);
+                ItemStack stack = inventory.getStackInSlot(index);
                 if (!stack.isEmpty()) {
                     graphics.renderItem(stack, x + 1, y + 1);
                     graphics.renderItemDecorations(font, stack, x + 1, y + 1);
@@ -419,12 +419,25 @@ public final class KeySetScreen extends RbScreen implements JeiPanelScreen {
         return super.mouseScrolled(mouseX, mouseY, delta);
     }
 
+    /**
+     * 1.16.5 的 {@code displayGuiScreen(newScreen)} 会回调旧屏的 onClose，
+     * 这里只做收尾、不再切屏，否则会无限递归。
+     */
     @Override
     public void onClose() {
         JeiGhostHighlights.end();
-        if (minecraft != null) {
-            minecraft.setScreen(parent);
+    }
+
+    /** ESC 返回上一级（按钮里的 displayGuiScreen 同理，都不会递归）。 */
+    @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (keyCode == 256 && modifiers == 0) {
+            if (minecraft != null) {
+                minecraft.displayGuiScreen(parent);
+            }
+            return true;
         }
+        return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
     @Override

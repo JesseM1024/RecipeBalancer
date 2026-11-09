@@ -1,36 +1,39 @@
 package com.jessetech.recipebalancer.mc.jei;
 
-import com.jessetech.recipebalancer.core.util.J8;
-
 import com.jessetech.recipebalancer.RecipeBalancerMod;
 import com.jessetech.recipebalancer.mc.screen.BalancerScreen;
 import mezz.jei.api.gui.handlers.IGhostIngredientHandler;
-import mezz.jei.api.ingredients.IIngredientType;
-import mezz.jei.api.ingredients.ITypedIngredient;
-import mezz.jei.api.runtime.IJeiRuntime;
-import net.minecraft.client.renderer.Rect2i;
-import net.minecraft.world.item.ItemStack;
+import net.minecraft.client.renderer.Rectangle2d;
 
 import java.util.ArrayList;
 import java.util.List;
 
-/** JEI ghost 拖拽：物品 / 流体 / 化学品拖到编码格 / 设备 / 目标格。 */
+/**
+ * JEI ghost 拖拽：物品拖到编码格/设备/目标格（1.16.5 / JEI 7.x）。
+ *
+ * <p>7.x 的签名是 {@code getTargets(T, 裸配料, doStart)}，没有 {@code ITypedIngredient}。
+ *
+ * <p>高亮由本界面自己画（{@link JeiGhostHighlights}）：JEI 对普通 {@code Screen} 会经
+ * {@code drawTooltips} 与 {@code drawOnForeground} 两条路径各画一遍。这里
+ * {@code shouldHighlightTargets()} 返回 {@code false}，JEI 只保留「拖拽判定」职责
+ * （{@code Target#getArea()} 仍是绝对屏幕坐标，命中与投放都正确）。
+ */
 public final class JeiGhostHandler implements IGhostIngredientHandler<BalancerScreen> {
 
     @Override
     public <I> List<Target<I>> getTargets(BalancerScreen screen, I ingredient, boolean doStart) {
-        JeiIngredientMapper.Mapped mapped = map(ingredient);
+        JeiIngredientMapper.Mapped mapped = JeiIngredientMapper.of(ingredient);
         if (mapped == null) {
-            return J8.list();
+            return new ArrayList<>();
         }
         List<Target<I>> targets = new ArrayList<>();
-        List<Rect2i> areas = new ArrayList<>();
+        List<Rectangle2d> areas = new ArrayList<>();
         for (BalancerScreen.GhostSlot slot : screen.ghostSlots()) {
-            Rect2i area = new Rect2i(slot.x(), slot.y(), 18, 18);
+            Rectangle2d area = new Rectangle2d(slot.x(), slot.y(), 18, 18);
             areas.add(area);
             targets.add(new Target<I>() {
                 @Override
-                public Rect2i getArea() {
+                public Rectangle2d getArea() {
                     return area;
                 }
 
@@ -41,17 +44,18 @@ public final class JeiGhostHandler implements IGhostIngredientHandler<BalancerSc
             });
         }
         if (doStart) {
-            // 高亮由本界面自己画（JEI 不同版本的前景/后景通道坐标不一致，10.81 实测会偏移），
-            // JEI 只保留「拖拽判定」职责；矩形仍是绝对屏幕坐标，投放命中不受影响。
             JeiGhostHighlights.begin(areas);
             if (!areas.isEmpty()) {
                 int last = areas.size() - 1;
+                Rectangle2d first = areas.get(0);
+                Rectangle2d mid = areas.get(areas.size() / 2);
+                Rectangle2d tail = areas.get(last);
                 RecipeBalancerMod.LOGGER.info(
-                        "[RecipeBalancer] JEI ghost 开始: 共 {} 个, 首={}, 中={}, 末={},"
-                                + " GUI 原点=({},{}), 屏幕={}x{}, JEI={}",
-                        areas.size(), text(areas.get(0)), text(areas.get(areas.size() / 2)),
-                        text(areas.get(last)), screen.guiOriginX(), screen.guiOriginY(),
-                        screen.width, screen.height, JeiCapabilities.version());
+                        "[RecipeBalancer] JEI ghost 开始: 共 {} 个, 首=({},{} {}x{}), 中=({},{}),"
+                                + " 末=({},{}), GUI 原点=({},{}), 屏幕={}x{}",
+                        areas.size(), first.getX(), first.getY(), first.getWidth(),
+                        first.getHeight(), mid.getX(), mid.getY(), tail.getX(), tail.getY(),
+                        screen.getGuiLeft(), screen.getGuiTop(), screen.width, screen.height);
             }
         }
         return targets;
@@ -62,42 +66,9 @@ public final class JeiGhostHandler implements IGhostIngredientHandler<BalancerSc
         JeiGhostHighlights.end();
     }
 
-    /** 高亮自己说了算，避免 JEI 在不同版本把它们画到偏移的位置。 */
+    /** 高亮自己说了算，避免 JEI 在不同版本把它们画到偏移的位置或画两层。 */
     @Override
     public boolean shouldHighlightTargets() {
         return false;
-    }
-
-    private static String text(Rect2i area) {
-        return "(" + area.getX() + "," + area.getY() + " " + area.getWidth() + "x"
-                + area.getHeight() + ")";
-    }
-
-    /**
-     * 9.x 传进来的是<b>裸配料</b>（ItemStack / FluidStack / 化学品对象），
-     * 这里先按物品直读，其余交给 JEI 的类型表包装成 {@link ITypedIngredient}。
-     */
-    static JeiIngredientMapper.Mapped map(Object ingredient) {
-        if (ingredient instanceof ItemStack stack) {
-            if (stack.isEmpty()) {
-                return null;
-            }
-            return JeiIngredientMapper.ofTypedItem(stack);
-        }
-        IJeiRuntime runtime = JeiIngredientMapper.runtime();
-        if (runtime == null || ingredient == null) {
-            return null;
-        }
-        try {
-            IIngredientType<Object> type = runtime.getIngredientManager()
-                    .getIngredientType(ingredient);
-            if (type == null) {
-                return null;
-            }
-            ITypedIngredient<Object> typed = runtime.createTypedIngredient(type, ingredient);
-            return JeiIngredientMapper.of(typed);
-        } catch (RuntimeException | LinkageError e) {
-            return null;
-        }
     }
 }

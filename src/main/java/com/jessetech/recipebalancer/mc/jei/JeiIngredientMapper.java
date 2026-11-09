@@ -1,17 +1,13 @@
 package com.jessetech.recipebalancer.mc.jei;
 
 import com.jessetech.recipebalancer.core.util.J8;
-
 import com.jessetech.recipebalancer.mc.itemmap.IngredientKey;
 import com.jessetech.recipebalancer.mc.itemmap.ItemKeyMapper;
-import mezz.jei.api.constants.VanillaTypes;
 import mezz.jei.api.ingredients.IIngredientHelper;
 import mezz.jei.api.ingredients.IIngredientType;
-import mezz.jei.api.ingredients.ITypedIngredient;
-import mezz.jei.api.ingredients.subtypes.UidContext;
 import mezz.jei.api.runtime.IIngredientManager;
 import mezz.jei.api.runtime.IJeiRuntime;
-import net.minecraft.world.item.ItemStack;
+import net.minecraft.item.ItemStack;
 
 import java.lang.reflect.Method;
 import java.util.Optional;
@@ -19,49 +15,70 @@ import java.util.Optional;
 /**
  * 把 JEI 的任意配料（物品 / 流体 / 化学品…）转成可持久化的 key + 数量。
  *
- * <p>与 1.20.1 分支（JEI 15.x）的差异：
+ * <p>1.16.5 的 JEI 7.x 与我熟悉的 9.x/15.x 差别很大：
  * <ul>
- *   <li>9.x 的 {@code ITypedIngredient} 没有 {@code getItemStack()}，要用
- *       {@code getIngredient(VanillaTypes.ITEM)}；</li>
- *   <li>{@code IIngredientType} 只有 {@code getIngredientClass()}，没有 uid，
- *       所以类型标识用「配料类的全名」，读取时按同样规则反查已注册类型；</li>
+ *   <li>没有 {@code ITypedIngredient}，配料就是<b>裸对象</b>（{@code ItemStack} / {@code FluidStack} / …）；</li>
+ *   <li>类型标识用 {@code IIngredientType#getIngredientClass().getName()}
+ *       （7.x 没有 uid 概念）；</li>
  *   <li>helper 没有 {@code getAmount}，数量只能反射读配料自带的 {@code getAmount()}。</li>
  * </ul>
  */
 public final class JeiIngredientMapper {
 
-    public record Mapped(String key, double amount, String displayName) {
+    /** 一个可持久化的配料：key + 数量 + 显示名（record 在 Java 8 上不可用）。 */
+    public static final class Mapped {
+
+        private final String key;
+        private final double amount;
+        private final String displayName;
+
+        public Mapped(String key, double amount, String displayName) {
+            this.key = key;
+            this.amount = amount;
+            this.displayName = displayName;
+        }
+
+        public String key() {
+            return key;
+        }
+
+        public double amount() {
+            return amount;
+        }
+
+        public String displayName() {
+            return displayName;
+        }
     }
 
     private JeiIngredientMapper() {
     }
 
     /** @return 解析不了返回 null */
-    public static Mapped of(ITypedIngredient<?> typed) {
-        if (typed == null) {
+    public static Mapped of(Object ingredient) {
+        if (ingredient == null) {
             return null;
         }
-        ItemStack stack = typed.getIngredient(VanillaTypes.ITEM).orElse(ItemStack.EMPTY);
-        Mapped item = ofTypedItem(stack);
-        if (item != null) {
-            return item;
+        if (ingredient instanceof ItemStack) {
+            return ofItem((ItemStack) ingredient);
         }
         IJeiRuntime runtime = runtime();
         if (runtime == null) {
             return null;
         }
         try {
-            Object ingredient = typed.getIngredient();
-            IIngredientHelper<Object> helper = helperOf(runtime.getIngredientManager(), typed);
+            IIngredientManager manager = runtime.getIngredientManager();
+            IIngredientHelper<Object> helper = helperOf(manager, ingredient);
             if (helper == null) {
                 return null;
             }
-            String uniqueId = helper.getUniqueId(ingredient, UidContext.Ingredient);
+            String uniqueId = helper.getUniqueId(ingredient);
             String name = helper.getDisplayName(ingredient);
             long rawAmount = reflectiveAmount(ingredient);
             // 非物品默认是 mB 计量；500 mB -> 0.5 B
             double amount = rawAmount > 0 ? rawAmount / 1000.0 : 1.0;
-            String key = IngredientKey.encode(typeId(typed.getType()), uniqueId, name);
+            String key = IngredientKey.encode(typeId(manager.getIngredientType(ingredient)),
+                    uniqueId, name);
             return new Mapped(key, amount, name);
         } catch (RuntimeException | LinkageError e) {
             return null;
@@ -69,13 +86,13 @@ public final class JeiIngredientMapper {
     }
 
     /** 物品直接按 registry id + 堆叠数换算；空栈返回 null。 */
-    static Mapped ofTypedItem(ItemStack stack) {
+    static Mapped ofItem(ItemStack stack) {
         if (stack == null || stack.isEmpty()) {
             return null;
         }
         return new Mapped(ItemKeyMapper.of(stack),
                 Math.max(1.0, stack.getCount()),
-                stack.getHoverName().getString());
+                stack.getDisplayName().getString());
     }
 
     /**
@@ -84,8 +101,8 @@ public final class JeiIngredientMapper {
      *
      * @return 解析不出来时返回 null
      */
-    static String displayNameOf(ITypedIngredient<?> typed) {
-        if (typed == null) {
+    static String displayNameOf(Object ingredient) {
+        if (ingredient == null) {
             return null;
         }
         IJeiRuntime runtime = runtime();
@@ -93,8 +110,8 @@ public final class JeiIngredientMapper {
             return null;
         }
         try {
-            Object ingredient = typed.getIngredient();
-            IIngredientHelper<Object> helper = helperOf(runtime.getIngredientManager(), typed);
+            IIngredientHelper<Object> helper =
+                    helperOf(runtime.getIngredientManager(), ingredient);
             if (helper == null) {
                 return null;
             }
@@ -105,7 +122,7 @@ public final class JeiIngredientMapper {
         }
     }
 
-    /** 9.x 没有 {@code IIngredientType#getUid()}：用配料类的全名当类型标识。 */
+    /** 7.x 没有 uid：用配料类的全名当类型标识。 */
     static String typeId(IIngredientType<?> type) {
         Class<?> ingredientClass = type == null ? null : type.getIngredientClass();
         return ingredientClass == null ? "" : ingredientClass.getName();
@@ -113,7 +130,7 @@ public final class JeiIngredientMapper {
 
     /** 按类型标识找回已注册的 {@code IIngredientType}。 */
     static Optional<IIngredientType<?>> findType(IIngredientManager manager, String typeId) {
-        if (manager == null || typeId == null || J8.isBlank(typeId)) {
+        if (manager == null || J8.isBlank(typeId)) {
             return Optional.empty();
         }
         for (IIngredientType<?> candidate : manager.getRegisteredIngredientTypes()) {
@@ -125,9 +142,11 @@ public final class JeiIngredientMapper {
     }
 
     @SuppressWarnings("unchecked")
-    static IIngredientHelper<Object> helperOf(IIngredientManager manager,
-                                              ITypedIngredient<?> typed) {
-        IIngredientHelper<?> helper = manager.getIngredientHelper(typed.getType());
+    static IIngredientHelper<Object> helperOf(IIngredientManager manager, Object ingredient) {
+        if (manager == null || ingredient == null) {
+            return null;
+        }
+        IIngredientHelper<?> helper = manager.getIngredientHelper(ingredient);
         return (IIngredientHelper<Object>) helper;
     }
 
@@ -139,8 +158,8 @@ public final class JeiIngredientMapper {
             Method method = ingredient.getClass().getMethod("getAmount");
             method.setAccessible(true);
             Object value = method.invoke(ingredient);
-            if (value instanceof Number number) {
-                return number.longValue();
+            if (value instanceof Number) {
+                return ((Number) value).longValue();
             }
         } catch (ReflectiveOperationException | RuntimeException ignored) {
             // 物品之外的配料不一定有数量概念，按 1 处理
@@ -150,6 +169,6 @@ public final class JeiIngredientMapper {
 
     static IJeiRuntime runtime() {
         Object runtime = JeiRuntimeHolder.get();
-        return runtime instanceof IJeiRuntime jei ? jei : null;
+        return runtime instanceof IJeiRuntime ? (IJeiRuntime) runtime : null;
     }
 }

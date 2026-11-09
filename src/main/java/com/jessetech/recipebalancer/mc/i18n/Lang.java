@@ -1,9 +1,11 @@
 package com.jessetech.recipebalancer.mc.i18n;
 
+import net.minecraft.util.text.StringTextComponent;
+import com.jessetech.recipebalancer.core.util.J8;
 import com.jessetech.recipebalancer.mc.ui.Chat;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.resources.language.I18n;
-import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.client.resources.I18n;
+import net.minecraft.util.text.ITextComponent;
 
 import java.util.Locale;
 
@@ -12,13 +14,18 @@ import java.util.Locale;
  *
  * <p>源文本使用中文作为 key；{@code en_us.json} 提供英文映射。
  * 中文环境下直接使用源文本，避免 zh_cn 文件缺项时回退成英文。
+ *
+ * <p>1.16.5 线：{@code Component/MutableComponent} 换成 {@code ITextComponent}
+ * （{@link Chat#literal} 返回 {@code StringTextComponent}），{@code I18n} 换到
+ * {@code net.minecraft.client.resources} 包。
  */
 public final class Lang {
 
     private Lang() {
     }
 
-    public static MutableComponent c(String key, Object... args) {
+    /** 返回可继续链式设置样式的组件（1.16.5 的样式方法是 {@code mergeStyle}）。 */
+    public static net.minecraft.util.text.IFormattableTextComponent c(String key, Object... args) {
         return Chat.literal(t(key, args));
     }
 
@@ -26,8 +33,8 @@ public final class Lang {
         if (isChinese()) {
             return format(key, args);
         }
-        if (I18n.exists(key)) {
-            return I18n.get(key, args);
+        if (I18n.hasKey(key)) {
+            return I18n.format(key, args);
         }
         return format(key, args);
     }
@@ -62,18 +69,18 @@ public final class Lang {
             return line;
         }
         String translated = translateBody(body);
-        return indent == 0 ? translated : " ".repeat(indent) + translated;
+        return indent == 0 ? translated : J8.repeat(" ", indent) + translated;
     }
 
     private static String translateBody(String body) {
-        if (I18n.exists(body)) {
-            return I18n.get(body);
+        if (I18n.hasKey(body)) {
+            return I18n.format(body);
         }
         int colon = body.indexOf(':');
         if (colon > 0) {
             String label = body.substring(0, colon);
-            if (I18n.exists(label)) {
-                return I18n.get(label) + body.substring(colon);
+            if (I18n.hasKey(label)) {
+                return I18n.format(label) + body.substring(colon);
             }
         }
         return body;
@@ -82,8 +89,8 @@ public final class Lang {
     /** 当前游戏语言代码（如 {@code en_us}）；语言切换时可用来判断缓存是否过期。 */
     public static String languageCode() {
         Minecraft minecraft = Minecraft.getInstance();
-        String code = minecraft == null || minecraft.options == null
-                ? "en_us" : minecraft.options.languageCode;
+        String code = minecraft == null || minecraft.gameSettings == null
+                ? "en_us" : minecraft.gameSettings.language;
         return code == null ? "en_us" : code;
     }
 

@@ -2,26 +2,35 @@ package com.jessetech.recipebalancer.mc.jei;
 
 import com.jessetech.recipebalancer.mc.screen.BalancerScreen;
 import mezz.jei.api.gui.handlers.IGlobalGuiHandler;
-import mezz.jei.api.ingredients.ITypedIngredient;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.Rectangle2d;
+
+import java.util.ArrayList;
+import java.util.Collection;
 
 /**
- * 非容器界面的悬停处理器，让 R / U / A 生效。
+ * 全局悬停处理器（1.16.5 / JEI 7.x），让 R / U / A 生效。
  *
- * <p>JEI 的 {@code GuiScreenHelper} 对任意 Screen 都会遍历全局处理器，而 R/U/A 三个快捷键
- * 都建立在「鼠标下是什么配料」之上。9.x 与 10.x 的这个重载都返回<b>裸配料</b>
- * （{@code ItemStack} / {@code FluidStack} / 化学品对象），由 JEI 自己包成可点击配料；
- * 10.x 新增的工厂重载默认也转调这里，所以一份实现覆盖全区间。
+ * <p>7.x 的 {@code IGlobalGuiHandler#getIngredientUnderMouse} 返回<b>裸配料对象</b>；
+ * 一级界面还有容器处理器这条主路径，本类只是兜底：
+ * 若某个 JEI 构建裁剪了容器侧回调，R/U/A 依然可用。
  */
 public final class JeiHoverHandler implements IGlobalGuiHandler {
 
     @Override
     public Object getIngredientUnderMouse(double mouseX, double mouseY) {
-        BalancerScreen.HoveredKey hovered = JeiHoverKeys.hovered(mouseX, mouseY);
-        if (hovered == null) {
+        Minecraft minecraft = Minecraft.getInstance();
+        if (!(minecraft.currentScreen instanceof BalancerScreen)) {
             return null;
         }
-        return JeiHoverKeys.typed(hovered.key())
-                .map(ITypedIngredient::getIngredient)
-                .orElse(null);
+        BalancerScreen screen = (BalancerScreen) minecraft.currentScreen;
+        BalancerScreen.HoveredKey hovered = screen.jeiHoveredKey(mouseX, mouseY);
+        return hovered == null ? null : JeiHoverKeys.ingredient(hovered.key());
+    }
+
+    @Override
+    public Collection<Rectangle2d> getGuiExtraAreas() {
+        // 额外区域由容器处理器负责；全局处理器不声明区域
+        return new ArrayList<>();
     }
 }
