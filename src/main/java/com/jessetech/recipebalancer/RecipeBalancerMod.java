@@ -12,8 +12,8 @@ import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.config.ModConfig;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
 import net.minecraftforge.fml.loading.FMLEnvironment;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 /**
  * RecipeBalancer —— 产线配平自动计算器（纯客户端）。
@@ -32,7 +32,15 @@ import org.slf4j.LoggerFactory;
 public final class RecipeBalancerMod {
 
     public static final String MODID = "recipebalancer";
-    public static final Logger LOGGER = LoggerFactory.getLogger("RecipeBalancer");
+
+    /**
+     * 1.16.5 的 MC / Forge 只用 log4j2，运行环境里<b>没有 slf4j</b>：
+     * 用 {@code LoggerFactory} 会在类加载（{@code <clinit>}）阶段直接
+     * {@code NoClassDefFoundError: org/slf4j/LoggerFactory}，模组连实例都建不起来。
+     * 1.18.2 的 slf4j 是 Forge 自带的，所以那条件用 slf4j 没问题；这里必须换 log4j2。
+     * 两者都是 {@code {} } 占位符，调用点无需改动。
+     */
+    public static final Logger LOGGER = LogManager.getLogger("RecipeBalancer");
 
     public RecipeBalancerMod() {
         // 非客户端环境：跳过全部客户端注册（1.18.2 的 @Mod 无 dist 参数）
