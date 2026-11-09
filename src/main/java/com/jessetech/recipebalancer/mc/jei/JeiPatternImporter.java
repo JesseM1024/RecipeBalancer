@@ -5,11 +5,15 @@ import com.jessetech.recipebalancer.mc.itemmap.ItemKeyMapper;
 import com.jessetech.recipebalancer.mc.itemmap.ProductIndex;
 import mezz.jei.api.recipe.category.IRecipeCategory;
 import mezz.jei.api.runtime.IJeiRuntime;
+import mezz.jei.gui.recipes.RecipeLayout;
 import net.minecraft.item.ItemStack;
+import net.minecraftforge.fluids.FluidStack;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 把 JEI 的配方转成我们的编码样板（输入 / 输出 / 设备），1.16.5 / JEI 7.x 版。
@@ -25,9 +29,20 @@ public final class JeiPatternImporter {
     private JeiPatternImporter() {
     }
 
-    /** 统一入口：槽位视图 → 编码样板。 */
+    /** 统一入口：槽位视图 → 编码样板（不带配方原始量，数量按槽位显示值）。 */
     public static RecipePattern buildFromSlots(IRecipeCategory<?> category,
                                                List<JeiSlots.Slot> slots) {
+        return buildFromSlots(category, slots, Collections.<String, Double>emptyMap());
+    }
+
+    /**
+     * 带「配方原始流体量」的入口。
+     *
+     * @param fluidOriginals 流体注册名 → 配方里声明的真实桶数（由 {@link #fluidOriginals} 提取）
+     */
+    public static RecipePattern buildFromSlots(IRecipeCategory<?> category,
+                                               List<JeiSlots.Slot> slots,
+                                               Map<String, Double> fluidOriginals) {
         RecipePattern pattern = new RecipePattern();
         if (slots == null || slots.isEmpty()) {
             applyEquipment(category, pattern);
@@ -80,7 +95,7 @@ public final class JeiPatternImporter {
             }
             if (index >= 0 && index < RecipePattern.MAX_INPUTS) {
                 pattern.putInput(index, mapped.key(),
-                        restoreAmount(category, slot, mapped.amount()));
+                        restoreAmount(category, slot, mapped.amount(), fluidOriginals));
             }
         }
         int outputIndex = 0;
@@ -90,7 +105,7 @@ public final class JeiPatternImporter {
                 continue;
             }
             pattern.putOutput(outputIndex++, mapped.key(),
-                    restoreAmount(category, slot, mapped.amount()));
+                    restoreAmount(category, slot, mapped.amount(), fluidOriginals));
         }
         applyEquipment(category, pattern);
         return pattern;
@@ -99,7 +114,82 @@ public final class JeiPatternImporter {
     /** 一份 JEI 配方布局 → 编码样板（7.x 的布局对象是 {@code RecipeLayout}）。 */
     public static RecipePattern build(IRecipeCategory<?> category, Object layout) {
         List<JeiSlots.Slot> slots = JeiSlots.fromLayout(layout);
-        return buildFromSlots(category, slots);
+        return buildFromSlots(category, slots, fluidOriginals(layout));
+    }
+
+    /**
+     * 从配方对象读出流体的<b>真实</b>用量（桶）。
+     *
+     * <p>比按显示量做逆运算可靠：Create 的部分类别会把槽位里的 FluidStack 数量放大
+     * （{@code withImprovedVisibility}），但配方对象本身（{@code FillingRecipe#getRequiredFluid}、
+     * {@code EmptyingRecipe#getResultingFluid} 等）始终是原始值。
+     * 这里反射取这两类 getter，顺带支持 Create 的 {@code FluidIngredient}（取其匹配流体列表）。
+     *
+     * @return 流体注册名 → 桶数；取不到返回空表（调用方再退回逆函数兜底）
+     */
+    private static Map<String, Double> fluidOriginals(Object layout) {
+        Map<String, Double> out = new HashMap<>();
+        Object recipe;
+        try {
+            recipe = ((RecipeLayout<?>) layout).getRecipe();
+        } catch (RuntimeException | LinkageError e) {
+            return out;
+        }
+        if (recipe == null) {
+            return out;
+        }
+        for (String getter : new String[]{"getRequiredFluid", "getResultingFluid"}) {
+            try {
+                collectFluid(out, recipe.getClass().getMethod(getter).invoke(recipe));
+            } catch (ReflectiveOperationException | RuntimeException | LinkageError ignored) {
+                // 该配方类没有这个方法：换下一个
+            }
+        }
+        return out;
+    }
+
+    private static void collectFluid(Map<String, Double> out, Object value) {
+        if (value == null) {
+            return;
+        }
+        if (value instanceof FluidStack) {
+            putFluid(out, (FluidStack) value);
+            return;
+        }
+        // Create 的 FluidIngredient：getMatchingFluidStacks() 里的 FluidStack 是原始量
+        try {
+            Object stacks = value.getClass().getMethod("getMatchingFluidStacks").invoke(value);
+            if (stacks instanceof Iterable) {
+                for (Object stack : (Iterable<?>) stacks) {
+                    if (stack instanceof FluidStack) {
+                        putFluid(out, (FluidStack) stack);
+                    }
+                }
+            }
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError ignored) {
+            // 不是流体描述对象，忽略
+        }
+    }
+
+    private static void putFluid(Map<String, Double> out, FluidStack stack) {
+        if (stack == null || stack.getFluid() == null
+                || stack.getFluid().getRegistryName() == null) {
+            return;
+        }
+        out.put(stack.getFluid().getRegistryName().toString(), stack.getAmount() / 1000.0);
+    }
+
+    /** 槽位里第一个流体配料的注册名，用于匹配配方原始量。 */
+    private static String fluidNameOf(JeiSlots.Slot slot) {
+        for (Object candidate : slot.ingredients()) {
+            if (candidate instanceof FluidStack) {
+                FluidStack stack = (FluidStack) candidate;
+                if (stack.getFluid() != null && stack.getFluid().getRegistryName() != null) {
+                    return stack.getFluid().getRegistryName().toString();
+                }
+            }
+        }
+        return null;
     }
 
     /**
@@ -132,13 +222,29 @@ public final class JeiPatternImporter {
      * <p>只对 {@code create} 命名空间的类别生效，且只作用于流体槽。
      */
     private static double restoreAmount(IRecipeCategory<?> category, JeiSlots.Slot slot,
-                                        double amount) {
-        if (category == null || !slot.fluid() || amount <= 0) {
+                                        double amount, Map<String, Double> originals) {
+        if (!slot.fluid() || amount <= 0) {
             return amount;
         }
+        // 首选：配方对象里声明的真实用量（与模组无关，只要配方类暴露了 getter）
+        String fluid = fluidNameOf(slot);
+        if (fluid != null && originals != null) {
+            Double original = originals.get(fluid);
+            if (original != null && original > 0) {
+                if (Math.abs(original - amount) > 1e-6) {
+                    logRestore(fluid, amount, original, "配方原始量");
+                }
+                return original;
+            }
+        }
+        // 兜底：Create 的显示量放大（仅 create 命名空间）
+        return createInverse(category, amount);
+    }
+
+    private static double createInverse(IRecipeCategory<?> category, double amount) {
         net.minecraft.util.ResourceLocation uid;
         try {
-            uid = category.getUid();
+            uid = category == null ? null : category.getUid();
         } catch (RuntimeException | LinkageError e) {
             return amount;
         }
@@ -151,13 +257,19 @@ public final class JeiPatternImporter {
             return amount;
         }
         double restored = restoredMb / 1000.0;
-        if (Math.abs(restored - amount) > 1e-6
-                && AMOUNT_LOGGED.add(uid + "@" + shownMb)) {
-            com.jessetech.recipebalancer.RecipeBalancerMod.LOGGER.info(
-                    "[RecipeBalancer] Create 流体量还原: {} mB -> {} mB（category={}）",
-                    shownMb, restoredMb, uid);
+        if (Math.abs(restored - amount) > 1e-6) {
+            logRestore(uid + "/" + shownMb, amount, restored, "显示量逆运算");
         }
         return restored;
+    }
+
+    private static void logRestore(String what, double shown, double restored, String source) {
+        if (!AMOUNT_LOGGED.add(what + "@" + shown)) {
+            return;
+        }
+        com.jessetech.recipebalancer.RecipeBalancerMod.LOGGER.info(
+                "[RecipeBalancer] 流体量还原（{}）: {} mB -> {} mB",
+                source, shown * 1000.0, restored * 1000.0);
     }
 
     /** 只有合成配方保留空格（纯视觉），机器配方等一律按顺序紧排。 */

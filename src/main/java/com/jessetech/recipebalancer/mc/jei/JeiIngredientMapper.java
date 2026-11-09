@@ -30,6 +30,42 @@ public final class JeiIngredientMapper {
     private static final java.util.Set<String> LOGGED =
             java.util.Collections.synchronizedSet(new java.util.HashSet<String>());
 
+    /**
+     * key → 原始配料对象的会话缓存（有界 LRU，最多 4096 条）。
+     *
+     * <p>为什么需要它：反查靠 {@code IIngredientHelper#getUniqueId}，但部分配料的 uniqueId
+     * 不含完整 NBT（Create 的药水流体就是这样），或同一配方对象在布局阶段被复制、uniqueId
+     * 与写入时有细微差别，导致「编码后变成自定义物质、R/U 失效」。
+     * 只要这一局里是我们自己编码进去的 key，就直接记住对象本身，不依赖反查。
+     */
+    private static final java.util.Map<String, Object> KEY_CACHE =
+            java.util.Collections.synchronizedMap(
+                    new java.util.LinkedHashMap<String, Object>(256, 0.75f, true) {
+                        @Override
+                        protected boolean removeEldestEntry(
+                                java.util.Map.Entry<String, Object> eldest) {
+                            return size() > 4096;
+                        }
+                    });
+
+    /** 记住 key 与它的原始配料，供渲染/悬停直接复用。 */
+    static void remember(String key, Object ingredient) {
+        if (key != null && ingredient != null) {
+            KEY_CACHE.put(key, ingredient);
+        }
+    }
+
+    /** 会话缓存查找（未命中返回 null，调用方再走 uniqueId 反查）。 */
+    static Object recall(String key) {
+        return key == null ? null : KEY_CACHE.get(key);
+    }
+
+    /** JEI runtime 重建时清空（对象来自旧 runtime，不能再持有）。 */
+    public static void clearCache() {
+        KEY_CACHE.clear();
+        LOGGED.clear();
+    }
+
     /** 一个可持久化的配料：key + 数量 + 显示名（record 在 Java 8 上不可用）。 */
     public static final class Mapped {
 
@@ -65,7 +101,11 @@ public final class JeiIngredientMapper {
             return null;
         }
         if (ingredient instanceof ItemStack) {
-            return ofItem((ItemStack) ingredient);
+            Mapped mapped = ofItem((ItemStack) ingredient);
+            if (mapped != null) {
+                remember(mapped.key(), ingredient);
+            }
+            return mapped;
         }
         IJeiRuntime runtime = runtime();
         if (runtime == null) {
@@ -94,6 +134,7 @@ public final class JeiIngredientMapper {
                         name, ingredient.getClass().getSimpleName(), rawAmount, amount,
                         uniqueId, ingredient);
             }
+            remember(key, ingredient);
             return new Mapped(key, amount, name);
         } catch (RuntimeException | LinkageError e) {
             return null;

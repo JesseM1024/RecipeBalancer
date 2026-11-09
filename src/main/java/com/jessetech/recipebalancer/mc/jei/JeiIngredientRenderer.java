@@ -94,7 +94,18 @@ public final class JeiIngredientRenderer
         if (runtime == null || key == null || !IngredientKey.isIngredientKey(key)) {
             return null;
         }
+        // 先查会话缓存：本次拖拽/导入时记下的对象最可靠
+        // （部分配料 uniqueId 不含完整 NBT，反查会失败，表现为编码成自定义物质、R/U 失效）
+        Object remembered = JeiIngredientMapper.recall(key);
+        if (remembered != null) {
+            return remembered;
+        }
         return resolveCached(runtime, key).orElse(null);
+    }
+
+    /** JEI runtime 重建时清空反查缓存。 */
+    public static void clearCache() {
+        RESOLVED.clear();
     }
 
     /** 当前语言下的显示名。 */

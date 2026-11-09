@@ -42,6 +42,9 @@ public final class RecipeBalancerJeiPlugin implements IModPlugin {
     @Override
     public void onRuntimeAvailable(IJeiRuntime jeiRuntime) {
         JeiRuntimeHolder.set(jeiRuntime);
+        // 旧 runtime 的对象已失效，清掉 key 缓存与反查缓存
+        JeiIngredientMapper.clearCache();
+        JeiIngredientRenderer.clearCache();
         JeiIngredientRenderer renderer = new JeiIngredientRenderer();
         ItemKeyMapper.setIngredientRenderHook(renderer);
         ItemKeyMapper.setIngredientNameHook(renderer);
