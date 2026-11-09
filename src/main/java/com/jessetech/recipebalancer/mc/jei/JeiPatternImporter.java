@@ -33,13 +33,18 @@ public final class JeiPatternImporter {
             applyEquipment(category, pattern);
             return pattern;
         }
+        // Create 的 JEI 类别把「排水」的流体槽用 init(0, true, ...) 声明成输入
+        // （ItemDrainCategory 的既有写法），视觉上它其实是输出；
+        // 按类别 uid 修正，否则气/液产物会全部落到原料区、产物为空。
+        boolean draining = isCreateDraining(category);
         List<JeiSlots.Slot> inputs = new ArrayList<>();
         List<JeiSlots.Slot> outputs = new ArrayList<>();
         for (JeiSlots.Slot slot : slots) {
-            if (slot.input()) {
-                inputs.add(slot);
-            } else {
+            boolean asOutput = !slot.input() || (draining && slot.fluid());
+            if (asOutput) {
                 outputs.add(slot);
+            } else {
+                inputs.add(slot);
             }
         }
 
@@ -74,7 +79,8 @@ public final class JeiPatternImporter {
                 index = ys.indexOf(slot.y()) * INPUT_COLS + xs.indexOf(slot.x());
             }
             if (index >= 0 && index < RecipePattern.MAX_INPUTS) {
-                pattern.putInput(index, mapped.key(), mapped.amount());
+                pattern.putInput(index, mapped.key(),
+                        restoreAmount(category, slot, mapped.amount()));
             }
         }
         int outputIndex = 0;
@@ -83,7 +89,8 @@ public final class JeiPatternImporter {
             if (mapped == null || outputIndex >= RecipePattern.MAX_OUTPUTS) {
                 continue;
             }
-            pattern.putOutput(outputIndex++, mapped.key(), mapped.amount());
+            pattern.putOutput(outputIndex++, mapped.key(),
+                    restoreAmount(category, slot, mapped.amount()));
         }
         applyEquipment(category, pattern);
         return pattern;
@@ -93,6 +100,64 @@ public final class JeiPatternImporter {
     public static RecipePattern build(IRecipeCategory<?> category, Object layout) {
         List<JeiSlots.Slot> slots = JeiSlots.fromLayout(layout);
         return buildFromSlots(category, slots);
+    }
+
+    /**
+     * Create 的「排水 / 倒空」（Item Draining）类别把流体槽声明成了输入
+     * （{@code ItemDrainCategory} 里是 {@code fluidStacks.init(0, true, ...)}），
+     * 但它在配方页画在右侧、语义上是产物。这里按类别 uid 修正。
+     */
+    private static boolean isCreateDraining(IRecipeCategory<?> category) {
+        try {
+            net.minecraft.util.ResourceLocation uid = category.getUid();
+            return uid != null && "create".equals(uid.getNamespace())
+                    && uid.getPath().contains("drain");
+        } catch (RuntimeException | LinkageError e) {
+            return false;
+        }
+    }
+
+    /** 已提示过的（类别 + 显示量），避免每次导入都刷屏。 */
+    private static final java.util.Set<String> AMOUNT_LOGGED =
+            java.util.Collections.synchronizedSet(new java.util.HashSet<String>());
+
+    /**
+     * 还原 Create 的「流体可见性放大」。
+     *
+     * <p>Create 的 {@code CreateRecipeCategory#withImprovedVisibility(FluidStack)} 是：
+     * {@code amount = (int)(原量 * 0.75) + 250}（1000 正好是不动点）。
+     * 于是在 JEI 里看到的 tooltip 是原量（250 mB），槽位里存的 FluidStack 却是 437 mB。
+     * 按逆函数 {@code ceil((shown - 250) / 0.75)} 还原：437→250、625→500、1000→1000。
+     *
+     * <p>只对 {@code create} 命名空间的类别生效，且只作用于流体槽。
+     */
+    private static double restoreAmount(IRecipeCategory<?> category, JeiSlots.Slot slot,
+                                        double amount) {
+        if (category == null || !slot.fluid() || amount <= 0) {
+            return amount;
+        }
+        net.minecraft.util.ResourceLocation uid;
+        try {
+            uid = category.getUid();
+        } catch (RuntimeException | LinkageError e) {
+            return amount;
+        }
+        if (uid == null || !"create".equals(uid.getNamespace())) {
+            return amount;
+        }
+        double shownMb = amount * 1000.0;
+        double restoredMb = Math.ceil((shownMb - 250.0) / 0.75);
+        if (restoredMb <= 0) {
+            return amount;
+        }
+        double restored = restoredMb / 1000.0;
+        if (Math.abs(restored - amount) > 1e-6
+                && AMOUNT_LOGGED.add(uid + "@" + shownMb)) {
+            com.jessetech.recipebalancer.RecipeBalancerMod.LOGGER.info(
+                    "[RecipeBalancer] Create 流体量还原: {} mB -> {} mB（category={}）",
+                    shownMb, restoredMb, uid);
+        }
+        return restored;
     }
 
     /** 只有合成配方保留空格（纯视觉），机器配方等一律按顺序紧排。 */

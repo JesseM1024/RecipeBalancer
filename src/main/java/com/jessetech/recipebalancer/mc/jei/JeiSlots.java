@@ -27,15 +27,17 @@ public final class JeiSlots {
         private final int width;
         private final int height;
         private final boolean input;
+        private final boolean fluid;
         private final List<Object> ingredients;
 
-        public Slot(int x, int y, int width, int height, boolean input,
+        public Slot(int x, int y, int width, int height, boolean input, boolean fluid,
                     List<Object> ingredients) {
             this.x = x;
             this.y = y;
             this.width = width;
             this.height = height;
             this.input = input;
+            this.fluid = fluid;
             this.ingredients = ingredients == null ? J8.list() : J8.listCopy(ingredients);
         }
 
@@ -57,6 +59,11 @@ public final class JeiSlots {
 
         public boolean input() {
             return input;
+        }
+
+        /** 是否为流体槽（Create 的 JEI 类别会把显示量放大，需要按类型还原）。 */
+        public boolean fluid() {
+            return fluid;
         }
 
         public List<Object> ingredients() {
@@ -81,8 +88,8 @@ public final class JeiSlots {
             RecipeLayout<?> typed = (RecipeLayout<?>) layout;
             int originX = typed.getPosX();
             int originY = typed.getPosY();
-            addGroup(slots, typed.getItemStacks(), originX, originY);
-            addGroup(slots, typed.getFluidStacks(), originX, originY);
+            addGroup(slots, typed.getItemStacks(), originX, originY, false);
+            addGroup(slots, typed.getFluidStacks(), originX, originY, true);
             addOtherTypes(slots, typed, originX, originY);
         } catch (RuntimeException | LinkageError e) {
             // 布局结构异常时返回已解析的部分
@@ -112,7 +119,7 @@ public final class JeiSlots {
             }
             try {
                 IGuiIngredientGroup group = layout.getIngredientsGroup((mezz.jei.api.ingredients.IIngredientType) type);
-                addGroup(slots, group, originX, originY);
+                addGroup(slots, group, originX, originY, false);
             } catch (RuntimeException | LinkageError ignored) {
                 // 该类别没有定义这种配料类型，跳过
             }
@@ -127,7 +134,7 @@ public final class JeiSlots {
      * 一律当输入会导致「产物落到原料区、输出为空」。
      */
     private static <T> void addGroup(List<Slot> slots, IGuiIngredientGroup<T> group,
-                                     int originX, int originY) {
+                                     int originX, int originY, boolean fluid) {
         if (group == null) {
             return;
         }
@@ -165,6 +172,7 @@ public final class JeiSlots {
                     rect == null ? 0 : rect.getWidth(),
                     rect == null ? 0 : rect.getHeight(),
                     isInput(ingredient),
+                    fluid,
                     ordered));
         }
     }
