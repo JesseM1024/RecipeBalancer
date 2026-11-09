@@ -415,6 +415,50 @@ public final class ItemKeyMapper {
         renderAmount(graphics, font, amount, x, y);
     }
 
+    /**
+     * 在当前 {@link MatrixStack} 变换下画 18px 槽内图标（流程图节点用）。
+     *
+     * <p>与 {@link #renderIcon} 的区别：物品走 {@code renderItemPosed}，位置与颜色都吃调用方的
+     * 位姿变换 —— 调用方先 {@code translate} 到节点左上角，再调本方法。
+     * 之前流程图直接调 {@code renderIcon}（绝对坐标 + 老式物品渲染），
+     * 结果节点随相机平移缩放、图标却钉死在屏幕原点，这是 1.18.2 也有的老问题。
+     */
+    public static void renderIconPosed(Draw graphics, FontRenderer font, String key,
+                                       String amount) {
+        String id = normalize(key);
+        if (id.isEmpty()) {
+            return;
+        }
+        if (IngredientKey.isIngredientKey(id)) {
+            IngredientRenderHook hook = ingredientRenderHook;
+            if (hook != null && hook.render(graphics, font, id, 0, 0, amount)) {
+                return;
+            }
+            drawPlaceholderPosed(graphics, font, id, amount);
+            return;
+        }
+        ItemStack stack = stack(id);
+        if (!stack.isEmpty()) {
+            graphics.renderItemPosed(stack, 1.0f, 1.0f);
+            renderAmount(graphics, font, amount, 0, 0);
+            return;
+        }
+        drawPlaceholderPosed(graphics, font, id, amount);
+    }
+
+    /** 未注册物品/配料的占位块（位姿版，坐标以 0,0 为左上角）。 */
+    private static void drawPlaceholderPosed(Draw graphics, FontRenderer font, String id,
+                                             String amount) {
+        int color = placeholderColor(id);
+        graphics.fill(1, 1, 17, 17, color);
+        graphics.fill(1, 1, 17, 2, 0x40FFFFFF);
+        graphics.fill(1, 16, 17, 17, 0x60000000);
+        String label = shortLabel(id);
+        graphics.drawString(font, label, 9 - font.getStringWidth(label) / 2, 5,
+                0xFF101010, false);
+        renderAmount(graphics, font, amount, 0, 0);
+    }
+
     /** 渲染钩子复用：在 18px 槽内画数量文本。 */
     public static void renderAmountOverlay(Draw graphics, FontRenderer font, String amount,
                                            int x, int y) {

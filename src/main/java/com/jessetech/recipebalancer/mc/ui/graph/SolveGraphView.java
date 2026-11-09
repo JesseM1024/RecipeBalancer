@@ -1906,7 +1906,12 @@ public final class SolveGraphView {
                 y + RECIPE - 10, 0xFF3A2A10, false);
 
         if (showIcons && node.hasIcon) {
-            ItemKeyMapper.renderIcon(graphics, font, node.key, x + 12, y + 12, null);
+            // 节点坐标已含相机平移/缩放，图标必须在当前位姿下绘制，否则会钉死在屏幕上
+            MatrixStack iconPose = graphics.pose();
+            iconPose.push();
+            iconPose.translate(x + 12, y + 12, 0);
+            ItemKeyMapper.renderIconPosed(graphics, font, node.key, null);
+            iconPose.pop();
         } else {
             String initial = node.initial;
             graphics.drawString(font, initial, x + RECIPE / 2 - font.getStringWidth(initial) / 2,
@@ -1942,7 +1947,11 @@ public final class SolveGraphView {
         roundedFill(graphics, x, y, MATERIAL, MATERIAL, 4, color);
 
         if (showIcons && node.hasIcon) {
-            ItemKeyMapper.renderIcon(graphics, font, node.key, x + 2, y + 2, null);
+            MatrixStack iconPose = graphics.pose();
+            iconPose.push();
+            iconPose.translate(x + 2, y + 2, 0);
+            ItemKeyMapper.renderIconPosed(graphics, font, node.key, null);
+            iconPose.pop();
         } else {
             String initial = node.initial;
             graphics.drawString(font, initial,

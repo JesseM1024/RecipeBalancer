@@ -113,9 +113,12 @@ public final class Draw {
 
     public void drawString(FontRenderer font, IReorderingProcessor text, int x, int y, int color,
                            boolean shadow) {
-        // 1.16.5 只给了「带阴影」的处理器重载（drawTextWithShadow）；
-        // 关闭阴影的写法在本代不存在，这里统一走带阴影，视觉差异仅在个别提示行。
-        font.drawTextWithShadow(pose, text, x, y, color);
+        if (shadow) {
+            font.drawTextWithShadow(pose, text, x, y, color);
+        } else {
+            // 1.16.5 的无阴影处理器重载是 func_238422_b_（结果页正文用得到）
+            font.func_238422_b_(pose, text, x, y, color);
+        }
     }
 
     /** 16×16 物品图标（绝对 GUI 坐标，不支持位姿缩放）。 */
@@ -214,23 +217,113 @@ public final class Draw {
     private static List<ITextComponent> expand(FontRenderer font, List<ITextComponent> lines) {
         List<ITextComponent> out = new java.util.ArrayList<>(lines.size() + 4);
         for (ITextComponent line : lines) {
-            String text = line.getString();
-            if (text.indexOf('\n') < 0) {
-                out.addAll(wrap(font, text));
-                continue;
-            }
-            for (String part : text.split("\n", -1)) {
-                out.addAll(wrap(font, part));
+            for (ITextComponent composed : composeLines(line)) {
+                if (font.getStringWidth(composed.getString()) <= TOOLTIP_MAX_WIDTH) {
+                    out.add(composed);
+                } else {
+                    // 超长行才退化：只保留首段样式，按宽度折行
+                    out.addAll(wrap(font, composed.getString(), firstStyle(composed)));
+                }
             }
         }
         return out;
     }
 
-    /** 按像素宽度贪心折行：优先在空格处断，超长单词按字符断。 */
-    private static List<ITextComponent> wrap(FontRenderer font, String text) {
+    /**
+     * 把一个「可能带子组件与换行符」的组件拆成多行，并<b>逐段保留颜色</b>。
+     *
+     * <p>界面里的提示是 {@code Chat.empty().appendSibling(灰).appendSibling(黄)...} 拼出来的，
+     * 直接取 {@code getString()} 再重建字面量会把所有颜色抹掉（1.18.2/1.20.1 看到的是彩色）。
+     * 这里沿组件树收集「文本 + 有效样式」的片段，再按 {@code \n} 分行重组。
+     */
+    private static List<ITextComponent> composeLines(ITextComponent root) {
+        List<List<Run>> lines = new java.util.ArrayList<>(2);
+        lines.add(new java.util.ArrayList<Run>());
+        collectRuns(root, net.minecraft.util.text.Style.EMPTY, lines);
+        List<ITextComponent> out = new java.util.ArrayList<>(lines.size());
+        int last = lines.size() - 1;
+        while (last >= 0 && lines.get(last).isEmpty()) {
+            last--;
+        }
+        for (int i = 0; i <= last; i++) {
+            out.add(compose(lines.get(i)));
+        }
+        return out;
+    }
+
+    /** 组件树 → 文本片段（含换行切分）。 */
+    private static void collectRuns(ITextComponent component, net.minecraft.util.text.Style parent,
+                                    List<List<Run>> lines) {
+        net.minecraft.util.text.Style style = merged(parent, component.getStyle());
+        String text = component.getUnformattedComponentText();
+        if (text != null && !text.isEmpty()) {
+            String[] parts = text.split("\n", -1);
+            for (int i = 0; i < parts.length; i++) {
+                if (i > 0) {
+                    lines.add(new java.util.ArrayList<Run>());
+                }
+                if (!parts[i].isEmpty()) {
+                    lines.get(lines.size() - 1).add(new Run(parts[i], style));
+                }
+            }
+        }
+        for (ITextComponent child : component.getSiblings()) {
+            collectRuns(child, style, lines);
+        }
+    }
+
+    /** 空字段不覆盖，等价于逐段叠加样式。 */
+    private static net.minecraft.util.text.Style merged(net.minecraft.util.text.Style parent,
+                                                        net.minecraft.util.text.Style own) {
+        if (own == null || own == net.minecraft.util.text.Style.EMPTY) {
+            return parent;
+        }
+        return Chat.literal("").mergeStyle(parent).mergeStyle(own).getStyle();
+    }
+
+    private static ITextComponent compose(List<Run> runs) {
+        net.minecraft.util.text.IFormattableTextComponent line = Chat.empty();
+        for (Run run : runs) {
+            line.appendSibling(Chat.literal(run.text).mergeStyle(run.style));
+        }
+        return line;
+    }
+
+    /** 取首个片段的样式（超长行折行时兜底用）。 */
+    private static net.minecraft.util.text.Style firstStyle(ITextComponent component) {
+        net.minecraft.util.text.Style style = component.getStyle();
+        for (ITextComponent child : component.getSiblings()) {
+            net.minecraft.util.text.Style childStyle = firstStyle(child);
+            if (childStyle != null && childStyle != net.minecraft.util.text.Style.EMPTY) {
+                return childStyle;
+            }
+        }
+        return style;
+    }
+
+    /** 一段带样式的文本。 */
+    private static final class Run {
+
+        private final String text;
+        private final net.minecraft.util.text.Style style;
+
+        Run(String text, net.minecraft.util.text.Style style) {
+            this.text = text;
+            this.style = style;
+        }
+    }
+
+    /**
+     * 按像素宽度贪心折行：优先在空格处断，超长单词按字符断。
+     *
+     * <p>折行必须带上原始 {@code Style}：1.18.2 / 1.20.1 的颜色是逐组件带过来的，
+     * 若这里统一 {@code Chat.literal(...)}，界面里灰/黄/绿的提示会全部变白。
+     */
+    private static List<ITextComponent> wrap(FontRenderer font, String text,
+                                            net.minecraft.util.text.Style style) {
         List<ITextComponent> out = new java.util.ArrayList<>(2);
         if (font.getStringWidth(text) <= TOOLTIP_MAX_WIDTH) {
-            out.add(Chat.literal(text));
+            out.add(styled(text, style));
             return out;
         }
         StringBuilder current = new StringBuilder();
@@ -242,7 +335,7 @@ public final class Draw {
                 continue;
             }
             if (current.length() > 0) {
-                out.add(Chat.literal(current.toString()));
+                out.add(styled(current.toString(), style));
                 current.setLength(0);
             }
             // 单个词本身就超宽（长 ID / 无空格的中文）：按字符切
@@ -252,15 +345,20 @@ public final class Draw {
                         && font.getStringWidth(word.substring(0, cut + 1)) <= TOOLTIP_MAX_WIDTH) {
                     cut++;
                 }
-                out.add(Chat.literal(word.substring(0, cut)));
+                out.add(styled(word.substring(0, cut), style));
                 word = word.substring(cut);
             }
             current.append(word);
         }
         if (current.length() > 0) {
-            out.add(Chat.literal(current.toString()));
+            out.add(styled(current.toString(), style));
         }
         return out;
+    }
+
+    /** 生成带样式的组件（保留原行的颜色/粗体等）。 */
+    private static ITextComponent styled(String text, net.minecraft.util.text.Style style) {
+        return Chat.literal(text).mergeStyle(style);
     }
 
     // ------------------------------------------------------------------

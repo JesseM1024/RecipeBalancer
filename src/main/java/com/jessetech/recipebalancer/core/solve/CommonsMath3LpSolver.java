@@ -7,7 +7,6 @@ import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -38,6 +37,15 @@ public final class CommonsMath3LpSolver implements LpSolver {
     /** 模组 jar 内的嵌套库路径。 */
     private static final String LIB_RESOURCE = "/recipebalancer/lib/math3.jar";
 
+    /**
+     * 嵌套库的解压目录（由模组入口设为 {@code <实例>/RecipeBalancer/lib}）。
+     *
+     * <p>必须由调用方显式设置：core 层不依赖 Minecraft，也不能自己决定往哪里写文件。
+     * 未设置时**不解压**，直接退回 classpath 查找（单测环境），
+     * 以保证除了实例目录之外不会在用户机器上留下任何文件。
+     */
+    private static volatile Path libraryDir;
+
     private static volatile ClassLoader math3Loader;
     private static volatile Throwable loadFailure;
     private static volatile boolean loadAttempted;
@@ -52,6 +60,14 @@ public final class CommonsMath3LpSolver implements LpSolver {
     public CommonsMath3LpSolver(double epsilon, int maxIterations) {
         this.epsilon = epsilon;
         this.maxIterations = maxIterations;
+    }
+
+    /**
+     * 指定嵌套库的解压目录（模组入口在构造时调用，指向实例内的
+     * {@code <gamedir>/RecipeBalancer/lib}）；传 {@code null} 表示不解压、只走 classpath。
+     */
+    public static void setLibraryDir(Path dir) {
+        libraryDir = dir;
     }
 
     /** 求解库是否可用（启动自检用）。 */
@@ -100,11 +116,15 @@ public final class CommonsMath3LpSolver implements LpSolver {
     }
 
     private static ClassLoader extractAndLoad() throws Exception {
+        Path dir = libraryDir;
+        if (dir == null) {
+            // 没有指定目录：不解压，后续回退到 classpath（单测/开发环境）
+            return null;
+        }
         InputStream in = CommonsMath3LpSolver.class.getResourceAsStream(LIB_RESOURCE);
         if (in == null) {
             return null;
         }
-        Path dir = Paths.get(System.getProperty("java.io.tmpdir"), "recipebalancer-lib");
         Files.createDirectories(dir);
         Path jar = dir.resolve("math3-3.6.1.jar");
         try (InputStream stream = in) {

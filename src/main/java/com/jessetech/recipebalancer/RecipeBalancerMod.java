@@ -64,6 +64,12 @@ public final class RecipeBalancerMod {
         // 亦不注册 ConfigScreenHandler 扩展点：配置仅经 TOML 文件修改。
         ModLoadingContext.get().registerConfig(ModConfig.Type.CLIENT, GraphLayoutConfig.SPEC);
 
+        // 求解库的解压目录：固定放在实例内（<gamedir>/RecipeBalancer/lib），
+        // 不在系统临时目录或用户其它位置留文件。
+        com.jessetech.recipebalancer.core.solve.CommonsMath3LpSolver.setLibraryDir(
+                net.minecraftforge.fml.loading.FMLPaths.GAMEDIR.get()
+                        .resolve("RecipeBalancer").resolve("lib"));
+
         LOGGER.info("[RecipeBalancer] 初始化：快捷键 K 打开主界面");
         checkRuntimeDependencies();
     }

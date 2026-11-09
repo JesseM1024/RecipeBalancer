@@ -154,9 +154,11 @@ public final class JeiRecipeOverlay {
         }
         int height = lines.size() * 10;
         net.minecraft.client.MainWindow window = Minecraft.getInstance().getMainWindow();
-        int x = mouseX + 12;
-        if (x + width + 6 > window.getScaledWidth()) {
-            x = mouseX - width - 12;
+        // JEI 的物品面板固定在屏幕右侧、并且在本监听器之后绘制，
+        // 提示画在鼠标右侧一定会被它的物品图标盖住 —— 这里固定向**左**展开。
+        int x = mouseX - width - 12;
+        if (x < 4) {
+            x = Math.min(mouseX + 12, window.getScaledWidth() - width - 6);
         }
         x = Math.max(4, x);
         int y = Math.max(4, Math.min(mouseY - 12, window.getScaledHeight() - height - 6));

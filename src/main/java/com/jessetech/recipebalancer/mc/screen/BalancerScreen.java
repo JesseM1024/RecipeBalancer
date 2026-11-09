@@ -1545,6 +1545,9 @@ public final class BalancerScreen extends RbContainerScreen implements JeiPanelS
             if (showStatus) {
                 status = Lang.t("写入失败: %s", Lang.t(String.valueOf(e.getMessage())));
             }
+            // 界面只显示一行文字，完整堆栈留给日志（化学品/自定义物质写入失败时排查看）
+            com.jessetech.recipebalancer.RecipeBalancerMod.LOGGER.warn(
+                    "[RecipeBalancer] 写入配方失败（{}）", pattern, e);
             return false;
         }
     }
