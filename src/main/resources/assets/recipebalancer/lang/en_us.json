@@ -113,8 +113,6 @@
   "布局: 分层": "Layout: Layered",
   "布局: 弹性": "Layout: Force",
   "名称: 显示名": "Names: Display",
-  "编码此配方": "Encode Recipe",
-  "编码此配方到 RecipeBalancer": "Encode this recipe to RecipeBalancer",
   "名称: 注册名": "Names: IDs",
                 
   "配方运行方案（流量单位 /t）": "Recipe Plan (flow unit /t)",
@@ -257,5 +255,7 @@
   "recipebalancer.configuration.zoomMin.tooltip": "Lower zoom limit for auto-fit and mouse wheel zooming.",
   "recipebalancer.configuration.zoomMax": "Maximum zoom",
   "recipebalancer.configuration.zoomMax.tooltip": "Upper zoom limit for auto-fit and mouse wheel zooming.",
-  "点击后打开配方编码终端": "Click to open the pattern encoding terminal"
+  "点击后打开配方编码终端": "Click to open the pattern encoding terminal",
+  "编码此配方": "Encode Recipe",
+  "JEI 未安装，快捷功能不可用": "JEI is not installed; JEI shortcuts are unavailable"
 }
