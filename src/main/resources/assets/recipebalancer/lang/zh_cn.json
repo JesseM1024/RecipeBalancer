@@ -93,7 +93,6 @@
     "空格：左键/中键自定义物质":  "空格：左键/中键自定义物质",
     "JEI 未安装":  "JEI 未安装",
     "JEI 不可用":  "JEI 不可用",
-    "JEI 未安装，快捷功能不可用":  "JEI 未安装，快捷功能不可用",
     "JEI 书签为空":  "JEI 书签为空",
     "已读取 %s 个书签，新增 %s 个":  "已读取 %s 个书签，新增 %s 个",
     "先选中一个条目":  "先选中一个条目",
@@ -221,5 +220,7 @@
   "recipebalancer.configuration.zoomMin.tooltip": "自动适配视野与滚轮缩放的缩放下限。",
   "recipebalancer.configuration.zoomMax": "缩放上限",
   "recipebalancer.configuration.zoomMax.tooltip": "自动适配视野与滚轮缩放的缩放上限。",
-  "点击后打开配方编码终端":  "点击后打开配方编码终端"
+  "点击后打开配方编码终端":  "点击后打开配方编码终端",
+  "编码此配方":  "编码此配方",
+  "JEI 未安装，快捷功能不可用":  "JEI 未安装，快捷功能不可用"
 }
