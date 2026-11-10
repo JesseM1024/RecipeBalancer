@@ -85,10 +85,6 @@ public final class JeiIngredientRenderer
             if (name != null && !name.trim().isEmpty()) {
                 lines.add(Chat.literal(name));
             }
-            int amount = reflectiveAmount(ingredient);
-            if (amount > 0) {
-                lines.add(Chat.literal(amount + " mB").mergeStyle(TextFormatting.GRAY));
-            }
             List<ITextComponent> extra = renderer.getTooltip(ingredient,
                     ITooltipFlag.TooltipFlags.NORMAL);
             if (extra != null) {
@@ -100,8 +96,8 @@ public final class JeiIngredientRenderer
                     if (name != null && text.contains(name)) {
                         continue;   // 与首行重复
                     }
-                    if (amount > 0 && text.contains("mB")) {
-                        continue;   // 容量行已由上面给出
+                    if (text.contains("mB") || text.contains("mb")) {
+                        continue;   // 不显示物质量（Create 会给出放大后的 437 mB，反而误导）
                     }
                     lines.add(line);
                 }
