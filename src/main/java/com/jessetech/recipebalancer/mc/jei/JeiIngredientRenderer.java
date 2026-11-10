@@ -77,16 +77,36 @@ public final class JeiIngredientRenderer
             if (renderer == null) {
                 return false;
             }
-            List<ITextComponent> lines = new ArrayList<>(
-                    renderer.getTooltip(ingredient, ITooltipFlag.TooltipFlags.NORMAL));
-            if (lines.isEmpty()) {
-                // 部分配料的 JEI 渲染器没实现 getTooltip（Create 的药水流体、
-                // 某些化学品就是这样），此时只显示单位提示等于没有提示 ——
-                // 退回「显示名 + 注册名」，保证信息量与原版 tooltip 一致。
-                String name = displayNameOf(key);
-                if (name != null && !name.trim().isEmpty()) {
-                    lines.add(Chat.literal(name));
+            // JEI 的 getTooltip 对流体/化学品常常返回「空行」或干脆空表，
+            // 直接用它会出现「只有单位提示」的 tooltip。这里自己组首行信息：
+            // 显示名 + 容量（mB），再把 JEI 的非空附加行接在后面。
+            List<ITextComponent> lines = new ArrayList<>();
+            String name = displayNameOf(key);
+            if (name != null && !name.trim().isEmpty()) {
+                lines.add(Chat.literal(name));
+            }
+            int amount = reflectiveAmount(ingredient);
+            if (amount > 0) {
+                lines.add(Chat.literal(amount + " mB").mergeStyle(TextFormatting.GRAY));
+            }
+            List<ITextComponent> extra = renderer.getTooltip(ingredient,
+                    ITooltipFlag.TooltipFlags.NORMAL);
+            if (extra != null) {
+                for (ITextComponent line : extra) {
+                    if (line == null || line.getString().trim().isEmpty()) {
+                        continue;
+                    }
+                    String text = line.getString();
+                    if (name != null && text.contains(name)) {
+                        continue;   // 与首行重复
+                    }
+                    if (amount > 0 && text.contains("mB")) {
+                        continue;   // 容量行已由上面给出
+                    }
+                    lines.add(line);
                 }
+            }
+            if (lines.isEmpty()) {
                 lines.add(Chat.literal(IngredientKey.describe(key))
                         .mergeStyle(TextFormatting.GRAY));
             }
@@ -163,6 +183,19 @@ public final class JeiIngredientRenderer
             }
         }
         return Optional.empty();
+    }
+
+    /** 反射读配料的 {@code getAmount()}（流体/气体都有，物品没有）；取不到返回 0。 */
+    private static int reflectiveAmount(Object ingredient) {
+        if (ingredient == null) {
+            return 0;
+        }
+        try {
+            Object value = ingredient.getClass().getMethod("getAmount").invoke(ingredient);
+            return value instanceof Number ? ((Number) value).intValue() : 0;
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            return 0;
+        }
     }
 
     @SuppressWarnings("unchecked")
