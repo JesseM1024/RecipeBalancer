@@ -94,16 +94,19 @@ public final class JeiIngredientRenderer
         if (runtime == null || !IngredientKey.isIngredientKey(key)) {
             return Optional.empty();
         }
-        Optional<ITypedIngredient<?>> cached = RESOLVED.get(key);
-        if (cached != null) {
-            return cached;
-        }
-        // 编码时记住的对象最可靠（Create 药水流体等 uniqueId 不含完整 NBT，反查会落空）
+        // 编码时记住的对象最可靠（Create 药水流体等 uniqueId 不含完整 NBT，反查会落空）。
+        // 必须先于 RESOLVED 检查：反查失败时这里会缓存 Optional.empty()，
+        // 若先查 RESOLVED，之后即使 remember() 了也永远拿不到对象，
+        // 表现就是「编码了药水，图标/名称还是错的 / R-U 无效」。
         ITypedIngredient<?> remembered = JeiIngredientMapper.recall(key);
         if (remembered != null) {
             Optional<ITypedIngredient<?>> hit = Optional.of(remembered);
             RESOLVED.put(key, hit);
             return hit;
+        }
+        Optional<ITypedIngredient<?>> cached = RESOLVED.get(key);
+        if (cached != null) {
+            return cached;
         }
         Optional<ITypedIngredient<?>> resolved;
         try {
