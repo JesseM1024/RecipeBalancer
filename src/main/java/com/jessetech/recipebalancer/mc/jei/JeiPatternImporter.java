@@ -101,7 +101,9 @@ public final class JeiPatternImporter {
             String version = net.minecraftforge.fml.ModList.get().getModContainerById("create")
                     .map(container -> container.getModInfo().getVersion().toString())
                     .orElse("");
-            int major = 0;
+            // 注意：Create 0.5.x 的主版本号是 **0**（"0.5.1f"），
+            // 不能写成 major > 0，否则 0.5.x 直接被判成「不放大」，逆运算永远不生效。
+            int major = -1;
             int end = 0;
             while (end < version.length() && Character.isDigit(version.charAt(end))) {
                 end++;
@@ -109,7 +111,7 @@ public final class JeiPatternImporter {
             if (end > 0) {
                 major = Integer.parseInt(version.substring(0, end));
             }
-            return major > 0 && major < 6;
+            return major >= 0 && major < 6;
         } catch (RuntimeException | LinkageError e) {
             return false;
         }
