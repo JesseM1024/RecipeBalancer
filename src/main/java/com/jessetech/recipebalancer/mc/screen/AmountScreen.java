@@ -253,6 +253,13 @@ public final class AmountScreen extends RbScreen implements JeiPanelScreen {
             graphics.drawString(font, status, panelX + 8, panelY + panelH - 44,
                     AeStyle.WARN, false);
         }
+
+        // 预览槽悬停：与编码区/目标区共用同一套 tooltip（物品走原版，流体/化学品/药水走 JEI）
+        if (!previewKey.isEmpty()
+                && mouseX >= panelX + 8 && mouseX < panelX + 8 + 18
+                && mouseY >= panelY + 32 && mouseY < panelY + 32 + 18) {
+            ItemKeyMapper.renderTooltip(graphics, font, previewKey, mouseX, mouseY);
+        }
     }
 
     @Override

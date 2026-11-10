@@ -79,6 +79,17 @@ public final class JeiIngredientRenderer
             }
             List<ITextComponent> lines = new ArrayList<>(
                     renderer.getTooltip(ingredient, ITooltipFlag.TooltipFlags.NORMAL));
+            if (lines.isEmpty()) {
+                // 部分配料的 JEI 渲染器没实现 getTooltip（Create 的药水流体、
+                // 某些化学品就是这样），此时只显示单位提示等于没有提示 ——
+                // 退回「显示名 + 注册名」，保证信息量与原版 tooltip 一致。
+                String name = displayNameOf(key);
+                if (name != null && !name.trim().isEmpty()) {
+                    lines.add(Chat.literal(name));
+                }
+                lines.add(Chat.literal(IngredientKey.describe(key))
+                        .mergeStyle(TextFormatting.GRAY));
+            }
             lines.add(Chat.literal(Lang.t("RecipeBalancer 数量单位: B"))
                     .mergeStyle(TextFormatting.DARK_GRAY));
             graphics.renderComponentTooltip(font, lines, mouseX, mouseY);
