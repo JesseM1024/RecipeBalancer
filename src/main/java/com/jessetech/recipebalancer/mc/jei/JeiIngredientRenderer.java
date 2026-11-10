@@ -98,10 +98,42 @@ public final class JeiIngredientRenderer
             if (type.isEmpty()) {
                 return Optional.empty();
             }
-            return resolveWithType(manager, type.get(), IngredientKey.uniqueId(key));
+            String uniqueId = IngredientKey.uniqueId(key);
+            int hash = uniqueId.indexOf('#');
+            if (hash > 0) {
+                return resolveWithFingerprint(manager, type.get(),
+                        uniqueId.substring(0, hash), uniqueId.substring(hash + 1));
+            }
+            return resolveWithType(manager, type.get(), uniqueId);
         } catch (RuntimeException | LinkageError e) {
             return Optional.empty();
         }
+    }
+
+    /**
+     * 带 NBT 摘要的 uid 解析：先按基础 uid 查，再比对摘要；
+     * 不一致时在同类配料里按摘要找（药水这种「同流体不同 NBT」的场景）。
+     */
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private static Optional<ITypedIngredient<?>> resolveWithFingerprint(
+            IIngredientManager manager, IIngredientType<?> type,
+            String baseUid, String fingerprint) {
+        Optional<ITypedIngredient<?>> direct = resolveWithType(manager, type, baseUid);
+        if (direct.isPresent()
+                && fingerprint.equals(JeiIngredientMapper.nbtFingerprint(direct.get().getIngredient()))) {
+            return direct;
+        }
+        for (Object candidate : manager.getAllIngredients((IIngredientType) type)) {
+            if (!fingerprint.equals(JeiIngredientMapper.nbtFingerprint(candidate))) {
+                continue;
+            }
+            Optional<ITypedIngredient<?>> typed = manager.createTypedIngredient(
+                    (IIngredientType) type, candidate);
+            if (typed.isPresent()) {
+                return typed;
+            }
+        }
+        return Optional.empty();
     }
 
     @SuppressWarnings({"rawtypes", "unchecked"})

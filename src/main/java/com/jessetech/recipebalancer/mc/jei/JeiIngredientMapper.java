@@ -45,9 +45,74 @@ public final class JeiIngredientMapper {
                         }
                     });
 
+    /** 已提示过的 key 碰撞，避免刷屏。 */
+    private static final java.util.Set<String> COLLIDED =
+            java.util.Collections.synchronizedSet(new java.util.HashSet<String>());
+
     static void remember(String key, ITypedIngredient<?> typed) {
-        if (key != null && typed != null) {
-            KEY_CACHE.put(key, typed);
+        if (key == null || typed == null) {
+            return;
+        }
+        ITypedIngredient<?> existing = KEY_CACHE.get(key);
+        if (existing != null && existing != typed && !sameIngredient(existing, typed)) {
+            // 同一个 key 指向不同配料：说明 uid 没能区分它们（药水的 NBT 差异没进 uid）。
+            // 保留先到的，避免「编码新药水把老药水顶掉」，并把 key 打进日志便于核对。
+            if (COLLIDED.add(key)) {
+                com.jessetech.recipebalancer.RecipeBalancerMod.LOGGER.warn(
+                        "[RecipeBalancer] 配料 key 碰撞（uid 未区分 NBT）: {} | 已有={} 新的={}",
+                        key, describeIngredient(existing.getIngredient()),
+                        describeIngredient(typed.getIngredient()));
+            }
+            return;
+        }
+        KEY_CACHE.put(key, typed);
+    }
+
+    private static boolean sameIngredient(ITypedIngredient<?> a, ITypedIngredient<?> b) {
+        Object first = a.getIngredient();
+        Object second = b.getIngredient();
+        return first == second || (first != null && first.equals(second));
+    }
+
+    private static String describeIngredient(Object ingredient) {
+        return ingredient == null ? "null" : ingredient.getClass().getSimpleName() + ":" + ingredient;
+    }
+
+    /**
+     * 配料 NBT 摘要（1.20.1 仍是 NBT 时代）：SHA-1 前 8 位十六进制，无 NBT 返回空串。
+     *
+     * <p>为什么需要：JEI 15 的 {@code FluidIngredientHelper#getUniqueId} 只拼
+     * {@code "fluid:" + registryName}，再附上 subtype interpreter 的结果；
+     * Create 的药水流体没有注册 subtype interpreter，于是所有药水的 uid 完全相同。
+     * 把 NBT 摘要并进 uid，不同药水才会得到不同的 key。
+     */
+    static String nbtFingerprint(Object ingredient) {
+        Object tag = null;
+        if (ingredient != null) {
+            try {
+                java.lang.reflect.Method getTag = ingredient.getClass().getMethod("getTag");
+                tag = getTag.invoke(ingredient);
+            } catch (ReflectiveOperationException | RuntimeException ignored) {
+                // 不是带 NBT 的配料
+            }
+        }
+        if (tag == null) {
+            return "";
+        }
+        String text = String.valueOf(tag);
+        if ("{}".equals(text)) {
+            return "";
+        }
+        try {
+            byte[] digest = java.security.MessageDigest.getInstance("SHA-1")
+                    .digest(text.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            StringBuilder hex = new StringBuilder(8);
+            for (int i = 0; i < 4; i++) {
+                hex.append(String.format("%02x", digest[i]));
+            }
+            return hex.toString();
+        } catch (java.security.NoSuchAlgorithmException e) {
+            return Integer.toHexString(text.hashCode());
         }
     }
 
@@ -91,6 +156,12 @@ public final class JeiIngredientMapper {
             long rawAmount = reflectiveAmount(ingredient);
             // 非物品默认是 mB 计量；500 mB -> 0.5 B
             double amount = rawAmount > 0 ? rawAmount / 1000.0 : 1.0;
+            // 把 NBT 摘要并入 uid：JEI 15 的流体 uid 只有 "fluid:注册名"，
+            // 药水这类「同流体不同 NBT」的配料不加摘要就会撞成同一个 key。
+            String fingerprint = nbtFingerprint(ingredient);
+            if (!fingerprint.isEmpty()) {
+                uniqueId = uniqueId + "#" + fingerprint;
+            }
             String key = IngredientKey.encode(typeId(typed.getType()), uniqueId, name);
             remember(key, typed);
             return new Mapped(key, amount, name);
