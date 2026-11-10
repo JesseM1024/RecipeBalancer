@@ -108,8 +108,10 @@ public final class JeiPatternImporter {
             while (end < version.length() && Character.isDigit(version.charAt(end))) {
                 end++;
             }
-            int major = end > 0 ? Integer.parseInt(version.substring(0, end)) : 0;
-            return major > 0 && major < 6;
+            // Create 0.5.x / 0.6.x 的主版本号是 **0**，不能写成 major > 0，
+            // 否则老版本会被判成「不放大」，逆运算永远不生效。
+            int major = end > 0 ? Integer.parseInt(version.substring(0, end)) : -1;
+            return major >= 0 && major < 6;
         } catch (RuntimeException | LinkageError e) {
             return false;
         }
