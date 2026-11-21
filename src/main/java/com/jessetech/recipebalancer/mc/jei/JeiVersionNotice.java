@@ -30,12 +30,25 @@ public final class JeiVersionNotice {
             return;
         }
         warned = true;
-        if (!JeiCapabilities.installed() || JeiCapabilities.hasFullApi()) {
+        if (!JeiCapabilities.installed()) {
             return;
         }
-        String message = Lang.t(
-                "检测到低版本 JEI（%s）：拖拽、配方页按钮与书签导入需要 4.8.5.160 及以上，请升级 JEI。",
-                JeiCapabilities.version());
+        // ① 低于编译基线：拖拽 / 配方页按钮 不可用
+        if (!JeiCapabilities.hasFullApi()) {
+            send(minecraft, Lang.t(
+                    "检测到低版本 JEI（%s）：拖拽、配方页按钮需要 4.8.5.160 及以上，请升级 JEI。",
+                    JeiCapabilities.version()));
+            return;
+        }
+        // ② 4.8.5 ~ 4.15 之间：书签导入不可用（不再做反射兜底，直接提示版本要求）
+        if (!JeiCapabilities.hasBookmarkApi()) {
+            send(minecraft, Lang.t(
+                    "JEI 书签导入功能需要 JEI 4.15.0.276（当前 %s）。",
+                    JeiCapabilities.version()));
+        }
+    }
+
+    private static void send(Minecraft minecraft, String message) {
         minecraft.player.sendMessage(new TextComponentString("[RecipeBalancer] " + message));
     }
 }

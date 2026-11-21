@@ -250,3 +250,4 @@ recipebalancer.configuration.zoomMax.tooltip=Upper zoom limit for auto-fit and m
 编码此配方=Encode Recipe
 JEI 未安装，快捷功能不可用=JEI is not installed; JEI shortcuts are unavailable
 检测到低版本 JEI（%s）：拖拽、配方页按钮与书签导入需要 4.8.5.160 及以上，请升级 JEI。=Detected an old JEI (%s): item dragging, recipe-page buttons and bookmark import need JEI 4.8.5.160 or newer. Please update JEI.
+JEI 书签导入功能需要 JEI 4.15.0.276（当前 %s）。=Bookmark import requires JEI 4.15.0.276 (current: %s).

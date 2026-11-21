@@ -58,6 +58,67 @@ public final class Draw {
     /** 全局唯一的位姿薄壳（1.12.2 的变换是全局状态，不需要每屏一个实例）。 */
     private static final Pose POSE = new Pose();
 
+    /**
+     * 槽位右下角数量文本（18px 槽位，绝对 GUI 坐标）。
+     *
+     * <p>必须在**画完图标之后**立刻调用：1.12.2 的 GUI 是立即模式，后画的就会盖住先画的。
+     * 绘制前显式重置 GL 状态——物品光照会留下 {@code GL_COLOR_MATERIAL}、JEI 的流体渲染会
+     * 留下非白色的 {@code GlStateManager.color}，不重置的话文字会被染成怪色。
+     *
+     * @param amount 数量文本；null/空则不画
+     */
+    public void renderAmount(FontRenderer font, String amount, int x, int y) {
+        if (font == null || amount == null || amount.isEmpty()) {
+            return;
+        }
+        beginText();
+        int width = font.getStringWidth(amount);
+        int maxWidth = 14;
+        if (width <= maxWidth) {
+            font.drawStringWithShadow(amount, x + 17 - width, y + 9, 0xFFFFFFFF);
+        } else {
+            float scale = (float) maxWidth / width;
+            GlStateManager.pushMatrix();
+            GlStateManager.translate(x + 17 - width * scale, y + 9, 0);
+            GlStateManager.scale(scale, scale, 1.0f);
+            font.drawStringWithShadow(amount, 0, 0, 0xFFFFFFFF);
+            GlStateManager.popMatrix();
+        }
+    }
+
+    /**
+     * 物品槽的数量角标：直接走原版 {@code RenderItem#renderItemOverlayIntoGUI}。
+     *
+     * <p>原版这一段自己处理位置、颜色、光照与深度，和背包里的堆叠数字完全一致；
+     * 自己用 {@code drawString} 画在图标上会因为 GL 状态差异出现"被图标盖住/颜色不对"。
+     *
+     * @param amount 覆盖显示的数量文本；null 则用物品自身的堆叠数
+     */
+    public void renderStackAmount(FontRenderer font, ItemStack stack, int x, int y, String amount) {
+        if (stack == null || stack.isEmpty() || font == null) {
+            return;
+        }
+        flush();
+        // 原版角标按 18px 槽位定位；本方法收到的 x/y 就是槽位左上角
+        Minecraft.getMinecraft().getRenderItem()
+                .renderItemOverlayIntoGUI(font, stack, x - 1, y - 1, amount);
+    }
+
+    /** 把文字渲染需要的最小 GL 状态摆正（不影响后续绘制）。 */
+    private static void beginText() {
+        GlStateManager.disableLighting();
+        GlStateManager.disableDepth();
+        GlStateManager.enableBlend();
+        GlStateManager.tryBlendFuncSeparate(GlStateManager.SourceFactor.SRC_ALPHA,
+                GlStateManager.DestFactor.ONE_MINUS_SRC_ALPHA,
+                GlStateManager.SourceFactor.ONE, GlStateManager.DestFactor.ZERO);
+        GlStateManager.enableTexture2D();
+        GlStateManager.enableAlpha();
+        // 物品光照留下的 color material 会把顶点色再乘一遍当前颜色
+        GlStateManager.disableColorMaterial();
+        GlStateManager.color(1.0f, 1.0f, 1.0f, 1.0f);
+    }
+
     /** 位姿薄壳：只转发到 {@link GlStateManager} 的矩阵栈。 */
     public static final class Pose {
 

@@ -34,6 +34,9 @@ public final class JeiCapabilities {
     /** 能加载的最低 JEI 版本（4.7.8.95 起 {@code IModPlugin} 的形态与本模组一致）。 */
     public static final String MIN_VERSION = "4.7.8";
 
+    /** 书签导入的最低 JEI 版本（{@code IBookmarkOverlay} / {@code IJeiRuntime#getBookmarkOverlay()}）。 */
+    public static final String BOOKMARK_API_VERSION = "4.15.0.276";
+
     private static final String JEI_MOD_ID = "jei";
 
     private static final boolean INSTALLED = classPresent("mezz.jei.api.IModPlugin");
@@ -87,9 +90,9 @@ public final class JeiCapabilities {
         return GLOBAL_GUI_HANDLER;
     }
 
-    /** 4.15+：公开的书签 API 存在。 */
+    /** 4.15+：公开的书签 API 存在（类存在 + 版本达标才算）。 */
     public static boolean hasBookmarkApi() {
-        return BOOKMARK_API;
+        return INSTALLED && BOOKMARK_API && versionAtLeast(BOOKMARK_API_VERSION);
     }
 
     /** 4.16+：公开的焦点工厂存在。 */

@@ -12,8 +12,10 @@ import net.minecraftforge.fluids.FluidStack;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 把 JEI 的配方转成我们的编码样板（输入 / 输出 / 设备），1.12.2 / JEI 4.x 版。
@@ -46,6 +48,21 @@ public final class JeiPatternImporter {
     public static RecipePattern buildFromSlots(IRecipeCategory<?> category,
                                                List<JeiSlots.Slot> slots,
                                                Map<String, Double> fluidOriginals) {
+        return buildFromSlots(category, slots, fluidOriginals,
+                Collections.<String>emptySet());
+    }
+
+    /**
+     * 完整入口。
+     *
+     * @param realOutputs 配方对象里声明的**真实产物** key（可为空）；用于剔除被 JEI 标记为
+     *                    “输出”的辅助显示槽 —— 例如 Mekanism 的高级机器类别会把「能提供所需
+     *                    气体的燃料物品列表」也注册成输出槽，直接导入会把圆石之类写进产物区。
+     */
+    public static RecipePattern buildFromSlots(IRecipeCategory<?> category,
+                                               List<JeiSlots.Slot> slots,
+                                               Map<String, Double> fluidOriginals,
+                                               Set<String> realOutputs) {
         RecipePattern pattern = new RecipePattern();
         if (slots == null || slots.isEmpty()) {
             applyEquipment(category, pattern);
@@ -96,27 +113,119 @@ public final class JeiPatternImporter {
                 index = ys.indexOf(slot.y()) * INPUT_COLS + xs.indexOf(slot.x());
             }
             if (index >= 0 && index < RecipePattern.MAX_INPUTS) {
-                pattern.putInput(index, mapped.key(),
-                        restoreAmount(category, slot, mapped.amount(), fluidOriginals));
+                double amount = restoreAmount(category, slot, mapped.amount(), fluidOriginals);
+                pattern.putInput(index, mapped.key(), amount);
+                logImported("in", slot, mapped, amount);
             }
         }
+        int itemOutputSlots = 0;
+        for (JeiSlots.Slot slot : outputs) {
+            if (isItemSlot(slot)) {
+                itemOutputSlots++;
+            }
+        }
+        // 只有当“物品输出槽数量 > 配方真实产物数量”时才启用剔除，避免把真正的多产物配方砍掉
+        boolean filterAuxiliary = !realOutputs.isEmpty()
+                && itemOutputSlots > realOutputs.size();
         int outputIndex = 0;
         for (JeiSlots.Slot slot : outputs) {
             JeiIngredientMapper.Mapped mapped = pick(slot.ingredients());
             if (mapped == null || outputIndex >= RecipePattern.MAX_OUTPUTS) {
                 continue;
             }
-            pattern.putOutput(outputIndex++, mapped.key(),
-                    restoreAmount(category, slot, mapped.amount(), fluidOriginals));
+            if (filterAuxiliary && isItemSlot(slot) && !realOutputs.contains(mapped.key())) {
+                // 辅助显示槽（MEK 的“能提供所需气体的燃料物品”）：不是产物，但确实是玩家要投入的
+                // 物料，按输入处理，不能直接丢掉。
+                int target = pattern.firstEmptyInput();
+                if (target >= 0 && target < RecipePattern.MAX_INPUTS) {
+                    pattern.putInput(target, mapped.key(), mapped.amount());
+                    logImported("in-aux", slot, mapped, mapped.amount());
+                }
+                continue;
+            }
+            double amount = restoreAmount(category, slot, mapped.amount(), fluidOriginals);
+            pattern.putOutput(outputIndex++, mapped.key(), amount);
+            logImported("out", slot, mapped, amount);
         }
         applyEquipment(category, pattern);
         return pattern;
     }
 
+    /** 已记录过的导入槽位（key + 数量 + 角色），避免每次导入都刷屏。 */
+    private static final java.util.Set<String> IMPORT_LOGGED =
+            java.util.Collections.synchronizedSet(new java.util.HashSet<String>());
+
+    /**
+     * 每个（角色 + key + 数量）只记一次。
+     *
+     * <p>用于排查"某个槽位的数量读成了默认 1 B"这类问题：日志里能直接看到
+     * 槽位是输入/输出、是不是流体、拿到的数量是多少。
+     */
+    private static void logImported(String role, JeiSlots.Slot slot,
+                                    JeiIngredientMapper.Mapped mapped, double amount) {
+        String key = role + '|' + mapped.key() + '|' + amount;
+        if (!IMPORT_LOGGED.add(key)) {
+            return;
+        }
+        com.jessetech.recipebalancer.RecipeBalancerMod.LOGGER.info(
+                "[RecipeBalancer] 导入槽位[{}]: key={} fluid={} 显示名={} 数量={}",
+                role, mapped.key(), slot.fluid(), mapped.displayName(), amount);
+    }
+
     /** 一份 JEI 配方布局 → 编码样板（4.x 的布局对象是 {@code RecipeLayout}）。 */
     public static RecipePattern build(IRecipeCategory<?> category, Object layout) {
         List<JeiSlots.Slot> slots = JeiSlots.fromLayout(layout);
-        return buildFromSlots(category, slots, fluidOriginals(layout));
+        return buildFromSlots(category, slots, fluidOriginals(layout), realOutputKeys(layout));
+    }
+
+    /** 槽位是不是物品槽（候选配料是 {@code ItemStack}）。 */
+    private static boolean isItemSlot(JeiSlots.Slot slot) {
+        List<Object> ingredients = slot.ingredients();
+        return !ingredients.isEmpty() && ingredients.get(0) instanceof ItemStack;
+    }
+
+    /**
+     * 从配方对象里读「真实产物」。
+     *
+     * <p>为什么需要：Mekanism 的 {@code AdvancedMachineRecipeCategory} 会把
+     * 「能提供所需气体的燃料物品列表」注册成 {@code init(slot, false, ...)}（输出槽），
+     * 于是融合机这类配方编码后会把圆石一类的燃料物品写进产物区。用配方里声明的
+     * {@code recipeOutput.output} 做交叉验证，就能把这类辅助槽剔掉。
+     *
+     * <p>4.x 的 {@code RecipeLayout} 没有公开的 {@code getRecipe()}，只能反射
+     * {@code recipeWrapper}，再走 wrapper 的 {@code getRecipe()} / {@code recipe} 字段。
+     *
+     * @return 提取不到时返回空集合（调用方据此关闭剔除逻辑）
+     */
+    private static Set<String> realOutputKeys(Object layout) {
+        Set<String> keys = new HashSet<>();
+        if (!(layout instanceof RecipeLayout)) {
+            return keys;
+        }
+        try {
+            Object wrapper = JeiReflect.field(layout, "recipeWrapper");
+            if (wrapper == null) {
+                return keys;
+            }
+            Object recipe = JeiReflect.call(wrapper, "getRecipe");
+            if (recipe == null) {
+                recipe = JeiReflect.field(wrapper, "recipe");
+            }
+            if (recipe == null) {
+                return keys;
+            }
+            Object output = JeiReflect.field(recipe, "recipeOutput");
+            if (output == null) {
+                return keys;
+            }
+            Object stack = JeiReflect.field(output, "output");
+            if (stack instanceof ItemStack && !((ItemStack) stack).isEmpty()) {
+                keys.add(ItemKeyMapper.of((ItemStack) stack));
+            }
+        } catch (RuntimeException | LinkageError ignored) {
+            // 提取失败＝关闭剔除逻辑，保持原行为
+        }
+        return keys;
     }
 
     /**

@@ -5,6 +5,24 @@
 
 ---
 
+## R52 · 2026-11-21 · 数字渲染重写 + 输入框默认失焦 + MEK 辅助输出槽剔除
+
+| 问题 | 处理 |
+|---|---|
+| 数量数字被图标盖住 / 颜色不对 | **回退延后队列**（Gradle 侧已无 `deferAmount/flushAmounts` 残留）。物品槽改走原版 `RenderItem#renderItemOverlayIntoGUI`（位置/颜色/深度由原版负责）；非物品槽在图标之后立即画，画前显式 `disableLighting/disableDepth/disableColorMaterial + color(1,1,1,1)`，避免继承物品光照留下的着色 |
+| 进界面就往名称框里打字 | `RbScreen/RbContainerScreen` 里删掉 `textFields.get(0).setFocused(true)`，`setListener(...)` 改为不聚焦（1.16.5 的语义只是"回车作用于哪个输入框"）；JEI 写入后打开的新界面同样默认失焦 |
+| 占位块短标签 | 回退为固定深色 `0xFF101010`（不做自动对比度） |
+| MEK 融合机：圆石被编码成产物 | 根因在 Mekanism 的 `AdvancedMachineRecipeCategory#setRecipe`：它把「能提供所需气体的燃料物品列表」注册成 `init(slot, false, ...)`（**输出槽**）。导入时新增交叉验证：反射读配方声明的 `recipeOutput.output`，当"物品输出槽数 > 真实产物数"时，把不匹配真实产物的物品槽**改为追加到输入**（它确实是玩家要投入的物料），提取失败则不启用，保持原行为 |
+
+## R51 · 2026-11-21 · 数量文本队列修正 + 书签按版本判能力
+
+| 问题 | 根因 | 处理 |
+|---|---|---|
+| 数量文本不渲染 / 被图标盖住 / 颜色不对 | ① 延后队列做成了 `Draw` 实例字段，而槽位在 `drawGuiContainerBackgroundLayer` 里用**另一个** `new Draw(this)` 绘制，flush 时队列为空；② 自己用 `font.drawStringWithShadow` 在图标上画数字，会继承 `renderItemAndEffectIntoGUI` 留下的 GL 状态（`color material` + 非白色 `GlStateManager.color`） | **回退整个延后队列**，改为跟随图标的立即绘制：物品走原版 `RenderItem#renderItemOverlayIntoGUI`（位置/颜色/深度由原版处理），非物品在图标之后调用 `Draw#renderAmount`，绘制前显式 `disableLighting/disableDepth/disableColorMaterial + color(1,1,1,1) + enableBlend/Texture2D` |
+| JEI 4.13.1.227 读不到书签 | 4.13/4.14 把 `BookmarkOverlay` 藏成 `ILeftAreaContent`，没有 `IJeiRuntime#getBookmarkOverlay()` | **删除反射/广搜兜底**；下限提到 **4.15.0.276**：按钮文字转金橙色，首次进世界聊天栏提示「JEI 书签导入功能需要 JEI 4.15.0.276」 |
+
+补充：`IBookmarkOverlay`（4.15+）只暴露 `getIngredientUnderMouse()`，列全部书签仍要反射 `BookmarkList`，所以这条路只在 4.15+ 成立。
+
 ## R50 · 2026-11-21 · 1.12.2 实机三修：图标光照 / 流体量 / 物品变体
 
 ### 实测结果（4.22.0.1037，`1.12.2-Forge` 实例）

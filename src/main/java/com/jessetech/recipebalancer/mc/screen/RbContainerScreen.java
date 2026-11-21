@@ -64,7 +64,7 @@ public abstract class RbContainerScreen extends GuiContainer implements Draw.Too
         super.initGui();
         init();
         if (!textFields.isEmpty()) {
-            textFields.get(0).setFocused(true);
+            // 不默认聚焦任何输入框：点进来就能用键盘，不会把字打进名称框
         }
     }
 
@@ -87,11 +87,12 @@ public abstract class RbContainerScreen extends GuiContainer implements Draw.Too
         return addText(field);
     }
 
-    /** 1.16.5 的 {@code setListener(TextFieldWidget)}：1.12.2 只有 setFocused。 */
+    /**
+     * 1.16.5 的 {@code setListener(TextFieldWidget)} 只是指定「回车作用于哪个输入框」，
+     * <b>不会聚焦</b>；1.12.2 没有这个机制，这里保持空实现以免一进界面就开始吃键盘。
+     */
     protected void setListener(GuiTextField field) {
-        if (field != null) {
-            field.setFocused(true);
-        }
+        // 不聚焦，也不抢输入
     }
 
     protected GuiTextField focusedField() {

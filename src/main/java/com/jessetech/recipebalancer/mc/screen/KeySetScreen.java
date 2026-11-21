@@ -5,6 +5,7 @@ import com.jessetech.recipebalancer.core.util.J8;
 import com.jessetech.recipebalancer.mc.i18n.Lang;
 import com.jessetech.recipebalancer.mc.itemmap.ItemKeyMapper;
 import com.jessetech.recipebalancer.mc.jei.JeiBookmarks;
+import com.jessetech.recipebalancer.mc.jei.JeiCapabilities;
 import com.jessetech.recipebalancer.mc.jei.JeiGhostHighlights;
 import com.jessetech.recipebalancer.mc.jei.JeiRuntimeHolder;
 import com.jessetech.recipebalancer.mc.jei.JeiScreenSupport;
@@ -93,15 +94,32 @@ public final class KeySetScreen extends RbScreen implements JeiPanelScreen {
         int halfW = (PANEL_W - 16 - 4) / 2;
         addButton(Buttons.builder(Lang.c("清空列表"), b -> clearWithConfirm())
                 .bounds(panelX + 8, panelY + 200, halfW, 20).build());
-        addButton(Buttons.builder(Lang.c("读取书签"), b -> addBookmarks())
+        // JEI 书签 API 要 4.15.0.276；不满足时按钮文字用金橙色，提示"能力不可用"
+        addButton(Buttons.builder(bookmarkLabel(), b -> addBookmarks())
                 .bounds(panelX + 8 + halfW + 4, panelY + 200, halfW, 20).build());
         addButton(Buttons.builder(Lang.c("返回"), b -> minecraft.displayGuiScreen(parent))
                 .bounds(panelX + 8, panelY + 224, PANEL_W - 16, 20).build());
         JeiScreenSupport.notifyGuiInit(this);
     }
 
+    /** 「读取书签」按钮的文字：JEI 版本不够时用金橙色（能力不可用，不是"点了没反应"）。 */
+    private static net.minecraft.util.text.ITextComponent bookmarkLabel() {
+        if (JeiCapabilities.hasBookmarkApi()) {
+            return Lang.c("读取书签");
+        }
+        return Chat.styled(Lang.t("读取书签"),
+                new net.minecraft.util.text.Style()
+                        .setColor(net.minecraft.util.text.TextFormatting.GOLD));
+    }
+
     /** 一键读 JEI 右侧书签。 */
     private void addBookmarks() {
+        // 1.12.2 的 JEI 只有 4.15.0.276 起才有公开的书签 API；更老版本不做反射兜底
+        if (!JeiCapabilities.hasBookmarkApi()) {
+            status = Lang.t("JEI 书签导入功能需要 JEI 4.15.0.276（当前 %s）",
+                    JeiCapabilities.version());
+            return;
+        }
         // 先判 JEI 是否安装：未安装时只提示、不触发，也不能让 NoClassDefFoundError 冒出来
         if (!JeiRuntimeHolder.installed()) {
             status = Lang.t("JEI 未安装，快捷功能不可用");

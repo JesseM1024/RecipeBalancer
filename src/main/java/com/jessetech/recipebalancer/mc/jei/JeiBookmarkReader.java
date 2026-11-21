@@ -7,23 +7,20 @@ import java.util.LinkedHashSet;
 import java.util.Set;
 
 /**
- * 读取 JEI 右侧书签里的全部 ingredient（1.12.2 / JEI 4.x）。
+ * 读取 JEI 右侧书签里的全部 ingredient（仅 JEI 4.15+）。
  *
- * <p>三级降级（逐 jar 核实过的版本边界）：
- * <ol>
- *   <li>4.15+：公开 API {@code IJeiRuntime#getBookmarkOverlay()} → 反射
- *       {@code BookmarkOverlay#bookmarkList}（按字段类型找） → {@code BookmarkList#getIngredientList()}；</li>
- *   <li>4.13 / 4.14：{@code getBookmarkOverlay()} 可能不可用 → 在 runtime 对象里按类型找
- *       {@code BookmarkOverlay} 字段，再走同上流程；</li>
- *   <li>更老：返回空表并只告警一次。</li>
- * </ol>
+ * <p>只保留一条路径：{@code IJeiRuntime#getBookmarkOverlay()}（4.15.0.276 起的公开方法）
+ * → 反射 {@code BookmarkOverlay#bookmarkList} → {@code BookmarkList#getIngredientList()}。
  *
- * <p>结构不对（JEI 改了内部实现）时返回空表，<b>绝不影响</b>界面与求解。
- * 本类不 import 任何 {@code mezz.jei.*} 类型，全部走反射。
+ * <p><b>不再做对象图搜索/按类型广搜</b>：4.13/4.14 把书签面板藏成 {@code ILeftAreaContent}
+ * 接口，实测不可靠，索性按版本判能力——低于 4.15.0.276 时界面直接提示需要升级，
+ * 按钮文字用金橙色标出，不浪费一次失败的反射。
+ *
+ * <p>本类不 import 任何 {@code mezz.jei.*} 类型；调用方（{@link JeiBookmarks}）
+ * 已先做能力判断，因此进到这里时版本一定够。
  */
 public final class JeiBookmarkReader {
 
-    private static final String OVERLAY_TYPE = "mezz.jei.gui.overlay.bookmarks.BookmarkOverlay";
     private static final String LIST_TYPE = "mezz.jei.bookmarks.BookmarkList";
 
     /** 反射失败只告警一次，避免每次打开物料清单都刷屏。 */
@@ -40,19 +37,15 @@ public final class JeiBookmarkReader {
             return keys;
         }
         try {
-            Object overlay = overlay(runtime);
+            Object overlay = JeiReflect.call(runtime, "getBookmarkOverlay");
             if (overlay == null) {
                 return keys;
             }
             Object list = JeiReflect.fieldOfType(overlay, LIST_TYPE);
             if (list == null) {
-                // 字段类型可能被子类化，退一步按类名后缀扫描
-                list = fieldOfTypeName(overlay, "BookmarkList");
-            }
-            if (list == null) {
                 return keys;
             }
-            Object elements = ingredientList(list);
+            Object elements = JeiReflect.call(list, "getIngredientList");
             if (!(elements instanceof Collection)) {
                 return keys;
             }
@@ -78,52 +71,5 @@ public final class JeiBookmarkReader {
             }
         }
         return keys;
-    }
-
-    /** 4.15+ 走公开方法；更老的版本在 runtime 里按类型找字段。 */
-    private static Object overlay(Object runtime) {
-        Object overlay = JeiReflect.call(runtime, "getBookmarkOverlay");
-        if (overlay != null) {
-            return overlay;
-        }
-        Object byType = JeiReflect.fieldOfType(runtime, OVERLAY_TYPE);
-        if (byType != null) {
-            return byType;
-        }
-        return fieldOfTypeName(runtime, "BookmarkOverlay");
-    }
-
-    /** {@code getIngredientList()} 在 4.16+ 无参；更老的版本可能带一个 String 参数。 */
-    private static Object ingredientList(Object list) {
-        Object elements = JeiReflect.call(list, "getIngredientList");
-        if (elements != null) {
-            return elements;
-        }
-        try {
-            java.lang.reflect.Method method = list.getClass().getMethod("getIngredientList", String.class);
-            method.setAccessible(true);
-            return method.invoke(list, "");
-        } catch (Throwable t) {
-            return null;
-        }
-    }
-
-    /** 按「类名以给定后缀结尾」找字段（字段被声明成接口/父类时的兜底）。 */
-    private static Object fieldOfTypeName(Object owner, String simpleNameSuffix) {
-        Class<?> type = owner.getClass();
-        while (type != null) {
-            for (java.lang.reflect.Field field : type.getDeclaredFields()) {
-                if (field.getType().getSimpleName().endsWith(simpleNameSuffix)) {
-                    try {
-                        field.setAccessible(true);
-                        return field.get(owner);
-                    } catch (Throwable t) {
-                        return null;
-                    }
-                }
-            }
-            type = type.getSuperclass();
-        }
-        return null;
     }
 }

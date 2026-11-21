@@ -421,6 +421,7 @@ public final class ItemKeyMapper {
         return new String(Character.toChars(first));
     }
 
+
     /** 未注册物品的确定性占位色。 */
     public static int placeholderColor(String key) {
         int hash = baseItemId(key).hashCode();
@@ -494,13 +495,14 @@ public final class ItemKeyMapper {
             String label = shortLabel(id);
             graphics.drawString(font, label, x + 9 - font.getStringWidth(label) / 2, y + 5,
                     0xFF101010, false);
-            renderAmount(graphics, font, amount, x, y);
+            graphics.renderAmount(font, amount, x, y);
             return;
         }
         ItemStack stack = stack(id);
         if (!stack.isEmpty()) {
             graphics.renderItem(stack, x + 1, y + 1);
-            renderAmount(graphics, font, amount, x, y);
+            // 数量角标走原版通道：位置/颜色/深度都由原版处理，自己用 drawString 画会被图标盖住
+            graphics.renderStackAmount(font, stack, x, y, amount);
             return;
         }
         int color = placeholderColor(id);
@@ -511,7 +513,7 @@ public final class ItemKeyMapper {
         int textX = x + 9 - font.getStringWidth(label) / 2;
         int textY = y + 5;
         graphics.drawString(font, label, textX, textY, 0xFF101010, false);
-        renderAmount(graphics, font, amount, x, y);
+        graphics.renderAmount(font, amount, x, y);
     }
 
     /**
@@ -537,7 +539,7 @@ public final class ItemKeyMapper {
         ItemStack stack = stack(id);
         if (!stack.isEmpty()) {
             graphics.renderItemPosed(stack, 1.0f, 1.0f);
-            renderAmount(graphics, font, amount, 0, 0);
+            renderAmountNow(graphics, font, amount, 0, 0);
             return;
         }
         drawPlaceholderPosed(graphics, font, id, amount);
@@ -553,17 +555,18 @@ public final class ItemKeyMapper {
         String label = shortLabel(id);
         graphics.drawString(font, label, 9 - font.getStringWidth(label) / 2, 5,
                 0xFF101010, false);
-        renderAmount(graphics, font, amount, 0, 0);
+        renderAmountNow(graphics, font, amount, 0, 0);
     }
 
-    /** 渲染钩子复用：在 18px 槽内画数量文本。 */
+    /** 渲染钩子复用：在 18px 槽内画数量文本（必须在图标画完之后调）。 */
     public static void renderAmountOverlay(Draw graphics, FontRenderer font, String amount,
                                            int x, int y) {
-        renderAmount(graphics, font, amount, x, y);
+        graphics.renderAmount(font, amount, x, y);
     }
 
-    /** 紧凑数量文本：过长时等比缩小，避免像 100000 一样溢出格子。 */
-    private static void renderAmount(Draw graphics, FontRenderer font, String amount, int x, int y) {
+    /** 位姿空间内的数量文本（流程图节点）：跟着当前矩阵走。 */
+    private static void renderAmountNow(Draw graphics, FontRenderer font, String amount,
+                                        int x, int y) {
         if (amount == null || J8.isBlank(amount)) {
             return;
         }

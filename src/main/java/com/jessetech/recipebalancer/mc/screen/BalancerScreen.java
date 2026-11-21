@@ -601,7 +601,8 @@ public final class BalancerScreen extends RbContainerScreen implements JeiPanelS
             return;
         }
         graphics.renderItem(stack, x + 1, y + 1);
-        ItemKeyMapper.renderAmountOverlay(graphics, font, amount, x, y);
+        // 物品数量走原版角标通道（位置/颜色/深度都由原版处理）
+        graphics.renderStackAmount(font, stack, x, y, amount);
     }
 
     private void drawTargets(Draw graphics, int mouseX, int mouseY) {

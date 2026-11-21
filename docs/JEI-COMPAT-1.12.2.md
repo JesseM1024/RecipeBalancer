@@ -52,7 +52,7 @@
 | 渲染器签名 | `render(MatrixStack, int, int, T)` | `render(Minecraft, int, int, T)` |
 | 渲染器 tooltip | `getTooltip(T, ITooltipFlag)` → `List<ITextComponent>` | `getTooltip(Minecraft, T, ITooltipFlag)` → **`List<String>`** |
 | 数量 | 反射 `IIngredientHelper#getAmount` | **没有 `getAmount`**；流体用 `FluidStack.amount` 字段 |
-| 书签 | `IJeiRuntime#getBookmarkOverlay()`（7.x 就有） | 4.15+ 才有 |
+| 书签 | `IJeiRuntime#getBookmarkOverlay()`（7.x 就有） | **4.15.0.276** 才有；且 `IBookmarkOverlay` 只暴露 `getIngredientUnderMouse()`，列全部书签仍要反射 `BookmarkList` |
 | 焦点构造 | `IRecipeManager#createFocus(...)` | 4.16 前无公开工厂 → 反射 `mezz.jei.gui.Focus(IFocus.Mode, V)` |
 
 ## 3. 关键签名（4.8.5.160 与 4.24.0.1043 逐字一致的部分）
@@ -97,7 +97,7 @@ Collection<Class> getRegisteredIngredientClasses();
 | 二级界面面板让位 | `IGuiScreenHandler` / `IGuiProperties`（4.8.4+） | 不注册，JEI 面板照旧覆盖二级界面 |
 | 拖拽录入 | `IGhostIngredientHandler`（4.8.4+） | 不注册；高亮逻辑本身不依赖 JEI |
 | `IGlobalGuiHandler` 兜底 | 4.14+（用**动态代理**注册，避免编译期依赖） | 不注册，只靠容器处理器 |
-| 书签导入 | 4.15+ 公开 API；4.13/4.14 反射内部字段 | 返回空表，告警一次 |
+| 书签导入 | 4.15.0.276+（公开 accessor + 反射 `BookmarkList`） | 不做反射兜底：按钮文字转金橙色，进世界时聊天栏提示需要 4.15.0.276 |
 | R/U/A 跳转 | `mezz.jei.gui.Focus` 构造器 | 构造失败则只打一次警告，不跳转 |
 | 配方页「编码此配方」 | `RecipesGui#recipeLayouts` + `GuiIngredient#rect` | 反射失败则整个叠加层降级（告警一次），主界面与求解不受影响 |
 
@@ -150,11 +150,11 @@ Collection<Class> getRegisteredIngredientClasses();
 | 悬停编码格/目标格/配方库/背包 → R/U/A | 需要 JEI ≥ 4.8.5 |
 | 从 JEI 拖物品到格子/清单网格 | 绿色高亮只画一层 |
 | 配方页「编码此配方」按钮 | 按钮在配方右上角，悬停时配方库能自产的槽位标蓝 |
-| 书签批量导入 | JEI ≥ 4.15 走公开 API，4.13/4.14 走反射 |
+| 书签批量导入 | 仅在 JEI ≥ 4.15.0.276 可用；低版本按钮为金橙色并给出提示 |
 | 低版本 JEI（如 4.7.9.96）首次进世界 | 聊天栏出现「检测到低版本 JEI」提示 |
 
 ## 9. 已知限制
 
 - 没有服务端配方转移（`IRecipeTransferHandler`）：编码只是本地草稿。
-- 配方页按钮与书签都依赖 JEI 内部字段，跨大版本仍可能失效（有一/两次告警，功能降级但不崩）。
+- 配方页按钮与书签列表都依赖 JEI 内部字段，跨大版本仍可能失效（有一/两次告警，功能降级但不崩）。\n- 书签在 4.13/4.14 上**明确不支持**：`BookmarkOverlay` 被藏在 `ILeftAreaContent` 里，实测反射与对象图搜索都不可靠，故按版本判能力而不是猜结构。
 - `runClient` 不能验证 JEI（JEI 的 config 注册在 dev 环境会抛异常），JEI 相关验证一律在实机实例做。
