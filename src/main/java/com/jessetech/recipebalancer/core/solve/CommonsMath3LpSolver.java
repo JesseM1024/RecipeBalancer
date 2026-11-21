@@ -1,17 +1,17 @@
 package com.jessetech.recipebalancer.core.solve;
 
-import org.apache.commons.math3.exception.MathRuntimeException;
-import org.apache.commons.math3.exception.TooManyIterationsException;
-import org.apache.commons.math3.optim.PointValuePair;
-import org.apache.commons.math3.optim.linear.LinearConstraint;
-import org.apache.commons.math3.optim.linear.LinearConstraintSet;
-import org.apache.commons.math3.optim.linear.LinearObjectiveFunction;
-import org.apache.commons.math3.optim.linear.NoFeasibleSolutionException;
-import org.apache.commons.math3.optim.linear.NonNegativeConstraint;
-import org.apache.commons.math3.optim.linear.Relationship;
-import org.apache.commons.math3.optim.linear.SimplexSolver;
-import org.apache.commons.math3.optim.linear.UnboundedSolutionException;
-import org.apache.commons.math3.optim.nonlinear.scalar.GoalType;
+import com.jessetech.recipebalancer.internal.math3.exception.MathRuntimeException;
+import com.jessetech.recipebalancer.internal.math3.exception.TooManyIterationsException;
+import com.jessetech.recipebalancer.internal.math3.optim.PointValuePair;
+import com.jessetech.recipebalancer.internal.math3.optim.linear.LinearConstraint;
+import com.jessetech.recipebalancer.internal.math3.optim.linear.LinearConstraintSet;
+import com.jessetech.recipebalancer.internal.math3.optim.linear.LinearObjectiveFunction;
+import com.jessetech.recipebalancer.internal.math3.optim.linear.NoFeasibleSolutionException;
+import com.jessetech.recipebalancer.internal.math3.optim.linear.NonNegativeConstraint;
+import com.jessetech.recipebalancer.internal.math3.optim.linear.Relationship;
+import com.jessetech.recipebalancer.internal.math3.optim.linear.SimplexSolver;
+import com.jessetech.recipebalancer.internal.math3.optim.linear.UnboundedSolutionException;
+import com.jessetech.recipebalancer.internal.math3.optim.nonlinear.scalar.GoalType;
 
 import java.util.ArrayList;
 import java.util.List;

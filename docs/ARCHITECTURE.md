@@ -246,10 +246,9 @@ SCC 分解 → 每 SCC **最小反馈顶点集**（|SCC|≤12 精确枚举，按
 - scipy 映射：`A_ub/b_ub`（≤ 约束）→ `LinearConstraint(LEQ)`；等式约束 → `EQ`；
   **变量只有下界 0**（`restrictToNonNegative=true`），禁用配方用**删列**实现
   `x_j = 0`——commons-math3 无任意上下界 API，不做 bounds 适配层；big-M 直接写进目标向量（语义同 P0-C）。
-- **分发形态（R-06 已定）**：commons-math3 **直接把 class 解包进模组 jar**
-  （Gradle `shaded` 配置 + `jar { from(zipTree) }`），不走 JarJar。
-  2026-10-25 实测：JarJar 版在实机/IDE 仍报 `NoClassDefFoundError`；改为解包后，
-  **仅用模组 jar 启动独立 Java 进程即可求解**（无任何外部 math3）。
+- **1.20.1 分发形态**：Shadow 将 commons-math3 的类和资源迁移到
+  `com.jessetech.recipebalancer.internal.math3` 对应的路径。开发运行和正式模组 JAR 共用
+  这份输出，避免 Forge 与其他模组内嵌的 `commons.math3` 同时加载时出现同包冲突。
 - **多解问题（R-10）**：LP 最优解可退化不唯一，CM3 与 HiGHS 可能给出不同顶点。
   对拍按 §7 分层策略执行，**不追求逐位速率恒等**；差异必须记录。
 - **S-04 实测（2026-10-25）**：`epsilon=1e-10`、`maxIterations=200000`、变量非负 + 删列后，
@@ -602,7 +601,7 @@ Java → JS 推送（`executeJavaScript`）：
 | R-03 | 无 AWT toolkit 进程里构造 KeyEvent | ⏸ 暂缓 | 恢复时 S-02；键码自映射 + CefKeyEvent 直填 |
 | R-04 | 中文 IME 输入（OSR 已知痛点） | ✅ 已消除 | 原生 `EditBox` 由 MC 处理 IME/粘贴 |
 | R-05 | CEF 内存 +~300MB | ⏸ 暂缓 | 恢复时配置开关 + 文档告知 |
-| R-06 | commons-math3 / gson 分发冲突（其他模组可能内嵌） | 低 | commons-math3 已 **直接 shade 进模组 jar**（单 jar 2.27MB，无嵌套依赖）；gson 用加载器自带（`compileOnly`） |
+| R-06 | commons-math3 / gson 分发冲突（其他模组可能内嵌） | 低 | 1.20.1 把 commons-math3 迁到模组私有包名后打入 JAR，Gson 用加载器自带（`compileOnly`） |
 | R-07 | GUI scale 与坐标换算错位（点击偏） | 低 | 原生控件统一用 GUI 缩放坐标；验收含 150% DPI |
 | R-08 | JEI 19.39 / 19.70 API 逐行核实（lookup/ghost 签名） | 中 | 沿用 logiscope 的"逐行核实"纪律，动工前先读 API jar；以 dev 19.39 为编译基准 |
 | R-09 | CEF 帧位序（BGRA/RGBA） | ⏸ 暂缓 | 恢复时 S-03 |
