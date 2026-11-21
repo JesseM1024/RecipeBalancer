@@ -5,41 +5,39 @@ import com.jessetech.recipebalancer.core.util.J8;
 import com.jessetech.recipebalancer.mc.itemmap.IngredientKey;
 import com.jessetech.recipebalancer.mc.itemmap.ItemKeyMapper;
 import mezz.jei.api.ingredients.IIngredientHelper;
-import mezz.jei.api.ingredients.IIngredientType;
-import mezz.jei.api.runtime.IIngredientManager;
-import mezz.jei.api.runtime.IJeiRuntime;
+import mezz.jei.api.ingredients.IIngredientRegistry;
 import net.minecraft.item.ItemStack;
 
 import java.lang.reflect.Method;
-import java.util.Optional;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Map;
 
 /**
  * 把 JEI 的任意配料（物品 / 流体 / 化学品…）转成可持久化的 key + 数量。
  *
- * <p>1.16.5 的 JEI 7.x 与我熟悉的 9.x/15.x 差别很大：
- * <ul>
- *   <li>没有 {@code ITypedIngredient}，配料就是<b>裸对象</b>（{@code ItemStack} / {@code FluidStack} / …）；</li>
- *   <li>类型标识用 {@code IIngredientType#getIngredientClass().getName()}
- *       （7.x 没有 uid 概念）；</li>
- *   <li>helper 没有 {@code getAmount}，数量只能反射读配料自带的 {@code getAmount()}。</li>
- * </ul>
+ * <p>1.12.2 的 JEI 4.x 没有 {@code ITypedIngredient}：配料就是<b>裸对象</b>。
+ * 类型标识用配料类的全名（{@code IIngredientType} 直到 4.12 才出现，本模组统一走
+ * {@code Class} 系 API，一份代码覆盖 4.8.5 ~ 4.24）。
+ *
+ * <p>数量：物品取堆叠数；其它配料反射读 {@code getAmount()}（流体/化学品有，物品没有）。
  */
 public final class JeiIngredientMapper {
 
     /** 已打过数量诊断的配料名（避免刷屏）。 */
     private static final java.util.Set<String> LOGGED =
-            java.util.Collections.synchronizedSet(new java.util.HashSet<String>());
+            Collections.synchronizedSet(new java.util.HashSet<String>());
 
     /**
      * key → 原始配料对象的会话缓存（有界 LRU，最多 4096 条）。
      *
      * <p>为什么需要它：反查靠 {@code IIngredientHelper#getUniqueId}，但部分配料的 uniqueId
-     * 不含完整 NBT（Create 的药水流体就是这样），或同一配方对象在布局阶段被复制、uniqueId
-     * 与写入时有细微差别，导致「编码后变成自定义物质、R/U 失效」。
-     * 只要这一局里是我们自己编码进去的 key，就直接记住对象本身，不依赖反查。
+     * 不含完整 NBT，或同一配方对象在布局阶段被复制、uniqueId 与写入时有细微差别，
+     * 导致「编码后变成自定义物质、R/U 失效」。只要这一局里是我们自己编码进去的 key，
+     * 就直接记住对象本身，不依赖反查。
      */
-    private static final java.util.Map<String, Object> KEY_CACHE =
-            java.util.Collections.synchronizedMap(
+    private static final Map<String, Object> KEY_CACHE =
+            Collections.synchronizedMap(
                     new java.util.LinkedHashMap<String, Object>(256, 0.75f, true) {
                         @Override
                         protected boolean removeEldestEntry(
@@ -47,6 +45,9 @@ public final class JeiIngredientMapper {
                             return size() > 4096;
                         }
                     });
+
+    private JeiIngredientMapper() {
+    }
 
     /** 记住 key 与它的原始配料，供渲染/悬停直接复用。 */
     static void remember(String key, Object ingredient) {
@@ -66,7 +67,7 @@ public final class JeiIngredientMapper {
         LOGGED.clear();
     }
 
-    /** 一个可持久化的配料：key + 数量 + 显示名（record 在 Java 8 上不可用）。 */
+    /** 一个可持久化的配料：key + 数量 + 显示名（Java 8，不能写 record）。 */
     public static final class Mapped {
 
         private final String key;
@@ -92,9 +93,6 @@ public final class JeiIngredientMapper {
         }
     }
 
-    private JeiIngredientMapper() {
-    }
-
     /** @return 解析不了返回 null */
     public static Mapped of(Object ingredient) {
         if (ingredient == null) {
@@ -107,13 +105,12 @@ public final class JeiIngredientMapper {
             }
             return mapped;
         }
-        IJeiRuntime runtime = runtime();
-        if (runtime == null) {
+        IIngredientRegistry registry = registry();
+        if (registry == null) {
             return null;
         }
         try {
-            IIngredientManager manager = runtime.getIngredientManager();
-            IIngredientHelper<Object> helper = helperOf(manager, ingredient);
+            IIngredientHelper<Object> helper = helperOf(registry, ingredient);
             if (helper == null) {
                 return null;
             }
@@ -122,12 +119,9 @@ public final class JeiIngredientMapper {
             long rawAmount = reflectiveAmount(ingredient);
             // 非物品默认是 mB 计量；500 mB -> 0.5 B
             double amount = rawAmount > 0 ? rawAmount / 1000.0 : 1.0;
-            String key = IngredientKey.encode(typeId(manager.getIngredientType(ingredient)),
-                    uniqueId, name);
+            String key = IngredientKey.encode(ingredient.getClass().getName(), uniqueId, name);
             // 诊断（每种配料只打一次）：确认 JEI 给的原始数量与换算是否正确
             if (LOGGED.add(name)) {
-                // toString 里对流体会带 amount（FluidStack{...Amount=250}），
-                // 用于核对「JEI 显示的数量」与「我们读到的数量」是否一致
                 RecipeBalancerMod.LOGGER.info(
                         "[RecipeBalancer] 配料数量: {} class={} 原始={} -> {} B,"
                                 + " uniqueId={}, 实例={}",
@@ -148,7 +142,7 @@ public final class JeiIngredientMapper {
         }
         return new Mapped(ItemKeyMapper.of(stack),
                 Math.max(1.0, stack.getCount()),
-                stack.getDisplayName().getString());
+                stack.getDisplayName());
     }
 
     /**
@@ -161,13 +155,12 @@ public final class JeiIngredientMapper {
         if (ingredient == null) {
             return null;
         }
-        IJeiRuntime runtime = runtime();
-        if (runtime == null) {
+        IIngredientRegistry registry = registry();
+        if (registry == null) {
             return null;
         }
         try {
-            IIngredientHelper<Object> helper =
-                    helperOf(runtime.getIngredientManager(), ingredient);
+            IIngredientHelper<Object> helper = helperOf(registry, ingredient);
             if (helper == null) {
                 return null;
             }
@@ -178,37 +171,60 @@ public final class JeiIngredientMapper {
         }
     }
 
-    /** 7.x 没有 uid：用配料类的全名当类型标识。 */
-    static String typeId(IIngredientType<?> type) {
-        Class<?> ingredientClass = type == null ? null : type.getIngredientClass();
-        return ingredientClass == null ? "" : ingredientClass.getName();
-    }
-
-    /** 按类型标识找回已注册的 {@code IIngredientType}。 */
-    static Optional<IIngredientType<?>> findType(IIngredientManager manager, String typeId) {
-        if (manager == null || J8.isBlank(typeId)) {
-            return Optional.empty();
+    /** 按类型标识（配料类全名）找回注册过的配料 Class。 */
+    static Class<?> findType(IIngredientRegistry registry, String typeId) {
+        if (registry == null || J8.isBlank(typeId)) {
+            return null;
         }
-        for (IIngredientType<?> candidate : manager.getRegisteredIngredientTypes()) {
-            if (typeId.equals(typeId(candidate))) {
-                return Optional.of(candidate);
+        try {
+            for (Class<?> candidate : registeredClasses(registry)) {
+                if (typeId.equals(candidate.getName())) {
+                    return candidate;
+                }
             }
+        } catch (RuntimeException | LinkageError ignored) {
+            // 自定义配料类型缺失时当作解析失败
         }
-        return Optional.empty();
+        return null;
     }
 
     @SuppressWarnings("unchecked")
-    static IIngredientHelper<Object> helperOf(IIngredientManager manager, Object ingredient) {
-        if (manager == null || ingredient == null) {
+    static Collection<Class<?>> registeredClasses(IIngredientRegistry registry) {
+        return (Collection<Class<?>>) (Collection<?>) registry.getRegisteredIngredientClasses();
+    }
+
+    @SuppressWarnings("unchecked")
+    static IIngredientHelper<Object> helperOf(IIngredientRegistry registry, Object ingredient) {
+        if (registry == null || ingredient == null) {
             return null;
         }
-        IIngredientHelper<?> helper = manager.getIngredientHelper(ingredient);
-        return (IIngredientHelper<Object>) helper;
+        return (IIngredientHelper<Object>) registry.getIngredientHelper(ingredient);
+    }
+
+    @SuppressWarnings("unchecked")
+    static <T> Collection<T> allIngredients(IIngredientRegistry registry, Class<T> type) {
+        if (registry == null || type == null) {
+            return Collections.emptyList();
+        }
+        return registry.getAllIngredients(type);
+    }
+
+    @SuppressWarnings("unchecked")
+    static <T> IIngredientHelper<T> helperOfClass(IIngredientRegistry registry, Class<T> type) {
+        if (registry == null || type == null) {
+            return null;
+        }
+        return (IIngredientHelper<T>) registry.getIngredientHelper(type);
     }
 
     private static long reflectiveAmount(Object ingredient) {
         if (ingredient == null) {
             return -1;
+        }
+        // 1.12.2 的 FluidStack 只有 public int amount 字段（没有 getAmount()）：
+        // 少了这条，流体量一律回落到默认 1 B —— 热力的 0.25 B、MEK 的 2 mB 都会变成 1 B。
+        if (ingredient instanceof net.minecraftforge.fluids.FluidStack) {
+            return ((net.minecraftforge.fluids.FluidStack) ingredient).amount;
         }
         try {
             Method method = ingredient.getClass().getMethod("getAmount");
@@ -218,13 +234,24 @@ public final class JeiIngredientMapper {
                 return ((Number) value).longValue();
             }
         } catch (ReflectiveOperationException | RuntimeException ignored) {
-            // 物品之外的配料不一定有数量概念，按 1 处理
+            // 换字段兜底
+        }
+        // 其它模组的「栈」类型（Mekanism 气体等）也常用 public int amount 字段
+        try {
+            java.lang.reflect.Field field = ingredient.getClass().getField("amount");
+            Object value = field.get(ingredient);
+            if (value instanceof Number) {
+                return ((Number) value).longValue();
+            }
+        } catch (ReflectiveOperationException | RuntimeException ignored) {
+            // 确实没有数量概念（例如某些自定义配料），按 1 处理
         }
         return -1;
     }
 
-    static IJeiRuntime runtime() {
-        Object runtime = JeiRuntimeHolder.get();
-        return runtime instanceof IJeiRuntime ? (IJeiRuntime) runtime : null;
+    /** 1.12.2 的配料注册表（在 {@code register(IModRegistry)} 阶段捕获）。 */
+    static IIngredientRegistry registry() {
+        Object registry = JeiRuntimeHolder.ingredientRegistry();
+        return registry instanceof IIngredientRegistry ? (IIngredientRegistry) registry : null;
     }
 }

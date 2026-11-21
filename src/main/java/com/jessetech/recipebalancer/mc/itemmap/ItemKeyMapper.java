@@ -1,22 +1,22 @@
 package com.jessetech.recipebalancer.mc.itemmap;
 
 import com.jessetech.recipebalancer.core.util.J8;
-
 import com.jessetech.recipebalancer.mc.i18n.Lang;
 import com.jessetech.recipebalancer.mc.ui.Chat;
 import com.jessetech.recipebalancer.mc.ui.Draw;
-import com.mojang.blaze3d.matrix.MatrixStack;
-import net.minecraft.util.text.TextFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.FontRenderer;
-import net.minecraft.nbt.CompoundNBT;
-import net.minecraft.nbt.JsonToNBT;
-import net.minecraft.util.text.ITextComponent;
-import net.minecraft.util.ResourceLocation;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.PotionItem;
 import net.minecraft.client.util.ITooltipFlag;
-import net.minecraftforge.registries.ForgeRegistries;
+import net.minecraft.item.Item;
+import net.minecraft.item.ItemPotion;
+import net.minecraft.item.ItemStack;
+import net.minecraft.nbt.JsonToNBT;
+import net.minecraft.nbt.NBTTagCompound;
+import net.minecraft.util.ResourceLocation;
+import net.minecraft.util.text.ITextComponent;
+import net.minecraft.util.text.Style;
+import net.minecraft.util.text.TextFormatting;
+import net.minecraftforge.fml.common.registry.ForgeRegistries;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -30,15 +30,20 @@ import java.util.regex.Pattern;
 
 /**
  * 物品身份与图标：core 里物品是字符串（registry id 或自定义名），
- * 这里负责与 {@link ItemStack} 互转，以及“未注册物品”的占位渲染。
+ * 这里负责与 {@link ItemStack} 互转，以及"未注册物品"的占位渲染。
  *
- * <p>1.18.2 没有 1.20.5+ 的数据组件（DataITextComponents）：带附加数据的物品
- * 用整份 NBT 走 {@code stack|base64(snbt)} 保存，语义与 1.21.1 线的
- * “带 patch 才存完整 stack”一致 —— 没有 NBT 的普通物品仍然只存 registry id。
+ * <p>带附加数据的物品用整份 NBT 走 {@code stack|base64(snbt)} 保存，
+ * 语义与其它版本线一致 —— 没有 NBT 的普通物品仍然只存 registry id。
+ *
+ * <p>1.12.2 的差异：NBT 类是 {@code NBTTagCompound} / {@code JsonToNbt}，
+ * {@code ItemStack} 由 NBT 构造（没有 {@code read/write} 静态对），
+ * 显示名与 tooltip 都是 {@code String} 而不是组件。
  */
 public final class ItemKeyMapper {
 
     private static final String STACK_PREFIX = "stack|";
+    /** 1.12.2 的物品变体用 metadata 区分：key 写成 {@code minecraft:fish#3}。 */
+    private static final String META_SEPARATOR = "#";
     private static final Map<String, ItemStack> STACK_CACHE = new ConcurrentHashMap<>();
     private static final Pattern STACK_KEY_PATTERN = Pattern.compile("stack\\|[A-Za-z0-9_-]+");
     private static final Pattern INGREDIENT_KEY_PATTERN =
@@ -47,7 +52,7 @@ public final class ItemKeyMapper {
     /** ingredient key 里固化的是编码当时的名称，换语言后需重新解析。 */
     private static final Map<String, String> INGREDIENT_NAME_CACHE = new ConcurrentHashMap<>();
 
-    /** 非物品 ingredient 的渲染钩子；JEI 适配层（后续移植）在运行期安装，避免无 JEI 环境加载 JEI 类。 */
+    /** 非物品 ingredient 的渲染钩子；JEI 适配层在运行期安装，避免无 JEI 环境加载 JEI 类。 */
     public interface IngredientRenderHook {
         boolean render(Draw graphics, FontRenderer font, String key, int x, int y, String amount);
 
@@ -85,6 +90,10 @@ public final class ItemKeyMapper {
     /**
      * 普通物品只存 registry id；带 NBT（药水、附魔、自定义名等）时
      * 用 {@code stack|<base64(snbt)>} 保存完整 ItemStack。
+     *
+     * <p><b>1.12.2 特有</b>：物品变体靠 metadata 区分（河豚 = {@code minecraft:fish} 的
+     * meta 3，生鱼是 meta 0），所以 meta ≠ 0 时必须写进 key，否则不同变体会撞成同一个物品。
+     * 形如 {@code minecraft:fish#3}。
      */
     public static String of(ItemStack stack) {
         if (stack == null || stack.isEmpty()) {
@@ -96,17 +105,20 @@ public final class ItemKeyMapper {
         }
         ItemStack single = stack.copy();
         single.setCount(1);
-        if (!single.hasTag()) {
-            return id.toString();
+        int meta = single.getMetadata();
+        if (!single.hasTagCompound()) {
+            return meta == 0 ? id.toString() : id + META_SEPARATOR + meta;
         }
         try {
-            CompoundNBT tag = single.write(new CompoundNBT());
+            NBTTagCompound tag = single.writeToNBT(new NBTTagCompound());
+            // writeToNBT 不写 Damage（metadata 是独立字段）：补上，解码才不会丢掉变体
+            tag.setShort("Damage", (short) meta);
             String encoded = Base64.getUrlEncoder().withoutPadding()
                     .encodeToString(tag.toString().getBytes(StandardCharsets.UTF_8));
             return STACK_PREFIX + encoded;
         } catch (RuntimeException e) {
             // 极端环境退化到 registry id，至少不崩
-            return id.toString();
+            return meta == 0 ? id.toString() : id + META_SEPARATOR + meta;
         }
     }
 
@@ -118,20 +130,80 @@ public final class ItemKeyMapper {
         if (id.startsWith(STACK_PREFIX)) {
             return STACK_CACHE.computeIfAbsent(id, ItemKeyMapper::decodeStack);
         }
-        ResourceLocation location = ResourceLocation.tryCreate(id);
+        int meta = metaOf(id);
+        String plain = baseIdOf(id);
+        ResourceLocation location = parseLocation(plain);
         if (location == null) {
             return ItemStack.EMPTY;
         }
-        net.minecraft.item.Item item = ForgeRegistries.ITEMS.getValue(location);
-        return item == null ? ItemStack.EMPTY : new ItemStack(item);
+        Item item = ForgeRegistries.ITEMS.getValue(location);
+        return item == null ? ItemStack.EMPTY : new ItemStack(item, 1, meta);
+    }
+
+    /** key 里带的 metadata（{@code minecraft:fish#3}，也接受旧写法 {@code minecraft:fish:3}）。 */
+    private static int metaOf(String id) {
+        int hash = id.indexOf(META_SEPARATOR);
+        if (hash >= 0) {
+            return parseInt(id.substring(hash + META_SEPARATOR.length()));
+        }
+        int colon = id.lastIndexOf(':');
+        if (colon > 0 && colon < id.length() - 1) {
+            String tail = id.substring(colon + 1);
+            if (isNumeric(tail)) {
+                return parseInt(tail);
+            }
+        }
+        return 0;
+    }
+
+    /** 去掉 key 里的 metadata，只留 registry id。 */
+    private static String baseIdOf(String id) {
+        int hash = id.indexOf(META_SEPARATOR);
+        if (hash >= 0) {
+            return id.substring(0, hash);
+        }
+        int colon = id.lastIndexOf(':');
+        if (colon > 0 && colon < id.length() - 1 && isNumeric(id.substring(colon + 1))) {
+            return id.substring(0, colon);
+        }
+        return id;
+    }
+
+    private static boolean isNumeric(String text) {
+        if (text.isEmpty()) {
+            return false;
+        }
+        for (int i = 0; i < text.length(); i++) {
+            if (!Character.isDigit(text.charAt(i))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static int parseInt(String text) {
+        try {
+            return Integer.parseInt(text);
+        } catch (NumberFormatException e) {
+            return 0;
+        }
+    }
+
+    /** 1.12.2 没有 {@code ResourceLocation.tryCreate}：非法 id 会抛异常。 */
+    private static ResourceLocation parseLocation(String id) {
+        try {
+            return new ResourceLocation(id);
+        } catch (RuntimeException e) {
+            return null;
+        }
     }
 
     private static ItemStack decodeStack(String key) {
         try {
             String snbt = new String(Base64.getUrlDecoder()
                     .decode(key.substring(STACK_PREFIX.length())), StandardCharsets.UTF_8);
-            CompoundNBT tag = JsonToNBT.getTagFromJson(snbt);
-            ItemStack stack = ItemStack.read(tag);
+            NBTTagCompound tag = JsonToNBT.getTagFromJson(snbt);
+            ItemStack stack = new ItemStack(tag);
             if (stack.isEmpty()) {
                 return ItemStack.EMPTY;
             }
@@ -150,7 +222,8 @@ public final class ItemKeyMapper {
                 return id.toString();
             }
         }
-        return normalize(key);
+        // 解析不出物品时也要去掉 metadata 再当注册名用（占位色/短标签要稳定）
+        return baseIdOf(normalize(key));
     }
 
     public static boolean exists(String key) {
@@ -171,7 +244,7 @@ public final class ItemKeyMapper {
         }
         ItemStack stack = stack(key);
         if (!stack.isEmpty()) {
-            return stack.getDisplayName().getString();
+            return stack.getDisplayName();
         }
         return normalize(key);
     }
@@ -209,12 +282,7 @@ public final class ItemKeyMapper {
     }
 
     /**
-     * 严格解析用户输入，只接受**完全一致**的写法，不做任何模糊/前缀匹配：
-     * <ul>
-     *   <li>完整的 ingredient key（{@code ingredient|…}）；</li>
-     *   <li>完整的物品注册名，如 {@code minecraft:stone}、{@code ae2:debug_item_gen}；</li>
-     *   <li>完整的显示名，如「石头」「镁粉」。</li>
-     * </ul>
+     * 严格解析用户输入，只接受**完全一致**的写法，不做任何模糊/前缀匹配。
      *
      * @return 空列表表示没有精确匹配；多个表示同名物品（极少见），此时要求改用注册名
      */
@@ -232,9 +300,36 @@ public final class ItemKeyMapper {
         }
         List<String> byName = new ArrayList<>();
         for (ResourceLocation id : ForgeRegistries.ITEMS.getKeys()) {
-            String name = new ItemStack(ForgeRegistries.ITEMS.getValue(id)).getDisplayName().getString();
+            Item item = ForgeRegistries.ITEMS.getValue(id);
+            if (item == null) {
+                continue;
+            }
+            if (item.getHasSubtypes()) {
+                // 1.12.2 的变体是 metadata（河豚/生鱼都是 minecraft:fish）：逐个变体比名字
+                try {
+                    net.minecraft.util.NonNullList<ItemStack> subs =
+                            net.minecraft.util.NonNullList.create();
+                    item.getSubItems(net.minecraft.creativetab.CreativeTabs.SEARCH, subs);
+                    for (ItemStack sub : subs) {
+                        String subName = sub.getDisplayName();
+                        if (subName.equalsIgnoreCase(value) || of(sub).equalsIgnoreCase(value)) {
+                            byName.add(of(sub));
+                            if (byName.size() >= limit + 1) {
+                                break;
+                            }
+                        }
+                    }
+                } catch (RuntimeException | LinkageError ignored) {
+                    // 某些模组的变体枚举会抛异常：忽略该物品
+                }
+                continue;
+            }
+            String name = new ItemStack(item).getDisplayName();
             if (name.equalsIgnoreCase(value) || id.toString().equalsIgnoreCase(value)) {
                 byName.add(id.toString());
+            }
+            if (byName.size() >= limit + 1) {
+                break;
             }
         }
         if (byName.size() <= limit) {
@@ -252,17 +347,17 @@ public final class ItemKeyMapper {
         if (stack.isEmpty()) {
             return registryName(key);
         }
-        String name = stack.getDisplayName().getString();
-        if (!(stack.getItem() instanceof PotionItem)) {
+        String name = stack.getDisplayName();
+        if (!(stack.getItem() instanceof ItemPotion)) {
             return name;
         }
         // 直接用物品自身的 tooltip：Lingering 会按 0.25 时长因子、Splash 按原版规则显示
-        Minecraft minecraft = Minecraft.getInstance();
-        List<ITextComponent> tooltip = stack.getTooltip(
+        Minecraft minecraft = Minecraft.getMinecraft();
+        List<String> tooltip = stack.getTooltip(
                 minecraft == null ? null : minecraft.player, ITooltipFlag.TooltipFlags.NORMAL);
         List<String> effects = new ArrayList<>();
         for (int i = 1; i < tooltip.size(); i++) {
-            String line = tooltip.get(i).getString();
+            String line = tooltip.get(i);
             if (!J8.isBlank(line)) {
                 effects.add(line);
             }
@@ -299,7 +394,12 @@ public final class ItemKeyMapper {
             return IngredientKey.describe(key);
         }
         String id = baseItemId(key);
-        return id.isEmpty() ? normalize(key) : id;
+        if (id.isEmpty()) {
+            return normalize(key);
+        }
+        // 1.12.2 的习惯写法是 mod:name:meta（例如 minecraft:fish:3）
+        int meta = metaOf(normalize(key));
+        return meta == 0 ? id : id + ":" + meta;
     }
 
     /** 未注册物品的短标签：ASCII 取前 3 个字母，中文取第一个字。 */
@@ -335,7 +435,6 @@ public final class ItemKeyMapper {
         float r;
         float g;
         float b;
-        // 1.16.5 线是 Java 8：不能用 switch 表达式的箭头语法
         switch (i % 6) {
             case 0:
                 r = brightness;
@@ -416,12 +515,10 @@ public final class ItemKeyMapper {
     }
 
     /**
-     * 在当前 {@link MatrixStack} 变换下画 18px 槽内图标（流程图节点用）。
+     * 在当前位姿变换下画 18px 槽内图标（流程图节点用）。
      *
      * <p>与 {@link #renderIcon} 的区别：物品走 {@code renderItemPosed}，位置与颜色都吃调用方的
      * 位姿变换 —— 调用方先 {@code translate} 到节点左上角，再调本方法。
-     * 之前流程图直接调 {@code renderIcon}（绝对坐标 + 老式物品渲染），
-     * 结果节点随相机平移缩放、图标却钉死在屏幕原点，这是 1.18.2 也有的老问题。
      */
     public static void renderIconPosed(Draw graphics, FontRenderer font, String key,
                                        String amount) {
@@ -472,10 +569,8 @@ public final class ItemKeyMapper {
         }
         int width = font.getStringWidth(amount);
         int maxWidth = 14;
-        // 抬高 z，避免数量文字被物品图标/槽位盖住
-        MatrixStack pose = graphics.pose();
+        Draw.Pose pose = graphics.pose();
         pose.push();
-        pose.translate(0, 0, 200);
         if (width <= maxWidth) {
             graphics.drawString(font, amount, x + 17 - width, y + 9, 0xFFFFFFFF, true);
         } else {
@@ -505,15 +600,15 @@ public final class ItemKeyMapper {
                 return;
             }
             lines.add(Chat.literal(ingredientDisplayName(id)));
-            lines.add(Chat.literal(IngredientKey.describe(id))
-                    .mergeStyle(TextFormatting.GRAY));
-            lines.add(Lang.c("非物品 ingredient；数量单位 B（500 mB = 0.5）")
-                    .mergeStyle(TextFormatting.DARK_GRAY));
+            lines.add(Chat.styled(IngredientKey.describe(id),
+                    new Style().setColor(TextFormatting.GRAY)));
+            lines.add(Chat.styled(Lang.t("非物品 ingredient；数量单位 B（500 mB = 0.5）"),
+                    new Style().setColor(TextFormatting.DARK_GRAY)));
         } else {
-            lines.add(Chat.literal(shortLabel(id)).mergeStyle(TextFormatting.GOLD));
-            lines.add(Chat.literal(id).mergeStyle(TextFormatting.GRAY));
-            lines.add(Lang.c("当前整合包未找到此物品（占位显示）")
-                    .mergeStyle(TextFormatting.DARK_GRAY));
+            lines.add(Chat.styled(shortLabel(id), new Style().setColor(TextFormatting.GOLD)));
+            lines.add(Chat.styled(id, new Style().setColor(TextFormatting.GRAY)));
+            lines.add(Chat.styled(Lang.t("当前整合包未找到此物品（占位显示）"),
+                    new Style().setColor(TextFormatting.DARK_GRAY)));
         }
         graphics.renderComponentTooltip(font, lines, mouseX, mouseY);
     }

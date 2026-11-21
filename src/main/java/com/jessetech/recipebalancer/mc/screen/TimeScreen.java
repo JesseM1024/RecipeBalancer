@@ -7,10 +7,11 @@ import com.jessetech.recipebalancer.mc.ui.AeStyle;
 import com.jessetech.recipebalancer.mc.ui.Buttons;
 import com.jessetech.recipebalancer.mc.ui.Chat;
 import com.jessetech.recipebalancer.mc.ui.Draw;
-import com.mojang.blaze3d.matrix.MatrixStack;
-import net.minecraft.client.gui.widget.button.Button;
-import net.minecraft.client.gui.widget.TextFieldWidget;
-import net.minecraft.client.gui.screen.Screen;
+import com.jessetech.recipebalancer.mc.ui.RbTextField;
+
+import com.jessetech.recipebalancer.mc.ui.Button;
+import net.minecraft.client.gui.GuiTextField;
+import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.util.text.ITextComponent;
 
 import java.util.function.DoubleConsumer;
@@ -18,11 +19,11 @@ import java.util.function.DoubleConsumer;
 /** 配方耗时编辑：表达式 + 单位（t/秒/分/时），确定后统一转 tick。 */
 public final class TimeScreen extends RbScreen implements JeiPanelScreen {
 
-    private final Screen parent;
+    private final GuiScreen parent;
     private final DoubleConsumer callback;
     private double ticks;
     private TimeUnit unit;
-    private TextFieldWidget expressionBox;
+    private GuiTextField expressionBox;
     private Button unitButton;
     private String status = "";
 
@@ -31,7 +32,7 @@ public final class TimeScreen extends RbScreen implements JeiPanelScreen {
     private static final int PANEL_W = 236;
     private static final int PANEL_H = 132;
 
-    public TimeScreen(Screen parent, double ticks, DoubleConsumer callback) {
+    public TimeScreen(GuiScreen parent, double ticks, DoubleConsumer callback) {
         super(Lang.c("配方耗时"));
         this.parent = parent;
         this.ticks = ticks > 0 ? ticks : 1.0;
@@ -45,7 +46,7 @@ public final class TimeScreen extends RbScreen implements JeiPanelScreen {
         panelX = (width - PANEL_W) / 2;
         panelY = (height - PANEL_H) / 2;
 
-        expressionBox = new TextFieldWidget(font, panelX + 8, panelY + 28, 150, 18,
+        expressionBox = new RbTextField(font, panelX + 8, panelY + 28, 150, 18,
                 Lang.c("耗时表达式"));
         expressionBox.setMaxStringLength(128);
         expressionBox.setText(TimeExpression.formatEditableNumber(unit.fromTicks(ticks)));
@@ -96,8 +97,8 @@ public final class TimeScreen extends RbScreen implements JeiPanelScreen {
     }
 
     @Override
-    public void renderBackground(MatrixStack pose) {
-        Draw graphics = new Draw(pose, this);
+    public void drawBackground(int tint) {
+        Draw graphics = new Draw(this);
         graphics.fill(0, 0, width, height, 0xB0101010);
         AeStyle.panel(graphics, panelX, panelY, PANEL_W, PANEL_H);
         AeStyle.header(graphics, panelX, panelY, PANEL_W, 20);
@@ -106,9 +107,9 @@ public final class TimeScreen extends RbScreen implements JeiPanelScreen {
     }
 
     @Override
-    public void render(MatrixStack pose, int mouseX, int mouseY, float partialTick) {
-        Draw graphics = new Draw(pose, this);
-        super.render(pose, mouseX, mouseY, partialTick);
+    public void drawScreen(int mouseX, int mouseY, float partialTicks) {
+        Draw graphics = new Draw(this);
+        super.drawScreen(mouseX, mouseY, partialTicks);
 
         String preview;
         try {
@@ -145,11 +146,11 @@ public final class TimeScreen extends RbScreen implements JeiPanelScreen {
      * {@code onClose()}，所以这里只能做收尾、绝不能再切屏，否则会无限递归。
      */
     @Override
-    public void onClose() {
+    public void onGuiClosed() {
     }
 
     @Override
-    public boolean isPauseScreen() {
+    public boolean doesGuiPauseGame() {
         return false;
     }
 

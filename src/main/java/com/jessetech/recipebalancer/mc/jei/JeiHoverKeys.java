@@ -7,11 +7,10 @@ import com.jessetech.recipebalancer.mc.screen.BalancerScreen;
 import net.minecraft.item.ItemStack;
 
 /**
- * 悬停槽位 → JEI 配料（1.16.5 / JEI 7.x）。
+ * 悬停槽位 → JEI 配料（1.12.2 / JEI 4.x）。
  *
- * <p>7.x 的 {@code IGuiContainerHandler#getIngredientUnderMouse} 返回的是
- * <b>裸配料对象</b>（{@code ItemStack} / {@code FluidStack} / …），
- * 不再是 9.x 的 {@code IClickableIngredient}。所以这里把界面给的 key
+ * <p>4.x 的 {@code IAdvancedGuiHandler#getIngredientUnderMouse} 返回的是
+ * <b>裸配料对象</b>（{@code ItemStack} / {@code FluidStack} / …）。所以这里把界面给的 key
  * 还原成 JEI 认识的对象即可：
  * <ul>
  *   <li>物品：{@link ItemKeyMapper#stack(String)}；</li>

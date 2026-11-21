@@ -11,11 +11,11 @@ import com.jessetech.recipebalancer.mc.itemmap.ScenarioKeyNormalizer;
 import com.jessetech.recipebalancer.mc.ui.AeStyle;
 import com.jessetech.recipebalancer.mc.ui.Buttons;
 import com.jessetech.recipebalancer.mc.ui.Draw;
-import com.mojang.blaze3d.matrix.MatrixStack;
-import net.minecraft.util.Util;
-import net.minecraft.client.gui.widget.button.Button;
-import net.minecraft.client.gui.widget.TextFieldWidget;
-import net.minecraft.client.gui.screen.Screen;
+import com.jessetech.recipebalancer.mc.ui.RbTextField;
+
+import com.jessetech.recipebalancer.mc.ui.Button;
+import net.minecraft.client.gui.GuiTextField;
+import net.minecraft.client.gui.GuiScreen;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -40,8 +40,8 @@ public final class ScenarioListScreen extends RbScreen implements JeiPanelScreen
     private int selected = -1;
     private double scroll;
     private String status = "";
-    private TextFieldWidget nameBox;
-    private TextFieldWidget filterBox;
+    private RbTextField nameBox;
+    private RbTextField filterBox;
 
     private int panelX = 20;
     private int panelY = 10;
@@ -70,14 +70,14 @@ public final class ScenarioListScreen extends RbScreen implements JeiPanelScreen
         String query = filterBox == null ? "" : filterBox.getText();
         int titleW = font.getStringWidth(Lang.t("配方集"));
         int filterX = panelX + 8 + titleW + 6;
-        filterBox = new TextFieldWidget(font, filterX, panelY + 3,
+        filterBox = new RbTextField(font, filterX, panelY + 3,
                 Math.max(48, panelX + PANEL_W - 8 - filterX), 14, Lang.c("筛选"));
         filterBox.setMaxStringLength(40);
         filterBox.setResponder(value -> applyFilter());
         filterBox.setText(query);
         addButton(filterBox);
 
-        nameBox = new TextFieldWidget(font, panelX + 8, panelY + PANEL_H - 52, 150, 18,
+        nameBox = new RbTextField(font, panelX + 8, panelY + PANEL_H - 52, 150, 18,
                 Lang.c("配方集名"));
         nameBox.setMaxStringLength(48);
         nameBox.setText(J8.isBlank(currentName) ? WorkspaceSession.DEFAULT_NAME : currentName);
@@ -153,12 +153,24 @@ public final class ScenarioListScreen extends RbScreen implements JeiPanelScreen
         Path directory = store.directory();
         try {
             Files.createDirectories(directory);
-            // 1.18.2 的 Util.OS 只有 openFile(File)，没有 openPath(Path)
-            Util.getOSType().openFile(directory.toFile());
+            // 1.12.2 的 Util 没有 openFile，直接用 AWT Desktop
+            openInFileManager(directory.toFile());
             status = Lang.t("已打开配方集文件夹");
         } catch (Exception e) {
             status = Lang.t("打开文件夹失败: %s", e.getMessage());
         }
+    }
+
+    /** 用系统文件管理器打开目录（1.12.2 没有 {@code Util.OS#openFile}）。 */
+    private static void openInFileManager(java.io.File file) throws java.io.IOException {
+        if (!java.awt.Desktop.isDesktopSupported()) {
+            throw new java.io.IOException("Desktop API 不可用");
+        }
+        java.awt.Desktop desktop = java.awt.Desktop.getDesktop();
+        if (!desktop.isSupported(java.awt.Desktop.Action.OPEN)) {
+            throw new java.io.IOException("系统不支持打开文件夹");
+        }
+        desktop.open(file);
     }
 
     /** 读取按钮：载入当前选中的配方集。 */
@@ -183,8 +195,8 @@ public final class ScenarioListScreen extends RbScreen implements JeiPanelScreen
     }
 
     @Override
-    public void renderBackground(MatrixStack pose) {
-        Draw graphics = new Draw(pose, this);
+    public void drawBackground(int tint) {
+        Draw graphics = new Draw(this);
         graphics.fill(0, 0, width, height, 0xB0101010);
         AeStyle.panel(graphics, panelX, panelY, PANEL_W, PANEL_H);
         AeStyle.header(graphics, panelX, panelY, PANEL_W, 20);
@@ -192,9 +204,9 @@ public final class ScenarioListScreen extends RbScreen implements JeiPanelScreen
     }
 
     @Override
-    public void render(MatrixStack pose, int mouseX, int mouseY, float partialTick) {
-        Draw graphics = new Draw(pose, this);
-        super.render(pose, mouseX, mouseY, partialTick);
+    public void drawScreen(int mouseX, int mouseY, float partialTicks) {
+        Draw graphics = new Draw(this);
+        super.drawScreen(mouseX, mouseY, partialTicks);
 
         AeStyle.subPanel(graphics, panelX + 4, listY, PANEL_W - 8, listH);
         graphics.enableScissor(panelX + 4, listY, panelX + PANEL_W - 4, listY + listH);
@@ -235,7 +247,7 @@ public final class ScenarioListScreen extends RbScreen implements JeiPanelScreen
     }
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+    protected boolean onMouseClicked(int mouseX, int mouseY, int button) {
         if (mouseX >= panelX + 4 && mouseX < panelX + PANEL_W - 4
                 && mouseY >= listY && mouseY < listY + listH) {
             int index = (int) ((mouseY - listY + scroll) / ROW_H);
@@ -248,17 +260,17 @@ public final class ScenarioListScreen extends RbScreen implements JeiPanelScreen
                 return true;
             }
         }
-        return super.mouseClicked(mouseX, mouseY, button);
+        return false;
     }
 
     /** 1.18.2：只有纵向滚动，签名比 1.20+ 少一个 scrollX。 */
     @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+    protected boolean onMouseScrolled(double delta) {
         if (mouseX >= panelX && mouseY >= listY && mouseY < listY + listH) {
             scroll -= delta * ROW_H * 2;
             return true;
         }
-        return super.mouseScrolled(mouseX, mouseY, delta);
+        return false;
     }
 
     /**
@@ -266,7 +278,7 @@ public final class ScenarioListScreen extends RbScreen implements JeiPanelScreen
      * {@code onClose()}，所以这里只能做收尾、绝不能再切屏，否则会无限递归。
      */
     @Override
-    public void onClose() {
+    public void onGuiClosed() {
     }
 
     /** ESC 返回上一级（按钮里的 displayGuiScreen 同理，都不会递归）。 */
@@ -282,7 +294,7 @@ public final class ScenarioListScreen extends RbScreen implements JeiPanelScreen
     }
 
     @Override
-    public boolean isPauseScreen() {
+    public boolean doesGuiPauseGame() {
         return false;
     }
 

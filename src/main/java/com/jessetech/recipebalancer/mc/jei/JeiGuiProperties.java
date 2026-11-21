@@ -2,9 +2,9 @@ package com.jessetech.recipebalancer.mc.jei;
 
 import com.jessetech.recipebalancer.RecipeBalancerMod;
 import com.jessetech.recipebalancer.mc.screen.JeiPanelScreen;
-import mezz.jei.api.gui.handlers.IGuiProperties;
+import mezz.jei.api.gui.IGuiProperties;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.screen.Screen;
+import net.minecraft.client.gui.GuiScreen;
 
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -12,8 +12,10 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * 把模组界面的面板位置告诉 JEI（决定 JEI 面板贴在哪一侧、是否遮挡）。
  *
- * <p>1.18.2 的 {@code IGuiProperties} 是 getter 风格（getGuiLeft/…），
- * 与 1.21.1 的 record 风格（guiLeft/…）不同，这里按 9.x/10.x 实现。
+ * <p>1.12.2 的 {@code IGuiProperties} 是 getter 风格，类名方法叫
+ * {@code getGuiClass()}（1.16.5 是 {@code getScreenClass()}）。
+ *
+ * <p><b>本类在 JEI 4.8.4 以上才会被加载</b>（{@link JeiRegistration} 在能力探测通过后才引用它）。
  */
 public final class JeiGuiProperties {
 
@@ -31,9 +33,8 @@ public final class JeiGuiProperties {
      * 当成结论缓存起来，书签列要等界面重新初始化才出现。所以布局就绪前直接返回 null
      * （JEI 对 null 是安全的，会当作「未知界面」）。
      */
-    public static <T extends Screen & JeiPanelScreen> IGuiProperties of(T screen,
-                                                                      JeiPanelScreen panel) {
-        if (screen.width <= 0 || screen.height <= 0) {
+    public static IGuiProperties of(GuiScreen screen, JeiPanelScreen panel) {
+        if (screen == null || screen.width <= 0 || screen.height <= 0) {
             return null;
         }
         if (LOGGED.add(screen.getClass())) {
@@ -42,7 +43,7 @@ public final class JeiGuiProperties {
         }
         return new IGuiProperties() {
             @Override
-            public Class<? extends Screen> getScreenClass() {
+            public Class<? extends GuiScreen> getGuiClass() {
                 return screen.getClass();
             }
 
@@ -69,13 +70,15 @@ public final class JeiGuiProperties {
             @Override
             public int getScreenWidth() {
                 return screen.width > 0 ? screen.width
-                        : Minecraft.getInstance().getMainWindow().getScaledWidth();
+                        : (int) (Minecraft.getMinecraft().displayWidth
+                        / Minecraft.getMinecraft().gameSettings.guiScale);
             }
 
             @Override
             public int getScreenHeight() {
                 return screen.height > 0 ? screen.height
-                        : Minecraft.getInstance().getMainWindow().getScaledHeight();
+                        : (int) (Minecraft.getMinecraft().displayHeight
+                        / Minecraft.getMinecraft().gameSettings.guiScale);
             }
         };
     }

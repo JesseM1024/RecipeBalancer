@@ -1,0 +1,17 @@
+[
+  {
+    "modid": "recipebalancer",
+    "name": "RecipeBalancer",
+    "description": "配方树自动配平：LP 求解 + AE 风格编码终端 + 流程图。/ Recipe tree balancing: LP solver + AE-style encoder + flow graph.",
+    "version": "${version}",
+    "mcversion": "${mcversion}",
+    "url": "",
+    "updateUrl": "",
+    "authorList": ["JesseTech"],
+    "credits": "",
+    "logoFile": "icon.png",
+    "screenshots": [],
+    "parent": "",
+    "dependencies": ["after:jei@${jeirange}"]
+  }
+]

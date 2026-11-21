@@ -4,7 +4,6 @@ import com.jessetech.recipebalancer.core.util.J8;
 
 import com.jessetech.recipebalancer.RecipeBalancerMod;
 import com.jessetech.recipebalancer.core.io.ScenarioStore;
-import net.minecraftforge.fml.loading.FMLPaths;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -30,7 +29,9 @@ public final class WorkspaceSession {
     private static final String MIGRATION_MARKER = ".migrated-from-config";
     private static final String LEGACY_DIRECTORY = "recipebalancer/scenarios";
 
-    private static final Path DIRECTORY = FMLPaths.GAMEDIR.get().resolve(DIRECTORY_NAME);
+    private static Path directory() {
+        return GamePaths.gameDir().resolve(DIRECTORY_NAME);
+    }
 
     private static ScenarioStore store;
 
@@ -41,7 +42,7 @@ public final class WorkspaceSession {
     public static synchronized ScenarioStore store() {
         if (store == null) {
             migrateLegacy();
-            store = new ScenarioStore(DIRECTORY);
+            store = new ScenarioStore(directory());
         }
         return store;
     }
@@ -56,7 +57,7 @@ public final class WorkspaceSession {
 
     /** 上次使用的工作区名（关闭界面/重启后仍保留）。 */
     public static synchronized String currentName() {
-        Path path = DIRECTORY.resolve(NAME_FILE);
+        Path path = directory().resolve(NAME_FILE);
         try {
             if (Files.isRegularFile(path)) {
                 // 1.16.5 线是 Java 8：没有 Files.readString
@@ -71,8 +72,9 @@ public final class WorkspaceSession {
 
     public static synchronized void saveName(String name) {
         try {
-            Files.createDirectories(DIRECTORY);
-            Files.write(DIRECTORY.resolve(NAME_FILE),
+            Path directory = directory();
+            Files.createDirectories(directory);
+            Files.write(directory.resolve(NAME_FILE),
                     nameOf(name).getBytes(StandardCharsets.UTF_8));
         } catch (IOException | RuntimeException e) {
             RecipeBalancerMod.LOGGER.warn("[RecipeBalancer] 记录当前工作区名失败", e);
@@ -80,13 +82,14 @@ public final class WorkspaceSession {
     }
 
     private static void migrateLegacy() {
-        Path legacy = FMLPaths.CONFIGDIR.get().resolve(LEGACY_DIRECTORY);
-        Path marker = DIRECTORY.resolve(MIGRATION_MARKER);
+        Path legacy = GamePaths.configDir().resolve(LEGACY_DIRECTORY);
+        Path directory = directory();
+        Path marker = directory.resolve(MIGRATION_MARKER);
         if (Files.exists(marker) || !Files.isDirectory(legacy)) {
             return;
         }
         try {
-            Files.createDirectories(DIRECTORY);
+            Files.createDirectories(directory);
             List<Path> files;
             try (Stream<Path> stream = Files.list(legacy)) {
                 files = stream.filter(path -> path.getFileName().toString().endsWith(".json"))
@@ -94,7 +97,7 @@ public final class WorkspaceSession {
             }
             int copied = 0;
             for (Path source : files) {
-                Path target = DIRECTORY.resolve(source.getFileName().toString());
+                Path target = directory.resolve(source.getFileName().toString());
                 if (Files.exists(target)) {
                     continue;
                 }
@@ -105,7 +108,7 @@ public final class WorkspaceSession {
             Files.write(marker, new byte[0]);
             if (copied > 0) {
                 RecipeBalancerMod.LOGGER.info("[RecipeBalancer] 已迁移 {} 个工作区到 {}",
-                        copied, DIRECTORY);
+                        copied, directory);
             }
         } catch (IOException | RuntimeException e) {
             RecipeBalancerMod.LOGGER.warn("[RecipeBalancer] 迁移旧工作区失败", e);

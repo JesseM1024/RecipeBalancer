@@ -1,6 +1,6 @@
 package com.jessetech.recipebalancer.mc.screen;
 
-import net.minecraft.client.renderer.Rectangle2d;
+import java.awt.Rectangle;
 import com.jessetech.recipebalancer.core.util.J8;
 
 import com.jessetech.recipebalancer.RecipeBalancerMod;
@@ -26,20 +26,21 @@ import com.jessetech.recipebalancer.mc.ui.Chat;
 import com.jessetech.recipebalancer.mc.jei.JeiRuntimeHolder;
 import com.jessetech.recipebalancer.mc.jei.JeiScreenSupport;
 import com.jessetech.recipebalancer.mc.ui.Draw;
+import com.jessetech.recipebalancer.mc.ui.RbTextField;
 import com.jessetech.recipebalancer.mc.ui.IconButton;
 import com.jessetech.recipebalancer.mc.ui.PixelIcon;
-import net.minecraft.client.audio.SimpleSound;
-import net.minecraft.util.SoundEvents;
-import com.mojang.blaze3d.matrix.MatrixStack;
-import net.minecraft.util.math.vector.Matrix4f;
+import com.jessetech.recipebalancer.mc.ui.Sounds;
+import net.minecraft.init.SoundEvents;
+
+import net.minecraft.client.renderer.Matrix4f;
 import net.minecraft.util.text.TextFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.FontRenderer;
-import net.minecraft.client.gui.widget.button.Button;
-import net.minecraft.client.gui.widget.TextFieldWidget;
+import com.jessetech.recipebalancer.mc.ui.Button;
+import net.minecraft.client.gui.GuiTextField;
 import net.minecraft.util.text.ITextComponent;
 import net.minecraft.util.text.ITextComponent;
-import net.minecraft.entity.player.PlayerInventory;
+import net.minecraft.entity.player.InventoryPlayer;
 import net.minecraft.item.ItemStack;
 
 import java.util.ArrayList;
@@ -157,24 +158,24 @@ public final class BalancerScreen extends RbContainerScreen implements JeiPanelS
     private IconButton solveButton;
     private IconButton rawListButton;
     private IconButton externalInputButton;
-    private TextFieldWidget nameBox;
-    private TextFieldWidget libraryFilterBox;
+    private RbTextField nameBox;
+    private RbTextField libraryFilterBox;
 
     /**
      * JEI 配方页按钮入口：带一个预填的编码草稿打开终端（配方仍需玩家复核后点「写入」）。
      */
     public static BalancerScreen withPattern(RecipePattern built) {
-        BalancerScreen screen = new BalancerScreen();
+        BalancerScreen GuiScreen = new BalancerScreen();
         if (built != null) {
-            screen.pattern.copyFrom(built);
-            screen.status = Lang.t("已从 JEI 导入编码；请检查设备/产物后点「写入」");
+            GuiScreen.pattern.copyFrom(built);
+            GuiScreen.status = Lang.t("已从 JEI 导入编码；请检查设备/产物后点「写入」");
         }
-        return screen;
+        return GuiScreen;
     }
 
     public BalancerScreen() {
         // 容器界面需要一个（零槽位的）空容器与玩家背包；背包只用于基类构造，不参与任何交互
-        super(new ClientEditorContainer(Minecraft.getInstance().player.inventory));
+        super(new ClientEditorContainer(Minecraft.getMinecraft().player.inventory));
     }
 
     @Override
@@ -272,17 +273,17 @@ public final class BalancerScreen extends RbContainerScreen implements JeiPanelS
         int openX = saveX - gap - buttonW;
         String typedName = nameBox == null ? scenarioName : nameBox.getText();
 
-        nameBox = new TextFieldWidget(font, panelX + 4, topY, Math.max(40, openX - 4 - panelX - 4), 16,
+        nameBox = new RbTextField(font, panelX + 4, topY, Math.max(40, openX - 4 - panelX - 4), 16,
                 Lang.c("工作区名"));
         nameBox.setMaxStringLength(48);
         nameBox.setText(typedName);
         addButton(nameBox);
 
         // 配方库筛选：左边关键字，右边原料/产物/设备三格开关
-        libraryFilterBox = new TextFieldWidget(font, contentX, libraryFilterY, LIB_FILTER_BOX, 14,
+        libraryFilterBox = new RbTextField(font, contentX, libraryFilterY, LIB_FILTER_BOX, 14,
                 Lang.c("筛选"));
         libraryFilterBox.setMaxStringLength(40);
-        // 1.18.2 的 TextFieldWidget 没有 setHint（1.19.2 才加）；占位由上方「筛选」标签承担
+        // 1.18.2 的 GuiTextField 没有 setHint（1.19.2 才加）；占位由上方「筛选」标签承担
         libraryFilterBox.setText(libraryQuery);
         libraryFilterBox.setResponder(value -> {
             libraryQuery = value;
@@ -358,10 +359,9 @@ public final class BalancerScreen extends RbContainerScreen implements JeiPanelS
         if (savedGuiScale < 0 || skipAutoScale || minecraft == null) {
             return false;
         }
-        // 用 Window 自己的公式估算目标缩放下的 GUI 高度
-        int target = minecraft.getMainWindow().calcGuiScale(savedGuiScale,
-                minecraft.gameSettings.forceUnicodeFont);
-        int targetHeight = (int) Math.ceil(minecraft.getMainWindow().getHeight() / (double) target);
+        // 1.12.2 没有 Window 对象：按缩放因子估 GUI 高度
+        int target = savedGuiScale <= 0 ? 1 : savedGuiScale;
+        int targetHeight = (int) Math.ceil(minecraft.displayHeight / (double) target);
         if (targetHeight - 8 < MIN_PANEL_H) {
             return false;
         }
@@ -383,7 +383,7 @@ public final class BalancerScreen extends RbContainerScreen implements JeiPanelS
         if (height - 8 >= MIN_PANEL_H) {
             return false;
         }
-        int scale = (int) minecraft.getMainWindow().getGuiScaleFactor();
+        int scale = new net.minecraft.client.gui.ScaledResolution(minecraft).getScaleFactor();
         if (scale <= 1) {
             // 已经是最小缩放：交回原有的压缩兜底（编码行可以再少）
             return false;
@@ -393,7 +393,7 @@ public final class BalancerScreen extends RbContainerScreen implements JeiPanelS
             savedGuiScale = minecraft.gameSettings.guiScale;
         }
         minecraft.gameSettings.guiScale = scale - 1;
-        minecraft.updateWindowSize();
+        minecraft.resize(minecraft.displayWidth, minecraft.displayHeight);
         return true;
     }
 
@@ -407,7 +407,7 @@ public final class BalancerScreen extends RbContainerScreen implements JeiPanelS
         minecraft.gameSettings.guiScale = value;
         skipAutoScale = true;
         try {
-            minecraft.updateWindowSize();
+            minecraft.resize(minecraft.displayWidth, minecraft.displayHeight);
         } finally {
             skipAutoScale = false;
         }
@@ -451,9 +451,9 @@ public final class BalancerScreen extends RbContainerScreen implements JeiPanelS
      * 并且自带鼠标坐标（1.16.5 的签名就是 4 个参数），正好满足本界面按悬停决定高亮的需求。
      */
     @Override
-    protected void drawGuiContainerBackgroundLayer(MatrixStack pose, float partialTick,
+    protected void drawGuiContainerBackgroundLayer(float partialTick,
                                                     int mouseX, int mouseY) {
-        drawBackdrop(new Draw(pose, this), mouseX, mouseY);
+        drawBackdrop(new Draw(this), mouseX, mouseY);
     }
 
     /** 背景 + 面板 + 全部内容（原 renderBackground 的主体；需要鼠标坐标判断悬停）。 */
@@ -577,7 +577,7 @@ public final class BalancerScreen extends RbContainerScreen implements JeiPanelS
             buildSlotChrome();
         }
         Draw.Batch batch = graphics.batch();
-        Matrix4f matrix = graphics.pose().getLast().getMatrix();
+        Matrix4f matrix = graphics.pose().matrix();
         for (int i = 0; i < slotChrome.length; i += 5) {
             int x1 = slotChrome[i];
             int y1 = slotChrome[i + 1];
@@ -668,7 +668,7 @@ public final class BalancerScreen extends RbContainerScreen implements JeiPanelS
                 if (!J8.isBlank(recipe.equType())) {
                     ItemStack equipment = ItemKeyMapper.stack(recipe.equType());
                     // 设备标记统一按 translate(x+10,y+10) + scale(0.5) 的变换画在右下角
-                    MatrixStack pose = graphics.pose();
+                    Draw.Pose pose = graphics.pose();
                     pose.push();
                     pose.translate(x + 10, y + 10, 0);
                     pose.scale(0.5f, 0.5f, 1.0f);
@@ -803,7 +803,7 @@ public final class BalancerScreen extends RbContainerScreen implements JeiPanelS
         // 小按钮字缩到 0.75 倍，13px 宽也能完整放下「÷5」「×5」
         float scale = 0.75f;
         float textW = font.getStringWidth(label) * scale;
-        MatrixStack pose = graphics.pose();
+        Draw.Pose pose = graphics.pose();
         pose.push();
         pose.translate(x + w / 2.0f - textW / 2.0f, y + (h - 8 * scale) / 2.0f, 0);
         pose.scale(scale, scale, 1.0f);
@@ -905,7 +905,7 @@ public final class BalancerScreen extends RbContainerScreen implements JeiPanelS
         // 一级耗时也用紧凑后缀（μ/k/M/G/T/P/E），并抬高 z 防止被槽位盖住
         String time = TimeExpression.formatCompact(pattern.timeTicks()) + "t";
         int textWidth = font.getStringWidth(time);
-        MatrixStack pose = graphics.pose();
+        Draw.Pose pose = graphics.pose();
         pose.push();
         pose.translate(0, 0, 200);
         if (textWidth <= SLOT) {
@@ -922,7 +922,7 @@ public final class BalancerScreen extends RbContainerScreen implements JeiPanelS
     }
 
     private void drawInventory(Draw graphics, int mouseX, int mouseY) {
-        PlayerInventory inventory = minecraft == null || minecraft.player == null
+        InventoryPlayer inventory = minecraft == null || minecraft.player == null
                 ? null : minecraft.player.inventory;
         for (int row = 0; row < INV_ROWS; row++) {
             for (int col = 0; col < INV_COLS; col++) {
@@ -952,12 +952,12 @@ public final class BalancerScreen extends RbContainerScreen implements JeiPanelS
     }
 
     @Override
-    public void render(MatrixStack pose, int mouseX, int mouseY, float partialTick) {
-        Draw graphics = new Draw(pose, this);
+    public void drawScreen(int mouseX, int mouseY, float partialTicks) {
+        Draw graphics = new Draw(this);
         // 顺序：背景+内容（super.render 内部先调 drawGuiContainerBackgroundLayer）→ 控件
         // → 拖拽高亮 → 手持物品 → tooltip，与原来自绘顺序一致。
         updateOptionStates();
-        super.render(pose, mouseX, mouseY, partialTick);
+        super.drawScreen(mouseX, mouseY, partialTicks);
         drawGhostHighlights(graphics, mouseX, mouseY);
 
         if (!carriedKey.isEmpty()) {
@@ -988,7 +988,7 @@ public final class BalancerScreen extends RbContainerScreen implements JeiPanelS
         if (drawIconButtonTooltip(graphics, mouseX, mouseY)) {
             return;
         }
-        PlayerInventory inventory = minecraft == null || minecraft.player == null
+        InventoryPlayer inventory = minecraft == null || minecraft.player == null
                 ? null : minecraft.player.inventory;
         int invIndex = inventoryIndexAt(mouseX, mouseY);
         if (inventory != null && invIndex >= 0) {
@@ -1006,14 +1006,14 @@ public final class BalancerScreen extends RbContainerScreen implements JeiPanelS
             List<ITextComponent> lines = new ArrayList<>();
             lines.add(Lang.c("R%s · %s", library, ItemKeyMapper.displayName(product)));
             lines.add(Lang.c("产物: %s", summary(recipe.productList()))
-                    .mergeStyle(Chat.styleRgb(0xFF90FF90)));
+                    .setStyle(Chat.styleRgb(0xFF90FF90)));
             lines.add(Lang.c("原料: %s", summary(recipe.sourceList()))
-                    .mergeStyle(Chat.styleRgb(0xFF90C0FF)));
+                    .setStyle(Chat.styleRgb(0xFF90C0FF)));
             lines.add(Lang.c("设备: %s · 耗时 %s", recipe.equType(),
                             TimeExpression.formatTicks(recipe.time() * 20.0))
-                    .mergeStyle(Chat.styleRgb(0xFFC0C0C0)));
+                    .setStyle(Chat.styleRgb(0xFFC0C0C0)));
             lines.add(Lang.c("左键载入编辑 · 右键两次删除")
-                    .mergeStyle(Chat.styleRgb(0xFF808080)));
+                    .setStyle(Chat.styleRgb(0xFF808080)));
             graphics.renderComponentTooltip(font, lines, mouseX, mouseY);
             return;
         }
@@ -1041,9 +1041,9 @@ public final class BalancerScreen extends RbContainerScreen implements JeiPanelS
             List<ITextComponent> lines = J8.list(
                     Lang.c("耗时 %s", TimeExpression.formatTicks(pattern.timeTicks())),
                     Lang.c("精确: %s", TimeExpression.formatExactTicks(pattern.timeTicks()))
-                            .mergeStyle(Chat.styleRgb(0xFF808080)),
+                            .setStyle(Chat.styleRgb(0xFF808080)),
                     Lang.c("左键/中键编辑，支持 + - * / ^")
-                            .mergeStyle(Chat.styleRgb(0xFF808080)));
+                            .setStyle(Chat.styleRgb(0xFF808080)));
             graphics.renderComponentTooltip(font, lines, mouseX, mouseY);
             return;
         }
@@ -1064,10 +1064,10 @@ public final class BalancerScreen extends RbContainerScreen implements JeiPanelS
     /** 求解按钮提示：标题 +（必要时）黄色无解警告 + 当前参数一览。 */
     private ITextComponent solveTooltip() {
         SolveOptions options = draft.options();
-        net.minecraft.util.text.IFormattableTextComponent tip = Chat.empty().appendSibling(Lang.c("求解并查看结果"));
+        net.minecraft.util.text.ITextComponent tip = Chat.empty().appendSibling(Lang.c("求解并查看结果"));
         if (!options.autoDetectRaw() && options.rawMaterials().isEmpty()) {
-            tip.appendString("\n").appendSibling(Lang.c("未启动自动探测原料且无无限物质输入，显然无解")
-                    .mergeStyle(TextFormatting.YELLOW));
+            tip.appendText("\n").appendSibling(Lang.c("未启动自动探测原料且无无限物质输入，显然无解")
+                    .setStyle(new net.minecraft.util.text.Style().setColor(TextFormatting.YELLOW)));
         }
         appendTipLine(tip, Lang.t("最小化目标: %s",
                 Lang.t(options.objective() == Objective.MACHINE ? "设备" : "配方")));
@@ -1080,37 +1080,37 @@ public final class BalancerScreen extends RbContainerScreen implements JeiPanelS
         int targets = draft.targets().size();
         if (targets == 0) {
             appendTip(tip, Lang.c("目标: %s 种，显然无解", targets)
-                    .mergeStyle(TextFormatting.YELLOW));
+                    .setStyle(new net.minecraft.util.text.Style().setColor(TextFormatting.YELLOW)));
         } else {
             appendTipLine(tip, Lang.t("目标: %s 种", targets));
         }
         int recipes = draft.recipeCount();
         if (recipes == 0) {
             appendTip(tip, Lang.c("配方库: %s 条，显然无解", recipes)
-                    .mergeStyle(TextFormatting.YELLOW));
+                    .setStyle(new net.minecraft.util.text.Style().setColor(TextFormatting.YELLOW)));
         } else {
             appendTipLine(tip, Lang.t("配方库: %s 条", recipes));
         }
         return tip;
     }
 
-    private static void appendTipLine(net.minecraft.util.text.IFormattableTextComponent tip,
+    private static void appendTipLine(net.minecraft.util.text.ITextComponent tip,
                                       String text) {
-        appendTip(tip, Chat.literal(text).mergeStyle(TextFormatting.GRAY));
+        appendTip(tip, Chat.literal(text).setStyle(new net.minecraft.util.text.Style().setColor(TextFormatting.GRAY)));
     }
 
     /** 1.16.5 的组件追加叫 {@code appendSibling}（1.19+ 才改名 {@code append}）。 */
-    private static void appendTip(net.minecraft.util.text.IFormattableTextComponent tip,
+    private static void appendTip(net.minecraft.util.text.ITextComponent tip,
                                   ITextComponent line) {
-        tip.appendString("\n").appendSibling(line);
+        tip.appendText("\n").appendSibling(line);
     }
 
     /** 图标按钮提示：第一行标题，第二行灰色说明（自动换行）。 */
     private static ITextComponent twoLineTooltip(String titleKey, String descKey) {
         return Chat.empty()
                 .appendSibling(Lang.c(titleKey))
-                .appendString("\n")
-                .appendSibling(Lang.c(descKey).mergeStyle(TextFormatting.GRAY));
+                .appendText("\n")
+                .appendSibling(Lang.c(descKey).setStyle(new net.minecraft.util.text.Style().setColor(TextFormatting.GRAY)));
     }
 
     /**
@@ -1118,16 +1118,16 @@ public final class BalancerScreen extends RbContainerScreen implements JeiPanelS
      *
      * @param grayLabel true 时标签也用灰色（用于求解按钮的参数总览）
      */
-    private static net.minecraft.util.text.IFormattableTextComponent onOffLine(String labelKey, boolean value, boolean grayLabel) {
-        net.minecraft.util.text.IFormattableTextComponent line = Chat.empty();
+    private static net.minecraft.util.text.ITextComponent onOffLine(String labelKey, boolean value, boolean grayLabel) {
+        net.minecraft.util.text.ITextComponent line = Chat.empty();
         if (grayLabel) {
-            line.appendSibling(Chat.literal(Lang.t(labelKey)).mergeStyle(TextFormatting.GRAY))
-                    .appendSibling(Chat.literal(": ").mergeStyle(TextFormatting.GRAY));
+            line.appendSibling(Chat.literal(Lang.t(labelKey)).setStyle(new net.minecraft.util.text.Style().setColor(TextFormatting.GRAY)))
+                    .appendSibling(Chat.literal(": ").setStyle(new net.minecraft.util.text.Style().setColor(TextFormatting.GRAY)));
         } else {
             line.appendSibling(Lang.c(labelKey)).appendSibling(Chat.literal(": "));
         }
         return line.appendSibling(Lang.c(value ? "开" : "关")
-                .mergeStyle(value ? TextFormatting.GREEN : TextFormatting.RED));
+                .setStyle(new net.minecraft.util.text.Style().setColor(value ? TextFormatting.GREEN : TextFormatting.RED)));
     }
 
     /** 图标按钮的说明：悬停时在鼠标处显示。 */
@@ -1135,7 +1135,7 @@ public final class BalancerScreen extends RbContainerScreen implements JeiPanelS
         IconButton[] buttons = {objectiveButton, rawButton, seedButton, bootstrapButton,
                 solveButton, rawListButton, externalInputButton};
         for (IconButton button : buttons) {
-            if (button != null && button.isMouseOver(mouseX, mouseY)) {
+            if (button != null && (mouseX >= button.x && mouseX < button.x + button.width && mouseY >= button.y && mouseY < button.y + button.height)) {
                 graphics.renderComponentTooltip(font, J8.list(button.tooltipText()),
                         mouseX, mouseY);
                 return true;
@@ -1252,7 +1252,7 @@ public final class BalancerScreen extends RbContainerScreen implements JeiPanelS
     // ------------------------------------------------------------------
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+    protected boolean onMouseClicked(int mouseX, int mouseY, int button) {
         int multi = multiButtonAt(mouseX, mouseY);
         if (multi >= 0 && button == 0) {
             if (multi < 6) {
@@ -1307,7 +1307,7 @@ public final class BalancerScreen extends RbContainerScreen implements JeiPanelS
         if (button == 0) {
             carriedKey = "";
         }
-        return super.mouseClicked(mouseX, mouseY, button);
+        return false;
     }
 
     private void handleTargetClick(int slot, int button) {
@@ -1473,7 +1473,7 @@ public final class BalancerScreen extends RbContainerScreen implements JeiPanelS
                     : minecraft.player.inventory.getStackInSlot(index);
             if (!stack.isEmpty()) {
                 carriedKey = ItemKeyMapper.of(stack);
-                status = Lang.t("手持: %s", stack.getDisplayName().getString());
+                status = Lang.t("手持: %s", stack.getDisplayName());
             } else {
                 carriedKey = "";
             }
@@ -1491,7 +1491,7 @@ public final class BalancerScreen extends RbContainerScreen implements JeiPanelS
 
     /** 1.18.2：只有纵向滚动，签名比 1.20+ 少一个 scrollX。 */
     @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+    protected boolean onMouseScrolled(double delta) {
         if (mouseX >= panelX && mouseY >= targetY
                 && mouseY < targetY + targetRows * SLOT) {
             targetScrollRow = Math.max(0, Math.min(
@@ -1510,7 +1510,7 @@ public final class BalancerScreen extends RbContainerScreen implements JeiPanelS
                     encodingScrollRow + (delta < 0 ? 1 : -1), maxEncodingScroll()));
             return true;
         }
-        return super.mouseScrolled(mouseX, mouseY, delta);
+        return false;
     }
 
     // ------------------------------------------------------------------
@@ -1677,7 +1677,7 @@ public final class BalancerScreen extends RbContainerScreen implements JeiPanelS
     }
 
     @Override
-    public void onClose() {
+    public void onGuiClosed() {
         // 关界面前把编码区未写入的内容落库，避免 K 关闭丢配方
         if (pattern.hasContent()) {
             commitPattern(false);
@@ -1690,26 +1690,26 @@ public final class BalancerScreen extends RbContainerScreen implements JeiPanelS
         restoreGuiScale();
         com.jessetech.recipebalancer.mc.jei.JeiGhostHighlights.end();
         // 1.16.5 里 displayGuiScreen 会回调旧屏 onClose，这里绝不能再次切屏：
-        // ESC / 按钮关闭由 Screen#closeScreen() 负责，本方法只收尾。
+        // ESC / 按钮关闭由 GuiScreen#closeScreen() 负责，本方法只收尾。
     }
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (modifiers == 0 && !(getListener() instanceof net.minecraft.client.gui.widget.TextFieldWidget)
-                && com.jessetech.recipebalancer.mc.keybind.RbKeyMappings.OPEN.matchesKey(keyCode, scanCode)) {
-            onClose();
+        if (modifiers == 0 && focusedField() == null
+                && lastKeyCode == com.jessetech.recipebalancer.mc.keybind.RbKeyMappings.OPEN.getKeyCode()) {
+            onGuiClosed();
             return true;
         }
         // 容器基类把「背包键」实现成 player.closeContainer()（给玩家背包菜单发关闭包）。
-        // 本界面没有服务端菜单，这条路径只会产生无意义的网络包，直接吞掉（原 Screen 行为也是无动作）。
-        if (minecraft != null && minecraft.gameSettings.keyBindInventory.matchesKey(keyCode, scanCode)) {
+        // 本界面没有服务端菜单，这条路径只会产生无意义的网络包，直接吞掉（原 GuiScreen 行为也是无动作）。
+        if (minecraft != null && lastKeyCode == minecraft.gameSettings.keyBindInventory.getKeyCode()) {
             return true;
         }
         return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
     @Override
-    public boolean isPauseScreen() {
+    public boolean doesGuiPauseGame() {
         return false;
     }
 
@@ -1987,8 +1987,7 @@ public final class BalancerScreen extends RbContainerScreen implements JeiPanelS
     /** 原版按钮点击音（与「写入」按钮按下时一致）。 */
     private void playClickSound() {
         if (minecraft != null) {
-            minecraft.getSoundHandler().play(
-                    SimpleSound.master(SoundEvents.UI_BUTTON_CLICK, 1.0F));
+            Sounds.master(SoundEvents.UI_BUTTON_CLICK, 1.0F);
         }
     }
 
@@ -2032,11 +2031,11 @@ public final class BalancerScreen extends RbContainerScreen implements JeiPanelS
      * <p>左右两列 18×18 图标按钮贴在面板外侧，不算面板的一部分；
      * 报成额外区域后，JEI 的书签/物品面板会把它们让开，不再盖住按钮。
      */
-    public java.util.List<net.minecraft.client.renderer.Rectangle2d> jeiExtraAreas() {
-        java.util.List<net.minecraft.client.renderer.Rectangle2d> areas = new java.util.ArrayList<>(2);
-        areas.add(new net.minecraft.client.renderer.Rectangle2d(panelX - SIDE_PAD, panelY,
+    public java.util.List<java.awt.Rectangle> jeiExtraAreas() {
+        java.util.List<java.awt.Rectangle> areas = new java.util.ArrayList<>(2);
+        areas.add(new java.awt.Rectangle(panelX - SIDE_PAD, panelY,
                 SIDE_PAD, panelH));
-        areas.add(new net.minecraft.client.renderer.Rectangle2d(panelX + panelW, panelY,
+        areas.add(new java.awt.Rectangle(panelX + panelW, panelY,
                 SIDE_PAD, panelH));
         return areas;
     }

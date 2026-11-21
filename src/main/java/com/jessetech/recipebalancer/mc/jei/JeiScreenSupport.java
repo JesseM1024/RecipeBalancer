@@ -2,21 +2,23 @@ package com.jessetech.recipebalancer.mc.jei;
 
 import com.jessetech.recipebalancer.RecipeBalancerMod;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.client.gui.widget.Widget;
+import net.minecraft.client.gui.GuiButton;
+import net.minecraft.client.gui.GuiScreen;
 import net.minecraftforge.client.event.GuiScreenEvent;
 import net.minecraftforge.common.MinecraftForge;
 
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.List;
 
 /**
- * 刷新 JEI 的 GUI 属性缓存（1.16.5 / JEI 7.x）。
+ * 刷新 JEI 的 GUI 属性缓存（1.12.2 / JEI 4.x）。
  *
  * <p>JEI 只在收到 {@code GuiScreenEvent.InitGuiEvent.Post} 时更新缓存；窗口 resize 后
- * Minecraft 会重新 {@code init()} 但不补发该事件，于是 JEI 按旧尺寸覆盖绘制。这里同时：
+ * Minecraft 会重新 {@code initGui()} 但不补发该事件，于是 JEI 按旧尺寸覆盖绘制。这里同时：
  * <ol>
- *   <li>补发 {@code InitGuiEvent.Post}（1.16.5 的列表元素类型是 {@code Widget}）；</li>
+ *   <li>补发 {@code InitGuiEvent.Post}（1.12.2 的构造器是 {@code (GuiScreen, List<GuiButton>)}）；</li>
  *   <li>反射驱动 JEI 内部覆盖层的属性刷新作为兜底（各版本内部结构不同，失败只告警一次）。</li>
  * </ol>
  */
@@ -28,16 +30,16 @@ public final class JeiScreenSupport {
     private JeiScreenSupport() {
     }
 
-    public static void notifyGuiInit(Screen screen) {
-        if (!JeiRuntimeHolder.ready()) {
+    public static void notifyGuiInit(GuiScreen screen) {
+        if (screen == null || !JeiRuntimeHolder.ready()) {
             return; // 未装 JEI / runtime 未就绪：什么都不用做
         }
         postInit(screen);
         refresh(screen);
-        Minecraft minecraft = Minecraft.getInstance();
+        Minecraft minecraft = Minecraft.getMinecraft();
         if (minecraft != null) {
-            // 再延后一 tick：首次 displayGuiScreen 时 Minecraft.currentScreen 可能尚未切换
-            minecraft.execute(() -> {
+            // 再延后一 tick：首次 displayGuiScreen 时 currentScreen 可能尚未切换
+            minecraft.addScheduledTask(() -> {
                 if (minecraft.currentScreen != screen) {
                     return;
                 }
@@ -47,25 +49,19 @@ public final class JeiScreenSupport {
         }
     }
 
-    private static void postInit(Screen screen) {
-        MinecraftForge.EVENT_BUS.post(new GuiScreenEvent.InitGuiEvent.Post(
-                screen,
-                widgets(screen),
-                widget -> {
-                },
-                widget -> {
-                }));
+    private static void postInit(GuiScreen screen) {
+        MinecraftForge.EVENT_BUS.post(new GuiScreenEvent.InitGuiEvent.Post(screen, buttons(screen)));
     }
 
-    /** 1.16.5 的 {@code Screen#buttons} 是 protected，事件却要一份 List&lt;Widget&gt;。 */
+    /** 1.12.2 的 {@code GuiScreen#buttonList} 是 protected，事件却要一份列表。 */
     @SuppressWarnings("unchecked")
-    private static java.util.List<Widget> widgets(Screen screen) {
+    private static List<GuiButton> buttons(GuiScreen screen) {
         try {
-            java.lang.reflect.Field field = Screen.class.getDeclaredField("buttons");
+            Field field = GuiScreen.class.getDeclaredField("buttonList");
             field.setAccessible(true);
             Object value = field.get(screen);
-            if (value instanceof java.util.List) {
-                return new ArrayList<>((java.util.List<Widget>) value);
+            if (value instanceof List) {
+                return new ArrayList<>((List<GuiButton>) value);
             }
         } catch (ReflectiveOperationException | RuntimeException e) {
             // 拿不到就发空列表：JEI 只是刷新缓存，空列表不会崩
@@ -73,61 +69,12 @@ public final class JeiScreenSupport {
         return new ArrayList<>();
     }
 
-    private static void refresh(Screen screen) {
-        Object runtime = JeiRuntimeHolder.get();
-        if (runtime == null) {
-            return;
-        }
-        Minecraft minecraft = Minecraft.getInstance();
-        if (minecraft != null && minecraft.currentScreen != screen) {
-            return;
-        }
-        refreshOverlay(call(runtime, "getIngredientListOverlay"), screen);
-        refreshOverlay(call(runtime, "getBookmarkOverlay"), screen);
-    }
-
-    private static Object call(Object target, String method) {
-        if (target == null) {
-            return null;
-        }
-        try {
-            Method reflected = target.getClass().getMethod(method);
-            reflected.setAccessible(true);
-            return reflected.invoke(target);
-        } catch (ReflectiveOperationException | RuntimeException e) {
-            return null;
-        }
-    }
-
-    private static void refreshOverlay(Object overlay, Screen screen) {
-        if (overlay == null) {
-            return;
-        }
-        try {
-            Method getUpdater = overlay.getClass().getMethod("getScreenPropertiesUpdater");
-            getUpdater.setAccessible(true);
-            Object updater = getUpdater.invoke(overlay);
-            if (updater == null) {
-                return;
-            }
-            Method updateScreen = updater.getClass().getMethod("updateScreen", Screen.class);
-            updateScreen.setAccessible(true);
-            Object updated = updateScreen.invoke(updater, screen);
-            if (updated == null) {
-                return;
-            }
-            Method forceUpdate = updated.getClass().getMethod("forceUpdate");
-            forceUpdate.setAccessible(true);
-            forceUpdate.invoke(updated);
-            RecipeBalancerMod.LOGGER.debug("[RecipeBalancer] JEI 属性刷新: {}x{}",
-                    screen.width, screen.height);
-        } catch (ReflectiveOperationException | RuntimeException e) {
-            if (!reflectionWarned) {
-                reflectionWarned = true;
-                RecipeBalancerMod.LOGGER.warn(
-                        "[RecipeBalancer] JEI 属性反射刷新失败（仅提示一次），退回 Init.Post 机制: {}",
-                        e.toString());
-            }
-        }
+    /**
+     * JEI 4.x 的覆盖层里<b>没有</b> 7.x 的 {@code getScreenPropertiesUpdater()}，
+     * 属性缓存完全由 {@code GuiScreenEvent.InitGuiEvent.Post} 驱动 —— 也就是上面的
+     * {@link #postInit}。这里保留空实现，避免每个界面刷一条 NoSuchMethodException 警告。
+     */
+    private static void refresh(GuiScreen screen) {
+        // 空实现：见方法注释
     }
 }

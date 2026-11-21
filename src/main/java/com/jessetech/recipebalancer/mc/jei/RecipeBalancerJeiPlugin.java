@@ -2,41 +2,59 @@ package com.jessetech.recipebalancer.mc.jei;
 
 import com.jessetech.recipebalancer.RecipeBalancerMod;
 import com.jessetech.recipebalancer.mc.itemmap.ItemKeyMapper;
-import com.jessetech.recipebalancer.mc.screen.AmountScreen;
 import com.jessetech.recipebalancer.mc.screen.AutoRecipeHooks;
-import com.jessetech.recipebalancer.mc.screen.BalancerScreen;
-import com.jessetech.recipebalancer.mc.screen.FactorScreen;
-import com.jessetech.recipebalancer.mc.screen.KeySetScreen;
-import com.jessetech.recipebalancer.mc.screen.ScenarioListScreen;
-import com.jessetech.recipebalancer.mc.screen.SolveScreen;
-import com.jessetech.recipebalancer.mc.screen.TimeScreen;
 import mezz.jei.api.IModPlugin;
-import mezz.jei.api.JeiPlugin;
-import mezz.jei.api.registration.IGuiHandlerRegistration;
-import mezz.jei.api.runtime.IJeiRuntime;
-import net.minecraft.util.ResourceLocation;
+import mezz.jei.api.IModRegistry;
+import mezz.jei.api.IJeiRuntime;
+import mezz.jei.api.JEIPlugin;
 
 /**
- * RecipeBalancer 的 JEI 插件入口（1.16.5 / JEI 7.6 ~ 7.8）。
+ * RecipeBalancer 的 JEI 插件入口（1.12.2 / JEI 4.7.8 ~ 4.24）。
  *
- * <p>与 1.18.2 的差异：
+ * <p>4.x 与 7.x 的入口差异：
  * <ul>
- *   <li>7.x 只有一代接口，不需要按能力探测注册路径；</li>
- *   <li>没有配方页按钮 API / 类别装饰器，按钮由 {@link JeiRecipeOverlay} 在配方页自绘；</li>
- *   <li>{@code IGlobalGuiHandler} / {@code IGuiContainerHandler} 的悬停返回<b>裸配料对象</b>。</li>
+ *   <li>注解是 {@code @JEIPlugin}（大写 I），没有 {@code getPluginUid()}；</li>
+ *   <li>注册入口是 {@code register(IModRegistry)}，不是 {@code registerGuiHandlers(...)}；</li>
+ *   <li>容器处理器、普通界面处理器、拖拽处理器全部挂在同一个 registry 上；</li>
+ *   <li>配料注册表（{@code IIngredientRegistry}）只能从这里拿，运行期要一直持有。</li>
  * </ul>
  *
- * <p>本类只引用 7.6.1 就存在的 API（编译基线），未装 JEI 时整类不会被加载。
+ * <p>本类只引用 4.7.9 就存在的 API（{@code IModPlugin} / {@code IModRegistry} /
+ * {@code IAdvancedGuiHandler}）。4.8.4+ 的能力注册全部委派给 {@link JeiRegistration}，
+ * 低于该版本时加载它会 {@code NoClassDefFoundError}，这里用 {@code catch (Throwable)} 兜住，
+ * 于是 4.7.8 的实例也能启动、只是少了拖拽与普通界面的面板让位。
  */
-@JeiPlugin
+@JEIPlugin
 public final class RecipeBalancerJeiPlugin implements IModPlugin {
 
-    private static final ResourceLocation UID =
-            new ResourceLocation("recipebalancer", "jei_plugin");
-
     @Override
-    public ResourceLocation getPluginUid() {
-        return UID;
+    public void register(IModRegistry registry) {
+        // 配料注册表：1.12.2 的 IJeiRuntime 没有 getIngredientManager()，只能在这里拿
+        try {
+            JeiRuntimeHolder.setIngredientRegistry(registry.getIngredientRegistry());
+        } catch (Throwable t) {
+            RecipeBalancerMod.LOGGER.warn("[RecipeBalancer] JEI 配料注册表不可用: {}",
+                    t.toString());
+        }
+
+        // 主路径：一级界面是容器界面，走 4.x 全版本都有的 IAdvancedGuiHandler
+        try {
+            registry.addAdvancedGuiHandlers(new RbContainerGuiHandler());
+            RecipeBalancerMod.LOGGER.info("[RecipeBalancer] JEI 容器处理器：已注册（一级界面）");
+        } catch (Throwable t) {
+            RecipeBalancerMod.LOGGER.warn("[RecipeBalancer] JEI 容器处理器注册失败: {}",
+                    t.toString());
+        }
+
+        // 4.8.4+：普通界面的面板让位 + 拖拽录入 + 4.14+ 的全局悬停兜底
+        try {
+            JeiRegistration.register(registry);
+            RecipeBalancerMod.LOGGER.info("[RecipeBalancer] JEI 面板定位/拖拽录入：已注册");
+        } catch (Throwable t) {
+            RecipeBalancerMod.LOGGER.warn(
+                    "[RecipeBalancer] JEI 4.8.4+ 能力注册失败（降级为容器处理器）: {}",
+                    t.toString());
+        }
     }
 
     @Override
@@ -45,13 +63,14 @@ public final class RecipeBalancerJeiPlugin implements IModPlugin {
         // 旧 runtime 的对象已失效，清掉 key 缓存与反查缓存
         JeiIngredientMapper.clearCache();
         JeiIngredientRenderer.clearCache();
+        JeiReflect.clear();
         JeiIngredientRenderer renderer = new JeiIngredientRenderer();
         ItemKeyMapper.setIngredientRenderHook(renderer);
         ItemKeyMapper.setIngredientNameHook(renderer);
         AutoRecipeHooks.set(new JeiAutoRecipe());
         RecipeBalancerMod.LOGGER.info("[RecipeBalancer] {}", JeiCapabilities.describe());
         try {
-            // 7.x 没有官方按钮 API：用客户端叠加层在配方页画「编码此配方」按钮
+            // 4.x 没有官方按钮 API：用客户端叠加层在配方页画「编码此配方」按钮
             JeiRecipeOverlay.install();
         } catch (Throwable t) {
             RecipeBalancerMod.LOGGER.warn("[RecipeBalancer] JEI 配方页叠加按钮安装失败: {}",
@@ -85,61 +104,5 @@ public final class RecipeBalancerJeiPlugin implements IModPlugin {
                                 + "若 jar 在游戏运行中被替换过，请重启游戏）", name, t);
             }
         }
-    }
-
-    @Override
-    public void registerGuiHandlers(IGuiHandlerRegistration registration) {
-        // 各段独立 try/catch：任何一段的 API 差异都不能把整个插件带崩。
-        try {
-            registerScreenHandlers(registration);
-        } catch (Throwable t) {
-            RecipeBalancerMod.LOGGER.warn(
-                    "[RecipeBalancer] JEI 面板定位不可用: {}", t.toString());
-        }
-        try {
-            // 主路径：一级界面已是容器界面，走 JEI 只对容器开放的 IGuiContainerHandler
-            // （额外区域 + 悬停配料）。
-            registration.addGuiContainerHandler(BalancerScreen.class,
-                    new RbContainerGuiHandler());
-            RecipeBalancerMod.LOGGER.info("[RecipeBalancer] JEI 容器处理器：已注册（一级界面）");
-        } catch (Throwable t) {
-            RecipeBalancerMod.LOGGER.warn(
-                    "[RecipeBalancer] JEI 容器处理器注册失败: {}", t.toString());
-        }
-        try {
-            // 兜底：若某个 JEI 构建裁掉了容器侧悬停回调，全局处理器仍能让 R/U/A 工作。
-            registration.addGlobalGuiHandler(new JeiHoverHandler());
-            RecipeBalancerMod.LOGGER.info("[RecipeBalancer] JEI 悬停查询：容器处理器 + 全局兜底");
-        } catch (Throwable t) {
-            RecipeBalancerMod.LOGGER.warn("[RecipeBalancer] JEI 悬停查询不可用: {}",
-                    t.toString());
-        }
-        try {
-            registration.addGhostIngredientHandler(BalancerScreen.class, new JeiGhostHandler());
-            // 物料清单编辑屏（无限外部供应 / 循环亏损补充）：拖进网格即追加
-            registration.addGhostIngredientHandler(KeySetScreen.class,
-                    new JeiKeySetGhostHandler());
-            RecipeBalancerMod.LOGGER.info("[RecipeBalancer] JEI 拖拽录入：已注册");
-        } catch (Throwable t) {
-            RecipeBalancerMod.LOGGER.warn(
-                    "[RecipeBalancer] JEI 拖拽录入不可用: {}", t.toString());
-        }
-    }
-
-    private static void registerScreenHandlers(IGuiHandlerRegistration registration) {
-        // 一级界面已改为容器界面，改由 addGuiContainerHandler 注册（见 registerGuiHandlers），
-        // 这里只处理仍是普通 Screen 的二级界面。
-        registration.addGuiScreenHandler(AmountScreen.class,
-                screen -> JeiGuiProperties.of(screen, screen));
-        registration.addGuiScreenHandler(KeySetScreen.class,
-                screen -> JeiGuiProperties.of(screen, screen));
-        registration.addGuiScreenHandler(TimeScreen.class,
-                screen -> JeiGuiProperties.of(screen, screen));
-        registration.addGuiScreenHandler(ScenarioListScreen.class,
-                screen -> JeiGuiProperties.of(screen, screen));
-        // 结果页**故意不注册** IGuiProperties：注册了 JEI 就会把物品面板/书签/提示
-        // 画在结果正文上（文字被盖住）。系数输入页仍保留。
-        registration.addGuiScreenHandler(FactorScreen.class,
-                screen -> JeiGuiProperties.of(screen, screen));
     }
 }

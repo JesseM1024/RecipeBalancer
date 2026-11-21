@@ -13,8 +13,8 @@ import com.jessetech.recipebalancer.mc.itemmap.ItemKeyMapper;
 import com.jessetech.recipebalancer.mc.ui.AeStyle;
 import com.jessetech.recipebalancer.mc.ui.Chat;
 import com.jessetech.recipebalancer.mc.ui.Draw;
-import com.mojang.blaze3d.matrix.MatrixStack;
-import net.minecraft.util.math.vector.Matrix4f;
+
+import net.minecraft.client.renderer.Matrix4f;
 import net.minecraft.util.text.TextFormatting;
 import net.minecraft.client.gui.FontRenderer;
 import net.minecraft.util.text.ITextComponent;
@@ -750,18 +750,6 @@ public final class SolveGraphView {
         }
     }
 
-
-
-
-
-
-
-
-
-
-
-
-
     /** 鼠标命中节点；没有则返回 null。 */
     public boolean beginNodeDrag(double screenX, double screenY) {
         if (lastAreaW <= 0) {
@@ -1019,19 +1007,6 @@ public final class SolveGraphView {
         }
     }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
     public void resetCamera(int areaW, int areaH) {
         if (nodes.isEmpty()) {
             return;
@@ -1141,7 +1116,7 @@ public final class SolveGraphView {
             return;
         }
         Draw.Batch batch = graphics.batch();
-        Matrix4f matrix = graphics.pose().getLast().getMatrix();
+        Matrix4f matrix = graphics.pose().matrix();
         double scale = Math.max(0.15, zoom);
         double dash = 6.0 / scale;
         double thickness = 1.8 / scale;
@@ -1206,7 +1181,7 @@ public final class SolveGraphView {
         double y = node.y + (node.recipe ? RECIPE : MATERIAL) / 2.0 + 3;
         // 与普通标签一致的“最小字号”补偿
         float textScale = (float) Math.max(1.0, MIN_LABEL_TEXT_SCALE / zoom);
-        MatrixStack pose = graphics.pose();
+        Draw.Pose pose = graphics.pose();
         pose.push();
         pose.translate(node.x, y, 210);
         pose.scale(textScale, textScale, 1.0f);
@@ -1219,7 +1194,7 @@ public final class SolveGraphView {
         String text = edge.label;
         int width = font.getStringWidth(text);
         double[] anchor = edgeLabelAnchor(edge, font);
-        MatrixStack pose = graphics.pose();
+        Draw.Pose pose = graphics.pose();
         pose.push();
         pose.translate(anchor[0], anchor[1], 210);
         graphics.fill(-2, -1, width + 2, 9, 0x80FFFFFF);
@@ -1311,9 +1286,9 @@ public final class SolveGraphView {
         if (edge != null) {
             List<ITextComponent> lines = new ArrayList<>();
             lines.add(Chat.literal(ItemKeyMapper.displayName(edge.material))
-                    .mergeStyle(TextFormatting.BOLD));
+                    .setStyle(new net.minecraft.util.text.Style().setColor(TextFormatting.BOLD)));
             lines.add(Lang.c(nodeLabel(edge.from) + " → " + nodeLabel(edge.to))
-                    .mergeStyle(TextFormatting.GRAY));
+                    .setStyle(new net.minecraft.util.text.Style().setColor(TextFormatting.GRAY)));
             lines.add(Lang.c("流量: %s /t",
                     TimeExpression.formatEditableNumber(edge.flow)));
             graphics.renderComponentTooltip(font, lines, mouseX, mouseY);
@@ -1378,21 +1353,21 @@ public final class SolveGraphView {
         Recipe recipe = recipes.get(node.recipeId);
         List<ITextComponent> lines = new ArrayList<>();
         lines.add(Lang.c("R%s · %s", node.recipeId,
-                ItemKeyMapper.displayName(recipe.equType())).mergeStyle(TextFormatting.BOLD));
+                ItemKeyMapper.displayName(recipe.equType())).setStyle(new net.minecraft.util.text.Style().setColor(TextFormatting.BOLD)));
         double perSecond = result.recipeRates().get(node.recipeId);
         lines.add(Lang.c("设备并行: %s  设备数: %s",
                         TimeExpression.formatEditableNumber(perSecond * recipe.time()),
                         node.machines)
-                .mergeStyle(TextFormatting.GRAY));
+                .setStyle(new net.minecraft.util.text.Style().setColor(TextFormatting.GRAY)));
         double ratePerTick = perSecond / 20.0;
         lines.add(Lang.c("运行速率: %s /t",
                 TimeExpression.formatEditableNumber(ratePerTick)));
-        lines.add(Lang.c("输入 (/t):").mergeStyle(TextFormatting.GREEN));
+        lines.add(Lang.c("输入 (/t):").setStyle(new net.minecraft.util.text.Style().setColor(TextFormatting.GREEN)));
         for (Map.Entry<String, Double> entry : recipe.sourceList().entrySet()) {
             lines.add(Lang.c("  - %s × %s", ItemKeyMapper.displayName(entry.getKey()),
                     TimeExpression.formatEditableNumber(entry.getValue() * ratePerTick)));
         }
-        lines.add(Lang.c("输出 (/t):").mergeStyle(TextFormatting.GOLD));
+        lines.add(Lang.c("输出 (/t):").setStyle(new net.minecraft.util.text.Style().setColor(TextFormatting.GOLD)));
         for (Map.Entry<String, Double> entry : recipe.productList().entrySet()) {
             lines.add(Lang.c("  + %s × %s", ItemKeyMapper.displayName(entry.getKey()),
                     TimeExpression.formatEditableNumber(entry.getValue() * ratePerTick)));
@@ -1403,9 +1378,9 @@ public final class SolveGraphView {
     private List<ITextComponent> materialTooltip(GNode node) {
         List<ITextComponent> lines = new ArrayList<>();
         lines.add(Chat.literal(ItemKeyMapper.displayName(node.key))
-                .mergeStyle(TextFormatting.BOLD));
+                .setStyle(new net.minecraft.util.text.Style().setColor(TextFormatting.BOLD)));
         lines.add(Lang.c("类别: %s", categoryLabel(node.category))
-                .mergeStyle(TextFormatting.GRAY));
+                .setStyle(new net.minecraft.util.text.Style().setColor(TextFormatting.GRAY)));
         double produced = 0.0;
         double consumed = 0.0;
         for (GEdge edge : edges) {
@@ -1424,7 +1399,7 @@ public final class SolveGraphView {
             if (target != null) {
                 lines.add(Lang.c("目标: %s /t",
                                 TimeExpression.formatEditableNumber(target))
-                        .mergeStyle(TextFormatting.LIGHT_PURPLE));
+                        .setStyle(new net.minecraft.util.text.Style().setColor(TextFormatting.LIGHT_PURPLE)));
             }
         }
         if (node.category == Category.INPUT) {
@@ -1432,7 +1407,7 @@ public final class SolveGraphView {
             if (amount != null) {
                 lines.add(Lang.c("外部输入: %s /t",
                                 TimeExpression.formatEditableNumber(amount / 20.0))
-                        .mergeStyle(TextFormatting.GREEN));
+                        .setStyle(new net.minecraft.util.text.Style().setColor(TextFormatting.GREEN)));
             }
         }
         if (node.category == Category.STARTUP) {
@@ -1440,7 +1415,7 @@ public final class SolveGraphView {
             if (amount != null) {
                 lines.add(Lang.c("启动库存: %s",
                                 TimeExpression.formatEditableNumber(amount))
-                        .mergeStyle(TextFormatting.RED));
+                        .setStyle(new net.minecraft.util.text.Style().setColor(TextFormatting.RED)));
             }
         }
         if (node.category == Category.BYPRODUCT) {
@@ -1448,7 +1423,7 @@ public final class SolveGraphView {
             if (amount != null) {
                 lines.add(Lang.c("副产物: %s /t",
                                 TimeExpression.formatEditableNumber(amount / 20.0))
-                        .mergeStyle(TextFormatting.YELLOW));
+                        .setStyle(new net.minecraft.util.text.Style().setColor(TextFormatting.YELLOW)));
             }
         }
         return lines;
@@ -1524,7 +1499,7 @@ public final class SolveGraphView {
             return;
         }
         Draw.Batch batch = graphics.batch();
-        Matrix4f matrix = graphics.pose().getLast().getMatrix();
+        Matrix4f matrix = graphics.pose().matrix();
         // 选中/悬停某个节点时，只把它相关的边点亮，其它边压到很淡——线太多时靠这一下看清
         // 跨多列的「总线」边先画（压在下层），相邻列的本地流线后画（在上层），
         // 这样局部工艺链一眼可见，长距离输送不会盖住它们。
@@ -1802,7 +1777,7 @@ public final class SolveGraphView {
         double[] anchor = edgeLabelAnchor(edge, font);
         // 用 pose 平移到锚点再画 (0,0)：与悬停字幕的定位方式完全一致，
         // 否则一个取整、一个用浮点平移，会错开半像素出现"重影"
-        MatrixStack pose = graphics.pose();
+        Draw.Pose pose = graphics.pose();
         pose.push();
         pose.translate(anchor[0], anchor[1], 0);
         graphics.drawString(font, edge.label, 0, 0, color, false);
@@ -1907,7 +1882,7 @@ public final class SolveGraphView {
 
         if (showIcons && node.hasIcon) {
             // 节点坐标已含相机平移/缩放，图标必须在当前位姿下绘制，否则会钉死在屏幕上
-            MatrixStack iconPose = graphics.pose();
+            Draw.Pose iconPose = graphics.pose();
             iconPose.push();
             iconPose.translate(x + 12, y + 12, 0);
             ItemKeyMapper.renderIconPosed(graphics, font, node.key, null);
@@ -1947,7 +1922,7 @@ public final class SolveGraphView {
         roundedFill(graphics, x, y, MATERIAL, MATERIAL, 4, color);
 
         if (showIcons && node.hasIcon) {
-            MatrixStack iconPose = graphics.pose();
+            Draw.Pose iconPose = graphics.pose();
             iconPose.push();
             iconPose.translate(x + 2, y + 2, 0);
             ItemKeyMapper.renderIconPosed(graphics, font, node.key, null);
@@ -1968,7 +1943,7 @@ public final class SolveGraphView {
         }
         // 整张图按 zoom 缩放；这里反向补偿，使屏幕上字号不小于 50%（缩得再小也不再变小）。
         float textScale = (float) Math.max(1.0, MIN_LABEL_TEXT_SCALE / zoom);
-        MatrixStack pose = graphics.pose();
+        Draw.Pose pose = graphics.pose();
         pose.push();
         pose.translate(centerX, y, 0);
         pose.scale(textScale, textScale, 1.0f);

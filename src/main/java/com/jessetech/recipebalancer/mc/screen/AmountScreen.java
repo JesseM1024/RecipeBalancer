@@ -9,10 +9,11 @@ import com.jessetech.recipebalancer.mc.ui.AeStyle;
 import com.jessetech.recipebalancer.mc.ui.Buttons;
 import com.jessetech.recipebalancer.mc.ui.Chat;
 import com.jessetech.recipebalancer.mc.ui.Draw;
-import com.mojang.blaze3d.matrix.MatrixStack;
-import net.minecraft.client.gui.widget.button.Button;
-import net.minecraft.client.gui.widget.TextFieldWidget;
-import net.minecraft.client.gui.screen.Screen;
+import com.jessetech.recipebalancer.mc.ui.RbTextField;
+
+import com.jessetech.recipebalancer.mc.ui.Button;
+import net.minecraft.client.gui.GuiTextField;
+import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.util.text.ITextComponent;
 
 import java.util.List;
@@ -29,7 +30,7 @@ public final class AmountScreen extends RbScreen implements JeiPanelScreen {
         void accept(String itemKey, double amount);
     }
 
-    private final Screen parent;
+    private final GuiScreen parent;
     private final String title;
     private final boolean amountEditable;
     private final boolean rateMode;
@@ -38,17 +39,17 @@ public final class AmountScreen extends RbScreen implements JeiPanelScreen {
     private final boolean nonItem;
     private String status = "";
     private RateUnit rateUnit;
-    private TextFieldWidget keyBox;
-    private TextFieldWidget amountBox;
+    private GuiTextField keyBox;
+    private GuiTextField amountBox;
     private Button unitButton;
 
-    public AmountScreen(Screen parent, String title, String itemKey, double amount,
+    public AmountScreen(GuiScreen parent, String title, String itemKey, double amount,
                         boolean amountEditable, Callback callback) {
         this(parent, title, itemKey, amount, amountEditable, false, callback);
     }
 
     /** rateMode=true：amount 为每 tick 数量，界面显示速率单位。 */
-    public AmountScreen(Screen parent, String title, String itemKey, double amount,
+    public AmountScreen(GuiScreen parent, String title, String itemKey, double amount,
                         boolean amountEditable, boolean rateMode, Callback callback) {
         super(Chat.literal(Lang.t(title)));
         this.parent = parent;
@@ -78,7 +79,7 @@ public final class AmountScreen extends RbScreen implements JeiPanelScreen {
         panelY = (height - panelH) / 2;
 
         // 图标槽在注册名输入框左侧；真名/注册名放在它们下方
-        keyBox = new TextFieldWidget(font, panelX + 30, panelY + 32, panelW - 38, 18,
+        keyBox = new RbTextField(font, panelX + 30, panelY + 32, panelW - 38, 18,
                 Lang.c("物品注册名"));
         // 组件物品（药水等）的 key 是 base64，可能远超 128
         keyBox.setMaxStringLength(4096);
@@ -87,7 +88,7 @@ public final class AmountScreen extends RbScreen implements JeiPanelScreen {
 
         if (amountEditable) {
             int amountWidth = rateMode ? 104 : 112;
-            amountBox = new TextFieldWidget(font, panelX + 8, panelY + 90, amountWidth, 18,
+            amountBox = new RbTextField(font, panelX + 8, panelY + 90, amountWidth, 18,
                     Lang.c("用量"));
             amountBox.setMaxStringLength(64);
             amountBox.setText(TimeExpression.formatEditableNumber(amount));
@@ -213,8 +214,8 @@ public final class AmountScreen extends RbScreen implements JeiPanelScreen {
     }
 
     @Override
-    public void renderBackground(MatrixStack pose) {
-        Draw graphics = new Draw(pose, this);
+    public void drawBackground(int tint) {
+        Draw graphics = new Draw(this);
         graphics.fill(0, 0, width, height, 0xB0101010);
         AeStyle.panel(graphics, panelX, panelY, panelW, panelH);
         AeStyle.header(graphics, panelX, panelY, panelW, 20);
@@ -222,9 +223,9 @@ public final class AmountScreen extends RbScreen implements JeiPanelScreen {
     }
 
     @Override
-    public void render(MatrixStack pose, int mouseX, int mouseY, float partialTick) {
-        Draw graphics = new Draw(pose, this);
-        super.render(pose, mouseX, mouseY, partialTick);
+    public void drawScreen(int mouseX, int mouseY, float partialTicks) {
+        Draw graphics = new Draw(this);
+        super.drawScreen(mouseX, mouseY, partialTicks);
 
         graphics.drawString(font, Lang.t("物品 / 注册名"),
                 panelX + 8, panelY + 22, AeStyle.MUTED, false);
@@ -280,11 +281,11 @@ public final class AmountScreen extends RbScreen implements JeiPanelScreen {
      * {@code onClose()}，所以这里只能做收尾、绝不能再切屏，否则会无限递归。
      */
     @Override
-    public void onClose() {
+    public void onGuiClosed() {
     }
 
     @Override
-    public boolean isPauseScreen() {
+    public boolean doesGuiPauseGame() {
         return false;
     }
 

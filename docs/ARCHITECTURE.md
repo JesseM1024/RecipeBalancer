@@ -681,3 +681,18 @@ RecipeBalancer/
 - 上游 Python 参考环境：`.venv`（Python 3.10.11 / numpy 2.2.6 / scipy 1.15.3 / pytest 9.1.1），
   用于生成测试夹具与跑金标准基线；**测试输入浮点必须由 Python 生成，禁止手抄**。
 - 产物已验证：`recipebalancer-0.1.0-1.21.1.jar`，mods.toml 占位符替换正确、中文 UTF-8 无损。
+
+## 十二、1.12.2 线（Forge 14.23.5.2859）的实现取舍
+
+工具链与另外三条线**完全不同**（详见 `docs/JEI-COMPAT-1.12.2.md` §6–§7）：
+
+- **ForgeGradle 3.+ + Gradle 4.9 + JDK 8 + MCP `snapshot 20171003-1.12`**；
+  构建脚本只能用 Gradle 4.x 语法，产物一律 `gradlew build`（`jar.finalizedBy('reobfJar')`）。
+- **元数据**：`mods.toml` → `mcmod.info`（可选依赖写 `after:jei@[4.7.8,)`），`pack_format` = 3。
+- **容器方案**：1.12.2 没有 `ContainerType`，`ClientEditorContainer` 只 new 一个本地实例、
+  永不注册（零槽位、`canInteractWith` 恒真），一级界面因此是真正的 `GuiContainer`，
+  可以继续用 JEI 的 `IAdvancedGuiHandler` 报额外区域与悬停配料。
+- **JEI 注册入口**：`@JEIPlugin` + `register(IModRegistry)`，没有 `IGuiHandlerRegistration`；
+  二级界面走 4.8.4+ 的 `IGuiScreenHandler`，全局悬停走 4.14+ 且用动态代理注册（编译期零依赖）。
+- **反射集中**：`mc/jei/JeiReflect` 是唯一允许 `getDeclaredField` 的地方，带缓存与"只告警一次"语义。
+- **契约不变**：`core/` 依旧零 MC 依赖（84 个纯 JVM 测试全绿）；`mc/jei/` 之外不 import `mezz.jei.*`。

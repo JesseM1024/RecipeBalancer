@@ -1,77 +1,82 @@
 package com.jessetech.recipebalancer;
 
 import com.jessetech.recipebalancer.mc.config.GraphLayoutConfig;
+import com.jessetech.recipebalancer.mc.io.GamePaths;
+import com.jessetech.recipebalancer.mc.jei.JeiVersionNotice;
 import com.jessetech.recipebalancer.mc.keybind.RbKeyMappings;
-
-import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.common.MinecraftForge;
-import net.minecraftforge.event.TickEvent;
-import net.minecraftforge.eventbus.api.IEventBus;
-import net.minecraftforge.fml.ModLoadingContext;
 import net.minecraftforge.fml.common.Mod;
-import net.minecraftforge.fml.config.ModConfig;
-import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
-import net.minecraftforge.fml.loading.FMLEnvironment;
+import net.minecraftforge.fml.common.event.FMLInitializationEvent;
+import net.minecraftforge.fml.common.event.FMLPreInitializationEvent;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+
+import java.io.File;
 
 /**
  * RecipeBalancer —— 产线配平自动计算器（纯客户端）。
  *
- * <p>1.18.2 的 {@code @Mod} 没有 {@code dist} 参数（20.2+ 才引入），改为构造时检查
- * {@link FMLEnvironment#dist}：非客户端环境只记一条日志就返回、不注册任何监听 ——
- * 专用服务端无需安装本模组，也不会因缺少客户端类而崩溃。
- *
- * <p>事件总线分工：
+ * <p>1.12.2 的入口形态：
  * <ul>
- *   <li>modBus（模组总线）：初始化阶段的事件，如注册快捷键、载入配置；</li>
- *   <li>{@link MinecraftForge#EVENT_BUS}（游戏总线）：运行期反复触发的事件，如客户端 tick。</li>
+ *   <li>{@code @Mod(clientSideOnly = true)}：专用服务端不加载本模组；</li>
+ *   <li>初始化分 {@code FMLPreInitializationEvent}（配置 / 求解库目录）与
+ *       {@code FMLInitializationEvent}（键位 / 事件订阅）；</li>
+ *   <li>事件总线只有 {@link MinecraftForge#EVENT_BUS} 一条（没有 1.13+ 的 mod 总线）。</li>
  * </ul>
+ *
+ * <p>{@code dependencies = "after:jei@[4.7.8,)"}：JEI 是<b>可选</b>前置，
+ * 低于 4.8.5.160 时仍能加载（缺能力只降级），首次进入世界会在聊天栏提示升级。
  */
-@Mod(RecipeBalancerMod.MODID)
+@Mod(modid = RecipeBalancerMod.MODID,
+        name = "RecipeBalancer",
+        version = RecipeBalancerMod.VERSION,
+        acceptedMinecraftVersions = "[1.12.2]",
+        clientSideOnly = true,
+        dependencies = "after:jei@[4.7.8,)")
 public final class RecipeBalancerMod {
 
     public static final String MODID = "recipebalancer";
 
+    /** 与 gradle.properties 的 mod_version 保持一致（1.12.2 的 @Mod 只能写常量）。 */
+    public static final String VERSION = "0.3.1-1.12.2";
+
     /**
-     * 1.16.5 的 MC / Forge 只用 log4j2，运行环境里<b>没有 slf4j</b>：
-     * 用 {@code LoggerFactory} 会在类加载（{@code <clinit>}）阶段直接
-     * {@code NoClassDefFoundError: org/slf4j/LoggerFactory}，模组连实例都建不起来。
-     * 1.18.2 的 slf4j 是 Forge 自带的，所以那条件用 slf4j 没问题；这里必须换 log4j2。
-     * 两者都是 {@code {} } 占位符，调用点无需改动。
+     * 1.12.2 的 MC / Forge 只用 log4j2，运行环境里<b>没有 slf4j</b>：
+     * 用 {@code LoggerFactory} 会在类加载阶段直接
+     * {@code NoClassDefFoundError: org/slf4j/LoggerFactory}。
      */
     public static final Logger LOGGER = LogManager.getLogger("RecipeBalancer");
 
-    public RecipeBalancerMod() {
-        // 非客户端环境：跳过全部客户端注册（1.18.2 的 @Mod 无 dist 参数）
-        if (FMLEnvironment.dist != Dist.CLIENT) {
-            LOGGER.info("[RecipeBalancer] not a client dist, skipping all client registrations");
-            return;
-        }
-        IEventBus modBus = FMLJavaModLoadingContext.get().getModEventBus();
+    private static boolean ready;
 
-        // 快捷键：1.18.2 没有 RegisterKeyMappingsEvent（1.19 才引入），
-        // 走 FMLClientSetupEvent + ClientRegistry.registerKeyBinding（ModBus 事件）。
-        modBus.addListener(RbKeyMappings::onClientSetup);
-        // 游戏总线：进入世界后按键打开界面。
-        // 方法引用在这里推不出泛型事件类型（IEventBus#addListener(Consumer<T>)），
-        // 必须写成带显式参数类型的 lambda。
-        MinecraftForge.EVENT_BUS.addListener((TickEvent.ClientTickEvent event) ->
-                RbKeyMappings.onClientTick(event));
+    @Mod.EventHandler
+    public void preInit(FMLPreInitializationEvent event) {
+        // 目录解析：1.12.2 没有 FMLPaths，统一由 GamePaths 收敛
+        GamePaths.init(event.getModConfigurationDirectory());
 
-        // 配置：ForgeConfigSpec，落在 config/recipebalancer-client.toml。
-        // 1.18.2 没有 NeoForge 自带的配置界面（ConfigurationScreen 为 20.4+ 引入），
-        // 亦不注册 ConfigScreenHandler 扩展点：配置仅经 TOML 文件修改。
-        ModLoadingContext.get().registerConfig(ModConfig.Type.CLIENT, GraphLayoutConfig.SPEC);
+        // 配置：config/recipebalancer-client.cfg（键名与其它版本线一致）
+        GraphLayoutConfig.load(new File(event.getModConfigurationDirectory(),
+                "recipebalancer-client.cfg"));
 
         // 求解库的解压目录：固定放在实例内（<gamedir>/RecipeBalancer/lib），
         // 不在系统临时目录或用户其它位置留文件。
         com.jessetech.recipebalancer.core.solve.CommonsMath3LpSolver.setLibraryDir(
-                net.minecraftforge.fml.loading.FMLPaths.GAMEDIR.get()
-                        .resolve("RecipeBalancer").resolve("lib"));
+                GamePaths.gameDir().resolve("RecipeBalancer").resolve("lib"));
+    }
+
+    @Mod.EventHandler
+    public void init(FMLInitializationEvent event) {
+        RbKeyMappings.register();
+        MinecraftForge.EVENT_BUS.register(new RbKeyMappings.Handler());
+        MinecraftForge.EVENT_BUS.register(new JeiVersionNotice());
 
         LOGGER.info("[RecipeBalancer] 初始化：快捷键 K 打开主界面");
         checkRuntimeDependencies();
+        ready = true;
+    }
+
+    public static boolean ready() {
+        return ready;
     }
 
     /** 启动自检：求解库是否真的能加载（比点「求解」时才发现更早）。 */
@@ -89,9 +94,7 @@ public final class RecipeBalancerMod {
      * <ul>
      *   <li>模组 jar 的实际位置（确认游戏加载的是哪一个文件）；</li>
      *   <li>模组类的 define 加载器；</li>
-     *   <li>同一个 jar 内的 {@code .class} 是否能作为资源被看到 ——
-     *       资源能读到却 {@code Class.forName} 失败，说明是类加载/转换层的问题；
-     *       资源也读不到，说明 jar 没被加进类加载器（打包/替换时机问题）。</li>
+     *   <li>同一个 jar 内的 {@code .class} 是否能作为资源被看到。</li>
      * </ul>
      */
     private static void diagnoseMath3() {
@@ -111,5 +114,4 @@ public final class RecipeBalancerMod {
             LOGGER.error("[RecipeBalancer] 诊断失败", t);
         }
     }
-
 }

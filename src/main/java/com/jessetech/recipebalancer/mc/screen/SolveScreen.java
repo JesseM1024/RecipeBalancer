@@ -1,6 +1,6 @@
 package com.jessetech.recipebalancer.mc.screen;
 
-import net.minecraft.util.text.StringTextComponent;
+import net.minecraft.util.text.TextComponentString;
 import com.jessetech.recipebalancer.core.util.J8;
 
 import com.jessetech.recipebalancer.core.model.Recipe;
@@ -12,12 +12,11 @@ import com.jessetech.recipebalancer.mc.ui.Buttons;
 import com.jessetech.recipebalancer.mc.ui.Chat;
 import com.jessetech.recipebalancer.mc.ui.Draw;
 import com.jessetech.recipebalancer.mc.ui.graph.SolveGraphView;
-import com.mojang.blaze3d.matrix.MatrixStack;
-import net.minecraft.client.gui.widget.button.Button;
-import net.minecraft.client.gui.screen.Screen;
+
+import com.jessetech.recipebalancer.mc.ui.Button;
+import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.util.text.ITextComponent;
 import net.minecraft.util.text.Style;
-import net.minecraft.util.IReorderingProcessor;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -29,7 +28,7 @@ import java.util.regex.Pattern;
 /** 求解结果二级页：只看报告，避免一级编码界面被文字挤占。 */
 public final class SolveScreen extends RbScreen implements JeiPanelScreen {
 
-    private final Screen parent;
+    private final GuiScreen parent;
     /** 注册名口径的报告（ingredient|/stack| 已被替换成显示名，普通物品仍是 registry id）。 */
     private final String report;
     private final boolean success;
@@ -37,7 +36,7 @@ public final class SolveScreen extends RbScreen implements JeiPanelScreen {
     private final List<Recipe> recipes;
     private final Map<String, Double> targets;
     private final boolean inventoryEnabled;
-    private List<IReorderingProcessor> lines = J8.list();
+    private List<String> lines = J8.list();
     private SolveGraphView graph;
     private boolean graphMode;
     private boolean graphDragging;
@@ -91,11 +90,11 @@ public final class SolveScreen extends RbScreen implements JeiPanelScreen {
     private static Map<String, Integer> titleColors = J8.map();
     private static String titleColorsLanguage;
 
-    public SolveScreen(Screen parent, String report, boolean success) {
+    public SolveScreen(GuiScreen parent, String report, boolean success) {
         this(parent, report, null, J8.list(), J8.map(), false, success);
     }
 
-    public SolveScreen(Screen parent, String report, SolveResult result,
+    public SolveScreen(GuiScreen parent, String report, SolveResult result,
                        List<Recipe> recipes, Map<String, Double> targets,
                        boolean inventoryEnabled, boolean success) {
         super(Lang.c("求解结果"));
@@ -138,12 +137,12 @@ public final class SolveScreen extends RbScreen implements JeiPanelScreen {
     /** 按当前名称口径把报告拆成可绘制的行；切换名称时整页重排。 */
     private void rebuildLines() {
         int wrapWidth = Math.max(80, panelW - 20);
-        List<IReorderingProcessor> built = new ArrayList<>();
+        List<String> built = new ArrayList<>();
         for (String raw : currentReport().split("\n", -1)) {
             if (raw.isEmpty()) {
-                built.add(StringTextComponent.EMPTY.func_241878_f());
+                built.add("");
             } else {
-                built.addAll(font.trimStringToWidth(styled(raw), wrapWidth));
+                built.addAll(font.listFormattedStringToWidth(styled(raw).getFormattedText(), wrapWidth));
             }
         }
         lines = built;
@@ -196,7 +195,7 @@ public final class SolveScreen extends RbScreen implements JeiPanelScreen {
         int color = titleColor(raw);
         return color == 0
                 ? Chat.literal(raw)
-                : Chat.literal(raw).mergeStyle(Chat.styleRgb(color));
+                : Chat.literal(raw).setStyle(Chat.styleRgb(color));
     }
 
     /**
@@ -267,8 +266,8 @@ public final class SolveScreen extends RbScreen implements JeiPanelScreen {
     }
 
     @Override
-    public void renderBackground(MatrixStack pose) {
-        Draw graphics = new Draw(pose, this);
+    public void drawBackground(int tint) {
+        Draw graphics = new Draw(this);
         graphics.fill(0, 0, width, height, 0xD0101010);
         AeStyle.panel(graphics, panelX, panelY, panelW, panelH);
         AeStyle.header(graphics, panelX, panelY, panelW, 20);
@@ -278,9 +277,9 @@ public final class SolveScreen extends RbScreen implements JeiPanelScreen {
     }
 
     @Override
-    public void render(MatrixStack pose, int mouseX, int mouseY, float partialTick) {
-        Draw graphics = new Draw(pose, this);
-        super.render(pose, mouseX, mouseY, partialTick);
+    public void drawScreen(int mouseX, int mouseY, float partialTicks) {
+        Draw graphics = new Draw(this);
+        super.drawScreen(mouseX, mouseY, partialTicks);
 
         AeStyle.subPanel(graphics, panelX + 4, textY, panelW - 8, textH);
         if (graphMode && graph != null) {
@@ -295,7 +294,7 @@ public final class SolveScreen extends RbScreen implements JeiPanelScreen {
 
         graphics.enableScissor(panelX + 4, textY, panelX + panelW - 4, textY + textH);
         int y = textY + 2 - (int) scroll;
-        for (IReorderingProcessor line : lines) {
+        for (String line : lines) {
             if (y + font.FONT_HEIGHT >= textY && y <= textY + textH) {
                 graphics.drawString(font, line, panelX + 8, y, AeStyle.TEXT, false);
             }
@@ -322,7 +321,7 @@ public final class SolveScreen extends RbScreen implements JeiPanelScreen {
     }
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+    protected boolean onMouseClicked(int mouseX, int mouseY, int button) {
         if (graphMode && graph != null && button == 0 && inGraphArea(mouseX, mouseY)) {
             if (graph.beginNodeDrag(mouseX, mouseY)) {
                 graphNodeDragging = true;
@@ -341,42 +340,43 @@ public final class SolveScreen extends RbScreen implements JeiPanelScreen {
             graph.clearSelectionOnRightClick(mouseX, mouseY);
             return true;
         }
-        return super.mouseClicked(mouseX, mouseY, button);
+        return false;
     }
 
+    /** 1.12.2 的拖拽回调（1.16.5 的 {@code mouseDragged}）。 */
     @Override
-    public boolean mouseDragged(double mouseX, double mouseY, int button,
-                                double dragX, double dragY) {
+    protected void mouseClickMove(int mouseX, int mouseY, int clickedMouseButton,
+                                  long timeSinceLastClick) {
         if (graphNodeDragging && graph != null) {
             graph.dragNodeTo(mouseX, mouseY);
-            return true;
+            return;
         }
         if (graphDragging && graph != null) {
             graph.panBy(mouseX - lastGraphMouseX, mouseY - lastGraphMouseY);
             lastGraphMouseX = mouseX;
             lastGraphMouseY = mouseY;
-            return true;
+            return;
         }
-        return super.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+        super.mouseClickMove(mouseX, mouseY, clickedMouseButton, timeSinceLastClick);
     }
 
+    /** 1.12.2 的抬起回调（返回 void）。 */
     @Override
-    public boolean mouseReleased(double mouseX, double mouseY, int button) {
+    protected void mouseReleased(int mouseX, int mouseY, int state) {
+        super.mouseReleased(mouseX, mouseY, state);
         if (graphNodeDragging && graph != null) {
             graph.endNodeDrag();
             graphNodeDragging = false;
-            return true;
+            return;
         }
         if (graphDragging) {
             graphDragging = false;
-            return true;
         }
-        return super.mouseReleased(mouseX, mouseY, button);
     }
 
     /** 1.18.2：只有纵向滚动，签名比 1.20+ 少一个 scrollX。 */
     @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+    protected boolean onMouseScrolled(double delta) {
         if (graphMode && graph != null) {
             if (inGraphArea(mouseX, mouseY)) {
                 graph.zoomAt(mouseX - (panelX + 4), mouseY - textY,
@@ -393,7 +393,7 @@ public final class SolveScreen extends RbScreen implements JeiPanelScreen {
      * {@code onClose()}，所以这里只能做收尾、绝不能再切屏，否则会无限递归。
      */
     @Override
-    public void onClose() {
+    public void onGuiClosed() {
     }
 
     /** ESC 返回上一级（按钮里的 displayGuiScreen 同理，都不会递归）。 */
@@ -409,7 +409,7 @@ public final class SolveScreen extends RbScreen implements JeiPanelScreen {
     }
 
     @Override
-    public boolean isPauseScreen() {
+    public boolean doesGuiPauseGame() {
         return false;
     }
 

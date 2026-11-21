@@ -12,12 +12,12 @@ import com.jessetech.recipebalancer.mc.ui.AeStyle;
 import com.jessetech.recipebalancer.mc.ui.Buttons;
 import com.jessetech.recipebalancer.mc.ui.Chat;
 import com.jessetech.recipebalancer.mc.ui.Draw;
-import com.mojang.blaze3d.matrix.MatrixStack;
+
 import net.minecraft.util.text.TextFormatting;
-import net.minecraft.client.gui.widget.button.Button;
-import net.minecraft.client.gui.screen.Screen;
+import com.jessetech.recipebalancer.mc.ui.Button;
+import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.util.text.ITextComponent;
-import net.minecraft.entity.player.PlayerInventory;
+import net.minecraft.entity.player.InventoryPlayer;
 import net.minecraft.item.ItemStack;
 
 import java.util.ArrayList;
@@ -53,7 +53,7 @@ public final class KeySetScreen extends RbScreen implements JeiPanelScreen {
     /** 清空需要两次点击，第二次必须在这个时间内。 */
     private static final long CLEAR_CONFIRM_MS = 2000L;
 
-    private final Screen parent;
+    private final GuiScreen parent;
     private final String title;
     private final Callback callback;
     /** 清单（保持加入顺序，格子按顺序填充）。 */
@@ -68,7 +68,7 @@ public final class KeySetScreen extends RbScreen implements JeiPanelScreen {
     private int gridY;
     private int inventoryY;
 
-    public KeySetScreen(Screen parent, String title, Collection<String> initial,
+    public KeySetScreen(GuiScreen parent, String title, Collection<String> initial,
                         Callback callback) {
         super(Lang.c(title));
         this.parent = parent;
@@ -311,8 +311,8 @@ public final class KeySetScreen extends RbScreen implements JeiPanelScreen {
     }
 
     @Override
-    public void renderBackground(MatrixStack pose) {
-        Draw graphics = new Draw(pose, this);
+    public void drawBackground(int tint) {
+        Draw graphics = new Draw(this);
         graphics.fill(0, 0, width, height, 0xB0101010);
         AeStyle.panel(graphics, panelX, panelY, PANEL_W, PANEL_H);
         AeStyle.header(graphics, panelX, panelY, PANEL_W, 20);
@@ -325,9 +325,9 @@ public final class KeySetScreen extends RbScreen implements JeiPanelScreen {
     }
 
     @Override
-    public void render(MatrixStack pose, int mouseX, int mouseY, float partialTick) {
-        Draw graphics = new Draw(pose, this);
-        super.render(pose, mouseX, mouseY, partialTick);
+    public void drawScreen(int mouseX, int mouseY, float partialTicks) {
+        Draw graphics = new Draw(this);
+        super.drawScreen(mouseX, mouseY, partialTicks);
 
         scrollRow = Math.max(0, Math.min(scrollRow, maxScroll()));
         for (int row = 0; row < ROWS; row++) {
@@ -361,7 +361,7 @@ public final class KeySetScreen extends RbScreen implements JeiPanelScreen {
             graphics.renderComponentTooltip(font, J8.list(
                     Chat.literal(ItemKeyMapper.displayName(key)),
                     Chat.literal(ItemKeyMapper.registryName(key))
-                            .mergeStyle(TextFormatting.GRAY)), mouseX, mouseY);
+                            .setStyle(new net.minecraft.util.text.Style().setColor(TextFormatting.GRAY))), mouseX, mouseY);
         } else if (slot >= 0) {
             graphics.renderComponentTooltip(font,
                     J8.list(Lang.c("空格：左键/中键自定义物质")), mouseX, mouseY);
@@ -370,7 +370,7 @@ public final class KeySetScreen extends RbScreen implements JeiPanelScreen {
 
     /** 背包 4 行（主背包 3 行 + 快捷栏），9 格宽度＝面板内容宽度。 */
     private void drawInventory(Draw graphics) {
-        PlayerInventory inventory = minecraft == null || minecraft.player == null
+        InventoryPlayer inventory = minecraft == null || minecraft.player == null
                 ? null : minecraft.player.inventory;
         for (int row = 0; row < INV_ROWS; row++) {
             for (int col = 0; col < COLS; col++) {
@@ -391,7 +391,7 @@ public final class KeySetScreen extends RbScreen implements JeiPanelScreen {
     }
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+    protected boolean onMouseClicked(int mouseX, int mouseY, int button) {
         int slot = gridSlotAt(mouseX, mouseY);
         if (slot >= 0) {
             handleGridClick(slot, button);
@@ -404,19 +404,19 @@ public final class KeySetScreen extends RbScreen implements JeiPanelScreen {
             }
             return true;
         }
-        return super.mouseClicked(mouseX, mouseY, button);
+        return false;
     }
 
     /** 1.18.2：只有纵向滚动，签名比 1.20+ 少一个 scrollX。 */
     @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+    protected boolean onMouseScrolled(double delta) {
         if (mouseX >= panelX && mouseX < panelX + PANEL_W
                 && mouseY >= gridY && mouseY < gridY + ROWS * SLOT) {
             scrollRow = Math.max(0, Math.min(
                     scrollRow + (delta < 0 ? 1 : -1), maxScroll()));
             return true;
         }
-        return super.mouseScrolled(mouseX, mouseY, delta);
+        return false;
     }
 
     /**
@@ -424,7 +424,7 @@ public final class KeySetScreen extends RbScreen implements JeiPanelScreen {
      * 这里只做收尾、不再切屏，否则会无限递归。
      */
     @Override
-    public void onClose() {
+    public void onGuiClosed() {
         JeiGhostHighlights.end();
     }
 
@@ -441,7 +441,7 @@ public final class KeySetScreen extends RbScreen implements JeiPanelScreen {
     }
 
     @Override
-    public boolean isPauseScreen() {
+    public boolean doesGuiPauseGame() {
         return false;
     }
 

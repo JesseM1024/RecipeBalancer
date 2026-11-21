@@ -7,28 +7,26 @@ import com.jessetech.recipebalancer.mc.ui.Chat;
 import com.jessetech.recipebalancer.mc.ui.Draw;
 import mezz.jei.api.ingredients.IIngredientHelper;
 import mezz.jei.api.ingredients.IIngredientRenderer;
-import mezz.jei.api.ingredients.IIngredientType;
-import mezz.jei.api.runtime.IIngredientManager;
-import mezz.jei.api.runtime.IJeiRuntime;
+import mezz.jei.api.ingredients.IIngredientRegistry;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.FontRenderer;
 import net.minecraft.client.util.ITooltipFlag;
 import net.minecraft.util.text.ITextComponent;
+import net.minecraft.util.text.Style;
 import net.minecraft.util.text.TextFormatting;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 用 JEI 的 {@code IIngredientRenderer} 绘制流体 / 化学品等非物品配料（1.16.5 版）。
+ * 用 JEI 的 {@code IIngredientRenderer} 绘制流体 / 化学品等非物品配料（1.12.2 版）。
  *
- * <p>7.x 的渲染器签名是 {@code render(MatrixStack, int x, int y, T)}（自带绝对坐标），
- * 与 15.x 的 {@code render(Draw, T)} 不同，这里直接传坐标，不再自己平移。
- *
- * <p>7.x 没有 {@code ITypedIngredient}：配料就是裸对象，类型用
- * {@code IIngredientManager#getIngredientType(ingredient)} 现查。
+ * <p>4.x 的渲染器签名是 {@code render(Minecraft, int x, int y, T)}（自带绝对坐标），
+ * {@code getTooltip(Minecraft, T, ITooltipFlag)} 返回 {@code List<String>}。
  */
 public final class JeiIngredientRenderer
         implements ItemKeyMapper.IngredientRenderHook, ItemKeyMapper.IngredientNameHook {
@@ -45,17 +43,16 @@ public final class JeiIngredientRenderer
     public boolean render(Draw graphics, FontRenderer font, String key, int x, int y,
                           String amount) {
         Object ingredient = resolveIngredient(key);
-        IJeiRuntime runtime = JeiIngredientMapper.runtime();
-        if (ingredient == null || runtime == null) {
+        IIngredientRegistry registry = JeiIngredientMapper.registry();
+        if (ingredient == null || registry == null) {
             return false;
         }
         try {
-            IIngredientRenderer<Object> renderer = rendererOf(runtime.getIngredientManager(),
-                    ingredient);
+            IIngredientRenderer<Object> renderer = rendererOf(registry, ingredient);
             if (renderer == null) {
                 return false;
             }
-            renderer.render(graphics.pose(), x + 1, y + 1, ingredient);
+            renderer.render(Minecraft.getMinecraft(), x + 1, y + 1, ingredient);
             ItemKeyMapper.renderAmountOverlay(graphics, font, amount, x, y);
             return true;
         } catch (RuntimeException | LinkageError e) {
@@ -67,13 +64,12 @@ public final class JeiIngredientRenderer
     public boolean renderTooltip(Draw graphics, FontRenderer font, String key,
                                  int mouseX, int mouseY) {
         Object ingredient = resolveIngredient(key);
-        IJeiRuntime runtime = JeiIngredientMapper.runtime();
-        if (ingredient == null || runtime == null) {
+        IIngredientRegistry registry = JeiIngredientMapper.registry();
+        if (ingredient == null || registry == null) {
             return false;
         }
         try {
-            IIngredientRenderer<Object> renderer = rendererOf(runtime.getIngredientManager(),
-                    ingredient);
+            IIngredientRenderer<Object> renderer = rendererOf(registry, ingredient);
             if (renderer == null) {
                 return false;
             }
@@ -85,29 +81,28 @@ public final class JeiIngredientRenderer
             if (name != null && !name.trim().isEmpty()) {
                 lines.add(Chat.literal(name));
             }
-            List<ITextComponent> extra = renderer.getTooltip(ingredient,
+            List<String> extra = renderer.getTooltip(Minecraft.getMinecraft(), ingredient,
                     ITooltipFlag.TooltipFlags.NORMAL);
             if (extra != null) {
-                for (ITextComponent line : extra) {
-                    if (line == null || line.getString().trim().isEmpty()) {
+                for (String line : extra) {
+                    if (line == null || line.trim().isEmpty()) {
                         continue;
                     }
-                    String text = line.getString();
-                    if (name != null && text.contains(name)) {
+                    if (name != null && line.contains(name)) {
                         continue;   // 与首行重复
                     }
-                    if (text.contains("mB") || text.contains("mb")) {
+                    if (line.contains("mB") || line.contains("mb")) {
                         continue;   // 不显示物质量（Create 会给出放大后的 437 mB，反而误导）
                     }
-                    lines.add(line);
+                    lines.add(Chat.literal(line));
                 }
             }
             if (lines.isEmpty()) {
-                lines.add(Chat.literal(IngredientKey.describe(key))
-                        .mergeStyle(TextFormatting.GRAY));
+                lines.add(Chat.styled(IngredientKey.describe(key),
+                        new Style().setColor(TextFormatting.GRAY)));
             }
-            lines.add(Chat.literal(Lang.t("RecipeBalancer 数量单位: B"))
-                    .mergeStyle(TextFormatting.DARK_GRAY));
+            lines.add(Chat.styled(Lang.t("RecipeBalancer 数量单位: B"),
+                    new Style().setColor(TextFormatting.DARK_GRAY)));
             graphics.renderComponentTooltip(font, lines, mouseX, mouseY);
             return true;
         } catch (RuntimeException | LinkageError e) {
@@ -117,17 +112,16 @@ public final class JeiIngredientRenderer
 
     /** 供 R/U 查询：把 ingredient key 还原成 JEI 的裸配料对象。 */
     public static Object resolveIngredient(String key) {
-        IJeiRuntime runtime = JeiIngredientMapper.runtime();
-        if (runtime == null || key == null || !IngredientKey.isIngredientKey(key)) {
+        IIngredientRegistry registry = JeiIngredientMapper.registry();
+        if (registry == null || key == null || !IngredientKey.isIngredientKey(key)) {
             return null;
         }
         // 先查会话缓存：本次拖拽/导入时记下的对象最可靠
-        // （部分配料 uniqueId 不含完整 NBT，反查会失败，表现为编码成自定义物质、R/U 失效）
         Object remembered = JeiIngredientMapper.recall(key);
         if (remembered != null) {
             return remembered;
         }
-        return resolveCached(runtime, key).orElse(null);
+        return resolveCached(registry, key).orElse(null);
     }
 
     /** JEI runtime 重建时清空反查缓存。 */
@@ -141,14 +135,14 @@ public final class JeiIngredientRenderer
         return ingredient == null ? null : JeiIngredientMapper.displayNameOf(ingredient);
     }
 
-    private static Optional<Object> resolveCached(IJeiRuntime runtime, String key) {
+    private static Optional<Object> resolveCached(IIngredientRegistry registry, String key) {
         Optional<Object> cached = RESOLVED.get(key);
         if (cached != null) {
             return cached;
         }
         Optional<Object> resolved;
         try {
-            resolved = lookup(runtime, key);
+            resolved = lookup(registry, key);
         } catch (RuntimeException | LinkageError e) {
             resolved = Optional.empty();
         }
@@ -157,23 +151,21 @@ public final class JeiIngredientRenderer
     }
 
     /**
-     * 7.x 没有按 uid 取配料的 API：按类型遍历全部配料，用 helper 的 uniqueId 匹配。
+     * 4.x 没有按 uid 取配料的 API：按类型遍历全部配料，用 helper 的 uniqueId 匹配。
      * 结果按 key 缓存，重复绘制不会每次都全量遍历。
      */
-    private static Optional<Object> lookup(IJeiRuntime runtime, String key) {
-        IIngredientManager manager = runtime.getIngredientManager();
-        Optional<IIngredientType<?>> type =
-                JeiIngredientMapper.findType(manager, IngredientKey.typeUid(key));
-        if (!type.isPresent()) {
+    private static Optional<Object> lookup(IIngredientRegistry registry, String key) {
+        Class<?> type = JeiIngredientMapper.findType(registry, IngredientKey.typeUid(key));
+        if (type == null) {
             return Optional.empty();
         }
-        IIngredientType rawType = type.get();
-        IIngredientHelper<Object> helper = manager.getIngredientHelper(rawType);
+        Collection<Object> all = JeiIngredientMapper.allIngredients(registry, cast(type));
+        IIngredientHelper<Object> helper = JeiIngredientMapper.helperOfClass(registry, cast(type));
         if (helper == null) {
             return Optional.empty();
         }
         String uniqueId = IngredientKey.uniqueId(key);
-        for (Object candidate : manager.getAllIngredients(rawType)) {
+        for (Object candidate : all) {
             if (uniqueId.equals(helper.getUniqueId(candidate))) {
                 return Optional.of(candidate);
             }
@@ -181,26 +173,17 @@ public final class JeiIngredientRenderer
         return Optional.empty();
     }
 
-    /** 反射读配料的 {@code getAmount()}（流体/气体都有，物品没有）；取不到返回 0。 */
-    private static int reflectiveAmount(Object ingredient) {
-        if (ingredient == null) {
-            return 0;
-        }
-        try {
-            Object value = ingredient.getClass().getMethod("getAmount").invoke(ingredient);
-            return value instanceof Number ? ((Number) value).intValue() : 0;
-        } catch (ReflectiveOperationException | RuntimeException e) {
-            return 0;
-        }
+    @SuppressWarnings("unchecked")
+    private static <T> Class<T> cast(Class<?> type) {
+        return (Class<T>) type;
     }
 
     @SuppressWarnings("unchecked")
-    private static IIngredientRenderer<Object> rendererOf(IIngredientManager manager,
+    private static IIngredientRenderer<Object> rendererOf(IIngredientRegistry registry,
                                                           Object ingredient) {
-        if (manager == null || ingredient == null) {
+        if (registry == null || ingredient == null) {
             return null;
         }
-        IIngredientRenderer<?> renderer = manager.getIngredientRenderer(ingredient);
-        return (IIngredientRenderer<Object>) renderer;
+        return (IIngredientRenderer<Object>) registry.getIngredientRenderer(ingredient);
     }
 }

@@ -1,16 +1,11 @@
 package com.jessetech.recipebalancer.mc.jei;
 
-import com.mojang.blaze3d.matrix.MatrixStack;
-import net.minecraft.client.gui.AbstractGui;
+import com.jessetech.recipebalancer.mc.ui.Draw;
 
 /**
- * JEI 配方页按钮的图案：13×13，从 JEI 高版本按钮里逐像素采样得到（与 1.20.1 / main 分支同一份）。
+ * JEI 配方页按钮的图案：13×13，从 JEI 高版本按钮里逐像素采样得到（各版本线同一份）。
  *
- * <p>尺寸跟 JEI 自带的侧边按钮（转移/书签按钮 13×13）一致，两条路径共用这份像素表：
- * <ul>
- *   <li>JEI 提供按钮 API 时由 JEI 画底板，我们只提供图案（{@code RbRecipeButtonFactory}）；</li>
- *   <li>否则 {@link JeiRecipeOverlay} 直接画图案 + 悬停白框（9.x 的客户端叠加层）。</li>
- * </ul>
+ * <p>1.12.2 的 JEI 没有按钮 API，{@link JeiRecipeOverlay} 直接画这份图案 + 悬停白框。
  */
 public final class JeiButtonSkin {
 
@@ -38,31 +33,30 @@ public final class JeiButtonSkin {
     }
 
     /** 画一个完整的 13×13 按钮（图案 + 悬停白框）。 */
-    public static void draw(MatrixStack pose, int x, int y, boolean hover) {
-        drawIcon(pose, x, y);
+    public static void draw(Draw graphics, int x, int y, boolean hover) {
+        drawIcon(graphics, x, y);
         if (hover) {
-            drawHoverBorder(pose, x, y);
+            drawHoverBorder(graphics, x, y);
         }
     }
 
     /** 只画 13×13 图案。 */
-    public static void drawIcon(MatrixStack pose, int x, int y) {
+    public static void drawIcon(Draw graphics, int x, int y) {
         for (int row = 0; row < ICON.length; row++) {
             for (int col = 0; col < ICON[row].length; col++) {
-                AbstractGui.fill(pose, x + col, y + row, x + col + 1, y + row + 1,
-                        ICON[row][col]);
+                graphics.fill(x + col, y + row, x + col + 1, y + row + 1, ICON[row][col]);
             }
         }
     }
 
     /** 悬停时的 1px 白框：老版本 JEI 的按钮没有底板，用它提供点击反馈。 */
-    public static void drawHoverBorder(MatrixStack pose, int x, int y) {
+    public static void drawHoverBorder(Draw graphics, int x, int y) {
         int x2 = x + SIZE;
         int y2 = y + SIZE;
         int white = 0xFFFFFFFF;
-        AbstractGui.fill(pose, x, y, x2, y + 1, white);
-        AbstractGui.fill(pose, x, y2 - 1, x2, y2, white);
-        AbstractGui.fill(pose, x, y, x + 1, y2, white);
-        AbstractGui.fill(pose, x2 - 1, y, x2, y2, white);
+        graphics.fill(x, y, x2, y + 1, white);
+        graphics.fill(x, y2 - 1, x2, y2, white);
+        graphics.fill(x, y, x + 1, y2, white);
+        graphics.fill(x2 - 1, y, x2, y2, white);
     }
 }

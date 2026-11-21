@@ -1,6 +1,5 @@
 package com.jessetech.recipebalancer.mc.i18n;
 
-import net.minecraft.util.text.StringTextComponent;
 import com.jessetech.recipebalancer.core.util.J8;
 import com.jessetech.recipebalancer.mc.ui.Chat;
 import net.minecraft.client.Minecraft;
@@ -12,20 +11,20 @@ import java.util.Locale;
 /**
  * 轻量 i18n 入口。
  *
- * <p>源文本使用中文作为 key；{@code en_us.json} 提供英文映射。
+ * <p>源文本使用中文作为 key；{@code en_us.lang} 提供英文映射。
  * 中文环境下直接使用源文本，避免 zh_cn 文件缺项时回退成英文。
  *
- * <p>1.16.5 线：{@code Component/MutableComponent} 换成 {@code ITextComponent}
- * （{@link Chat#literal} 返回 {@code StringTextComponent}），{@code I18n} 换到
- * {@code net.minecraft.client.resources} 包。
+ * <p>1.12.2 线：文本组件只有 {@link ITextComponent}（没有
+ * {@code ITextComponent}），{@code I18n} 仍在
+ * {@code net.minecraft.client.resources} 包，语言文件是 {@code .lang}。
  */
 public final class Lang {
 
     private Lang() {
     }
 
-    /** 返回可继续链式设置样式的组件（1.16.5 的样式方法是 {@code mergeStyle}）。 */
-    public static net.minecraft.util.text.IFormattableTextComponent c(String key, Object... args) {
+    /** 返回文本组件（1.12.2 的样式方法直接作用在组件上）。 */
+    public static ITextComponent c(String key, Object... args) {
         return Chat.literal(t(key, args));
     }
 
@@ -88,7 +87,7 @@ public final class Lang {
 
     /** 当前游戏语言代码（如 {@code en_us}）；语言切换时可用来判断缓存是否过期。 */
     public static String languageCode() {
-        Minecraft minecraft = Minecraft.getInstance();
+        Minecraft minecraft = Minecraft.getMinecraft();
         String code = minecraft == null || minecraft.gameSettings == null
                 ? "en_us" : minecraft.gameSettings.language;
         return code == null ? "en_us" : code;

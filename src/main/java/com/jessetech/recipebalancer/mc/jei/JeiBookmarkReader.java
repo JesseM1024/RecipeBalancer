@@ -1,26 +1,30 @@
 package com.jessetech.recipebalancer.mc.jei;
 
 import com.jessetech.recipebalancer.RecipeBalancerMod;
-import mezz.jei.bookmarks.BookmarkList;
-import mezz.jei.gui.ingredients.IIngredientListElement;
-import mezz.jei.gui.overlay.bookmarks.BookmarkOverlay;
 
-import java.lang.reflect.Field;
+import java.util.Collection;
 import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Set;
 
 /**
- * 读取 JEI 右侧书签里的全部 ingredient（1.16.5 / JEI 7.x）。
+ * 读取 JEI 右侧书签里的全部 ingredient（1.12.2 / JEI 4.x）。
  *
- * <p>7.x 的公开 API 只有 {@code IBookmarkOverlay#getIngredientUnderMouse()}，
- * 拿不到「全部书签」，只能反射内部字段：
- * {@code BookmarkOverlay#bookmarkList} → {@code BookmarkList#getIngredientList(String)}
- * → 每个 {@code IIngredientListElement#getIngredient()}。
+ * <p>三级降级（逐 jar 核实过的版本边界）：
+ * <ol>
+ *   <li>4.15+：公开 API {@code IJeiRuntime#getBookmarkOverlay()} → 反射
+ *       {@code BookmarkOverlay#bookmarkList}（按字段类型找） → {@code BookmarkList#getIngredientList()}；</li>
+ *   <li>4.13 / 4.14：{@code getBookmarkOverlay()} 可能不可用 → 在 runtime 对象里按类型找
+ *       {@code BookmarkOverlay} 字段，再走同上流程；</li>
+ *   <li>更老：返回空表并只告警一次。</li>
+ * </ol>
  *
- * <p>结构不对（JEI 改了内部实现）时返回空表并只告警一次，<b>绝不影响</b>界面与求解。
+ * <p>结构不对（JEI 改了内部实现）时返回空表，<b>绝不影响</b>界面与求解。
+ * 本类不 import 任何 {@code mezz.jei.*} 类型，全部走反射。
  */
 public final class JeiBookmarkReader {
+
+    private static final String OVERLAY_TYPE = "mezz.jei.gui.overlay.bookmarks.BookmarkOverlay";
+    private static final String LIST_TYPE = "mezz.jei.bookmarks.BookmarkList";
 
     /** 反射失败只告警一次，避免每次打开物料清单都刷屏。 */
     private static boolean warned;
@@ -36,24 +40,31 @@ public final class JeiBookmarkReader {
             return keys;
         }
         try {
-            Object overlay = runtime.getClass().getMethod("getBookmarkOverlay").invoke(runtime);
-            if (!(overlay instanceof BookmarkOverlay)) {
+            Object overlay = overlay(runtime);
+            if (overlay == null) {
                 return keys;
             }
-            BookmarkList list = bookmarkList((BookmarkOverlay) overlay);
+            Object list = JeiReflect.fieldOfType(overlay, LIST_TYPE);
+            if (list == null) {
+                // 字段类型可能被子类化，退一步按类名后缀扫描
+                list = fieldOfTypeName(overlay, "BookmarkList");
+            }
             if (list == null) {
                 return keys;
             }
-            List<IIngredientListElement<?>> elements = list.getIngredientList("");
-            if (elements == null) {
+            Object elements = ingredientList(list);
+            if (!(elements instanceof Collection)) {
                 return keys;
             }
-            for (IIngredientListElement<?> element : elements) {
+            for (Object element : (Collection<?>) elements) {
                 if (element == null) {
                     continue;
                 }
-                JeiIngredientMapper.Mapped mapped =
-                        JeiIngredientMapper.of(element.getIngredient());
+                Object ingredient = JeiReflect.call(element, "getIngredient");
+                if (ingredient == null) {
+                    continue;
+                }
+                JeiIngredientMapper.Mapped mapped = JeiIngredientMapper.of(ingredient);
                 if (mapped != null) {
                     keys.add(mapped.key());
                 }
@@ -69,15 +80,44 @@ public final class JeiBookmarkReader {
         return keys;
     }
 
-    private static BookmarkList bookmarkList(BookmarkOverlay overlay) {
-        Class<?> type = overlay.getClass();
+    /** 4.15+ 走公开方法；更老的版本在 runtime 里按类型找字段。 */
+    private static Object overlay(Object runtime) {
+        Object overlay = JeiReflect.call(runtime, "getBookmarkOverlay");
+        if (overlay != null) {
+            return overlay;
+        }
+        Object byType = JeiReflect.fieldOfType(runtime, OVERLAY_TYPE);
+        if (byType != null) {
+            return byType;
+        }
+        return fieldOfTypeName(runtime, "BookmarkOverlay");
+    }
+
+    /** {@code getIngredientList()} 在 4.16+ 无参；更老的版本可能带一个 String 参数。 */
+    private static Object ingredientList(Object list) {
+        Object elements = JeiReflect.call(list, "getIngredientList");
+        if (elements != null) {
+            return elements;
+        }
+        try {
+            java.lang.reflect.Method method = list.getClass().getMethod("getIngredientList", String.class);
+            method.setAccessible(true);
+            return method.invoke(list, "");
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    /** 按「类名以给定后缀结尾」找字段（字段被声明成接口/父类时的兜底）。 */
+    private static Object fieldOfTypeName(Object owner, String simpleNameSuffix) {
+        Class<?> type = owner.getClass();
         while (type != null) {
-            for (Field field : type.getDeclaredFields()) {
-                if (BookmarkList.class.isAssignableFrom(field.getType())) {
+            for (java.lang.reflect.Field field : type.getDeclaredFields()) {
+                if (field.getType().getSimpleName().endsWith(simpleNameSuffix)) {
                     try {
                         field.setAccessible(true);
-                        return (BookmarkList) field.get(overlay);
-                    } catch (ReflectiveOperationException | RuntimeException e) {
+                        return field.get(owner);
+                    } catch (Throwable t) {
                         return null;
                     }
                 }

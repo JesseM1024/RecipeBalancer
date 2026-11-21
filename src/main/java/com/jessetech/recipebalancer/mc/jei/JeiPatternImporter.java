@@ -3,8 +3,8 @@ package com.jessetech.recipebalancer.mc.jei;
 import com.jessetech.recipebalancer.core.model.RecipePattern;
 import com.jessetech.recipebalancer.mc.itemmap.ItemKeyMapper;
 import com.jessetech.recipebalancer.mc.itemmap.ProductIndex;
-import mezz.jei.api.recipe.category.IRecipeCategory;
-import mezz.jei.api.runtime.IJeiRuntime;
+import mezz.jei.api.IJeiRuntime;
+import mezz.jei.api.recipe.IRecipeCategory;
 import mezz.jei.gui.recipes.RecipeLayout;
 import net.minecraft.item.ItemStack;
 import net.minecraftforge.fluids.FluidStack;
@@ -16,10 +16,13 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 把 JEI 的配方转成我们的编码样板（输入 / 输出 / 设备），1.16.5 / JEI 7.x 版。
+ * 把 JEI 的配方转成我们的编码样板（输入 / 输出 / 设备），1.12.2 / JEI 4.x 版。
  *
- * <p>7.x 的槽位来源是 {@code RecipeLayout} 的分组（{@link JeiSlots#fromLayout}）：
+ * <p>槽位来源是 {@code RecipeLayout} 的分组（{@link JeiSlots#fromLayout}）：
  * 合成配方带矩形时按九宫格还原形状，机器配方或取不到矩形时按顺序紧排。
+ *
+ * <p>4.x 的类别 uid 是 {@code String}（{@code "create:item_draining"} 这种），
+ * 因此命名空间判断从 {@code ResourceLocation} 改成字符串前缀。
  */
 public final class JeiPatternImporter {
 
@@ -48,10 +51,9 @@ public final class JeiPatternImporter {
             applyEquipment(category, pattern);
             return pattern;
         }
-        // Create 的 JEI 类别把「排水」的流体槽用 init(0, true, ...) 声明成输入
-        // （ItemDrainCategory 的既有写法），视觉上它其实是输出；
+        // 部分类别的「排水」流体槽在 JEI 里声明成输入，视觉上其实是输出；
         // 按类别 uid 修正，否则气/液产物会全部落到原料区、产物为空。
-        boolean draining = isCreateDraining(category);
+        boolean draining = isDrainingCategory(category);
         List<JeiSlots.Slot> inputs = new ArrayList<>();
         List<JeiSlots.Slot> outputs = new ArrayList<>();
         for (JeiSlots.Slot slot : slots) {
@@ -80,7 +82,7 @@ public final class JeiPatternImporter {
         }
         Collections.sort(xs);
         Collections.sort(ys);
-        boolean grid = allHaveRect && isCraftingRecipe(category)
+        boolean grid = allHaveRect && isCraftingCategory(category)
                 && !xs.isEmpty() && xs.size() <= INPUT_COLS && ys.size() <= 9;
 
         int inputIndex = 0;
@@ -111,7 +113,7 @@ public final class JeiPatternImporter {
         return pattern;
     }
 
-    /** 一份 JEI 配方布局 → 编码样板（7.x 的布局对象是 {@code RecipeLayout}）。 */
+    /** 一份 JEI 配方布局 → 编码样板（4.x 的布局对象是 {@code RecipeLayout}）。 */
     public static RecipePattern build(IRecipeCategory<?> category, Object layout) {
         List<JeiSlots.Slot> slots = JeiSlots.fromLayout(layout);
         return buildFromSlots(category, slots, fluidOriginals(layout));
@@ -120,23 +122,22 @@ public final class JeiPatternImporter {
     /**
      * 从配方对象读出流体的<b>真实</b>用量（桶）。
      *
-     * <p>比按显示量做逆运算可靠：Create 的部分类别会把槽位里的 FluidStack 数量放大
-     * （{@code withImprovedVisibility}），但配方对象本身（{@code FillingRecipe#getRequiredFluid}、
-     * {@code EmptyingRecipe#getResultingFluid} 等）始终是原始值。
-     * 这里反射取这两类 getter，顺带支持 Create 的 {@code FluidIngredient}（取其匹配流体列表）。
-     *
-     * @return 流体注册名 → 桶数；取不到返回空表（调用方再退回逆函数兜底）
+     * <p>4.x 的 {@code RecipeLayout} 没有公开的 {@code getRecipe()}，只能反射私有字段
+     * {@code recipeWrapper}；拿到 wrapper 后再试 {@code getRequiredFluid/getResultingFluid}
+     * 以及 wrapper 内部的 {@code recipe} 字段。取不到返回空表（调用方退回逆函数兜底）。
      */
     private static Map<String, Double> fluidOriginals(Object layout) {
         Map<String, Double> out = new HashMap<>();
-        Object recipe;
-        try {
-            recipe = ((RecipeLayout<?>) layout).getRecipe();
-        } catch (RuntimeException | LinkageError e) {
+        if (!(layout instanceof RecipeLayout)) {
             return out;
         }
+        Object recipe = JeiReflect.field(layout, "recipeWrapper");
         if (recipe == null) {
             return out;
+        }
+        Object inner = JeiReflect.field(recipe, "recipe");
+        if (inner != null) {
+            recipe = inner;
         }
         for (String getter : new String[]{"getRequiredFluid", "getResultingFluid"}) {
             try {
@@ -173,10 +174,10 @@ public final class JeiPatternImporter {
 
     private static void putFluid(Map<String, Double> out, FluidStack stack) {
         if (stack == null || stack.getFluid() == null
-                || stack.getFluid().getRegistryName() == null) {
+                || net.minecraftforge.fluids.FluidRegistry.getFluidName(stack.getFluid()) == null) {
             return;
         }
-        out.put(stack.getFluid().getRegistryName().toString(), stack.getAmount() / 1000.0);
+        out.put(net.minecraftforge.fluids.FluidRegistry.getFluidName(stack.getFluid()).toString(), stack.amount / 1000.0);
     }
 
     /** 槽位里第一个流体配料的注册名，用于匹配配方原始量。 */
@@ -184,27 +185,30 @@ public final class JeiPatternImporter {
         for (Object candidate : slot.ingredients()) {
             if (candidate instanceof FluidStack) {
                 FluidStack stack = (FluidStack) candidate;
-                if (stack.getFluid() != null && stack.getFluid().getRegistryName() != null) {
-                    return stack.getFluid().getRegistryName().toString();
+                if (stack.getFluid() != null && net.minecraftforge.fluids.FluidRegistry.getFluidName(stack.getFluid()) != null) {
+                    return net.minecraftforge.fluids.FluidRegistry.getFluidName(stack.getFluid()).toString();
                 }
             }
         }
         return null;
     }
 
-    /**
-     * Create 的「排水 / 倒空」（Item Draining）类别把流体槽声明成了输入
-     * （{@code ItemDrainCategory} 里是 {@code fluidStacks.init(0, true, ...)}），
-     * 但它在配方页画在右侧、语义上是产物。这里按类别 uid 修正。
-     */
-    private static boolean isCreateDraining(IRecipeCategory<?> category) {
+    /** 4.x 的类别 uid 是 {@code String}（如 {@code create:item_draining}）。 */
+    private static String uidOf(IRecipeCategory<?> category) {
         try {
-            net.minecraft.util.ResourceLocation uid = category.getUid();
-            return uid != null && "create".equals(uid.getNamespace())
-                    && uid.getPath().contains("drain");
+            return category == null ? null : category.getUid();
         } catch (RuntimeException | LinkageError e) {
-            return false;
+            return null;
         }
+    }
+
+    /**
+     * 「排水 / 倒空」类别把流体槽声明成了输入，但它在配方页画在右侧、语义上是产物。
+     * 按类别 uid 修正。
+     */
+    private static boolean isDrainingCategory(IRecipeCategory<?> category) {
+        String uid = uidOf(category);
+        return uid != null && uid.startsWith("create:") && uid.contains("drain");
     }
 
     /** 已提示过的（类别 + 显示量），避免每次导入都刷屏。 */
@@ -212,14 +216,12 @@ public final class JeiPatternImporter {
             java.util.Collections.synchronizedSet(new java.util.HashSet<String>());
 
     /**
-     * 还原 Create 的「流体可见性放大」。
+     * 还原「流体可见性放大」。
      *
      * <p>Create 的 {@code CreateRecipeCategory#withImprovedVisibility(FluidStack)} 是：
      * {@code amount = (int)(原量 * 0.75) + 250}（1000 正好是不动点）。
-     * 于是在 JEI 里看到的 tooltip 是原量（250 mB），槽位里存的 FluidStack 却是 437 mB。
      * 按逆函数 {@code ceil((shown - 250) / 0.75)} 还原：437→250、625→500、1000→1000。
-     *
-     * <p>只对 {@code create} 命名空间的类别生效，且只作用于流体槽。
+     * 只对 {@code create:} 类别生效，且只作用于流体槽。
      */
     private static double restoreAmount(IRecipeCategory<?> category, JeiSlots.Slot slot,
                                         double amount, Map<String, Double> originals) {
@@ -242,13 +244,8 @@ public final class JeiPatternImporter {
     }
 
     private static double createInverse(IRecipeCategory<?> category, double amount) {
-        net.minecraft.util.ResourceLocation uid;
-        try {
-            uid = category == null ? null : category.getUid();
-        } catch (RuntimeException | LinkageError e) {
-            return amount;
-        }
-        if (uid == null || !"create".equals(uid.getNamespace())) {
+        String uid = uidOf(category);
+        if (uid == null || !uid.startsWith("create:")) {
             return amount;
         }
         double shownMb = amount * 1000.0;
@@ -273,13 +270,9 @@ public final class JeiPatternImporter {
     }
 
     /** 只有合成配方保留空格（纯视觉），机器配方等一律按顺序紧排。 */
-    private static boolean isCraftingRecipe(IRecipeCategory<?> category) {
-        try {
-            net.minecraft.util.ResourceLocation uid = category.getUid();
-            return uid != null && uid.getPath().contains("crafting");
-        } catch (RuntimeException | LinkageError e) {
-            return false;
-        }
+    private static boolean isCraftingCategory(IRecipeCategory<?> category) {
+        String uid = uidOf(category);
+        return uid != null && uid.contains("crafting");
     }
 
     /**
@@ -318,12 +311,12 @@ public final class JeiPatternImporter {
 
     /** 设备：取该配方类型的第一个催化剂。 */
     private static void applyEquipment(IRecipeCategory<?> category, RecipePattern pattern) {
-        IJeiRuntime runtime = JeiIngredientMapper.runtime();
+        IJeiRuntime runtime = JeiAutoRecipe.runtime();
         if (runtime == null || category == null) {
             return;
         }
         try {
-            for (Object catalyst : runtime.getRecipeManager().getRecipeCatalysts(category)) {
+            for (Object catalyst : runtime.getRecipeRegistry().getRecipeCatalysts(category)) {
                 if (catalyst instanceof ItemStack) {
                     ItemStack stack = (ItemStack) catalyst;
                     if (stack.isEmpty()) {

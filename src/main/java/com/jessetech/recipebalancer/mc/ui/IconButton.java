@@ -1,7 +1,6 @@
 package com.jessetech.recipebalancer.mc.ui;
 
-import com.mojang.blaze3d.matrix.MatrixStack;
-import net.minecraft.client.gui.widget.button.Button;
+import net.minecraft.client.Minecraft;
 import net.minecraft.util.text.ITextComponent;
 
 import java.util.function.Supplier;
@@ -10,7 +9,7 @@ import java.util.function.Supplier;
  * 方形图标按钮：沿用原版按钮底（与「打开/保存」同款），上面只叠一层纯白像素图标。
  *
  * <p>开关类按钮关闭时图标变淡；提示文字由界面在渲染末尾统一画，
- * 避免被同帧其它 widget 覆盖。
+ * 避免被同帧其它控件覆盖。
  */
 public final class IconButton extends Button {
 
@@ -27,7 +26,6 @@ public final class IconButton extends Button {
      */
     public IconButton(int x, int y, int size, PixelIcon icon, boolean stateful,
                       Supplier<ITextComponent> tooltip, IPressable onPress) {
-        // 1.18.2 的 Button 没有 builder()/DEFAULT_NARRATION，直接给 6 参构造器
         super(x, y, size, size, Chat.empty(), onPress);
         this.icon = icon;
         this.stateful = stateful;
@@ -42,17 +40,23 @@ public final class IconButton extends Button {
         return tooltip.get();
     }
 
-    /** 1.18.2 的可绘制入口叫 renderButton（1.19.3 起改名 renderWidget）。 */
+    /** 1.12.2 的可绘制入口叫 drawButton（1.16.5 叫 renderWidget）。 */
     @Override
-    public void renderWidget(MatrixStack pose, int mouseX, int mouseY, float partialTick) {
+    public void drawButton(Minecraft mc, int mouseX, int mouseY, float partialTicks) {
+        if (!visible) {
+            return;
+        }
         // 原版按钮底（悬停变蓝的那套贴图），只把文字换成图标。
         // 18×18 这种小方块不能走 super：原版把 200×20 贴图左右各切一半硬贴，
-        // 会把圆角和上下边框切掉，看起来像贴图被压坏；这里改用九宫格。
-        Buttons.drawButtonBackground(pose, x, y, width, height,
-                46 + getYImage(isHovered()) * 20);
+        // 会把圆角和上下边框切掉；这里改用九宫格。
+        Buttons.drawButtonBackground(x, y, width, height,
+                46 + getHoverState(isMouseOverButton(mouseX, mouseY)) * Buttons.BUTTON_SRC_H);
         int color = stateful && !on ? ICON_OFF : ICON_ON;
-        // 1.18.2 的控件坐标是字段（x/y/width/height），没有 getX()/getY()/getWidth()
-        icon.draw(new Draw(pose), x + (width - icon.width()) / 2,
+        icon.draw(new Draw(), x + (width - icon.width()) / 2,
                 y + (height - icon.height()) / 2, color);
+    }
+
+    private boolean isMouseOverButton(int mouseX, int mouseY) {
+        return mouseX >= x && mouseY >= y && mouseX < x + width && mouseY < y + height;
     }
 }

@@ -5,6 +5,63 @@
 
 ---
 
+## R50 · 2026-11-21 · 1.12.2 实机三修：图标光照 / 流体量 / 物品变体
+
+### 实测结果（4.22.0.1037，`1.12.2-Forge` 实例）
+
+| 现象 | 根因 | 修复 |
+|---|---|---|
+| 物品图标"失去明暗"（全亮平涂） | `Draw#renderItem` 没有开 GUI 标准物品光照（1.12.2 不自动开） | 渲染前 `flush()` + `RenderHelper.enableGUIStandardItemLighting()` + `GlStateManager.color(1,1,1,1)` |
+| 热力灌水瓶 0.25 B 水 → 写成 1 B；MEK 电解 2 mB 也一样 | `FluidStack` 在 1.12.2 **没有 `getAmount()`**，反射取数失败 → 回落默认 1 B | 先按 `FluidStack.amount` 字段读，再试 `getAmount()`，最后试同名 `amount` 字段 |
+| 河豚（`minecraft:fish` meta 3）被存成生鱼（meta 0） | 1.12.2 的变体在 **metadata**，`writeToNBT` 也不含 Damage | 物品 key 带 meta（`minecraft:fish#3`）；NBT 路径把 Damage 补进 tag；`stack(key)` 解析 meta；手输名字时枚举 `getSubItems` 变体 |
+
+构建：`BUILD SUCCESSFUL`，84 单测全绿，已部署到实例（16:17）。
+
+## R49 · 2026-11-21 · 1.12.2（Forge 14.23.5.2859）移植：工具链切换 + JEI 4.x 桥接
+
+### 实测结果
+
+| 项 | 结果 |
+|---|---|
+| `gradlew build` | **BUILD SUCCESSFUL**（Gradle 4.9 + FG3 + JDK 8） |
+| 产物 | `recipebalancer-0.3.1-1.12.2.jar` **2,300,639 B**（含 `recipebalancer/lib/math3.jar` 嵌套库） |
+| 单测 | **84 tests, 0 failures**（`core` 金标准 + `mc/itemmap` 全部保留） |
+| 部署 | 已复制到 `1.12.2-Forge/mods/`（`deployToTestInstance`） |
+| 实机 | 未测（按约定由人工抽样验证，见 `docs/JEI-COMPAT-1.12.2.md` §8） |
+
+### 工具链
+
+- 分支 `1.12.2-forge`：ForgeGradle **3.+** + Gradle **4.9** + JDK **1.8** + MCP `snapshot 20171003-1.12`
+  + Forge `1.12.2-14.23.5.2859`；`jar.finalizedBy('reobfJar')`，产物一律 `gradlew build` 出。
+- 构建脚本改写为 Gradle 4.x 语法（`def`/`task xxx`），`mods.toml` + `generateModMetadata` 换成
+  `src/main/resources/mcmod.info`（`processResources` 的 `filteringCharset='UTF-8'` 保留）；
+  `pack.mcmeta` 的 `pack_format` 6 → **3**；`src/jeiModern/` 三个 1.18/1.20 遗留源码删除。
+
+### JEI：7.x → 4.x
+
+- 编译基线 `libs/jei-api/jei-1.12.2-4.8.5.160.jar`；`mcmod.info` 声明 `after:jei@[4.7.8,)`。
+- 插件入口改 `@JEIPlugin` + `register(IModRegistry)`；`getPluginUid()` 在 4.x 不存在，已删除。
+- 注册拆分三档，全部 `try/catch (Throwable)`：
+  `RecipeBalancerJeiPlugin`（4.7 就能跑的 `IAdvancedGuiHandler`）/ `JeiRegistration`（4.8.4+ 的
+  面板让位与拖拽）/ `JeiGlobalRegistration`（4.14+ 的 `IGlobalGuiHandler`，用**动态代理**注册，
+  编译期不引用该接口）。
+- 配料遍历统一走 **Class 系 API**（`getRegisteredIngredientClasses` / `getAllIngredients(Class)` /
+  `getIngredientsGroup(Class)`）：`IIngredientType` 要 4.12 才有，走 Class 一份代码覆盖 4.8.5 ~ 4.24。
+- 新增 `JeiReflect`（字段/方法缓存 + "取不到只告警一次"）统一承载 `RecipesGui#recipeLayouts`、
+  `GuiIngredient#rect`、`RecipeLayout#recipeWrapper`、`BookmarkList#getIngredientList()`、`Focus` 构造。
+- 书签三级降级：4.15+ 公开 API / 4.13~4.14 反射 / 更老返回空表；焦点构造失败则关闭 R/U/A 跳转。
+- **低版本提示**：JEI < `4.8.5.160` 时首次进入世界在聊天栏提示一次
+  （`JeiVersionNotice` + 语言文件键 `检测到低版本 JEI（%s）…`），4.7.8 起都能加载。
+
+### 移植期踩到的坑（已写进 `docs/JEI-COMPAT-1.12.2.md` §7）
+
+1. **Gradle 4.9 + FG3 下 javac 的错误清单会被注解处理轮次截断**：不加 `-proc:none` 只能看到
+   40 条"某些类找不到符号"的假错误（真实错误 481 条）。`-Xmaxerrs 2000` 单独加不够。
+2. **PowerShell `-replace` 默认不区分大小写**：批量把 `Screen` 改成 `GuiScreen` 时把
+   `package ...mc.screen;` 也改了，9 个文件整包"消失"。批量改名后必须回读包声明。
+3. `gradle.properties` 的 `org.gradle.jvmargs` 加 `-Duser.language=en` 让 javac 说英文，
+   否则中文 Windows 下 GBK/UTF-8 混排会把报错打成乱码。
+
 ## R48 · 2026-10-27 · 最小缩放关闭图标 LOD + 摄像机 HUD
 
 ### LOD

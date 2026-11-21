@@ -1,83 +1,91 @@
 package com.jessetech.recipebalancer.mc.config;
 
-import net.minecraftforge.common.ForgeConfigSpec;
+import net.minecraftforge.common.config.Configuration;
+
+import java.io.File;
 
 /**
- * 流程图配置（Forge {@code ForgeConfigSpec}，文件 {@code config/recipebalancer-client.toml}）。
+ * 流程图配置（1.12.2 的 {@code Configuration}，文件 {@code config/recipebalancer-client.cfg}）。
  *
- * <p>1.18.2 没有 NeoForge 自带的配置编辑界面（{@code ConfigurationScreen} 为 20.4+ 引入），
- * 配置只能直接改 TOML 文件；每个字段都写了中英文注释。
+ * <p>1.12.2 没有 {@code ForgeConfigSpec}（1.13+ 才引入），键名/范围/默认值与其它版本线保持一致；
+ * {@link Settings} 快照与 {@link #current()} 的签名不变，界面层无需改动。
  */
 public final class GraphLayoutConfig {
 
-    public static final ForgeConfigSpec SPEC;
+    private static final String CATEGORY = "graph";
 
-    public static final ForgeConfigSpec.DoubleValue NODE_GAP;
-    public static final ForgeConfigSpec.DoubleValue EDGE_LENGTH;
-    public static final ForgeConfigSpec.DoubleValue FORCE_IDEAL;
-    public static final ForgeConfigSpec.DoubleValue MIN_EDGE_LENGTH;
-    public static final ForgeConfigSpec.DoubleValue EDGE_SATURATION;
-    public static final ForgeConfigSpec.DoubleValue EDGE_OPACITY;
-    public static final ForgeConfigSpec.DoubleValue DIM_OPACITY;
-    public static final ForgeConfigSpec.DoubleValue ZOOM_MIN;
-    public static final ForgeConfigSpec.DoubleValue ZOOM_MAX;
+    private static final double NODE_GAP_DEFAULT = 32.0;
+    private static final double EDGE_LENGTH_DEFAULT = 128.0;
+    private static final double FORCE_IDEAL_DEFAULT = 0.3;
+    private static final double MIN_EDGE_LENGTH_DEFAULT = 96.0;
+    private static final double EDGE_SATURATION_DEFAULT = 0.5;
+    private static final double EDGE_OPACITY_DEFAULT = 1.0;
+    private static final double DIM_OPACITY_DEFAULT = 0.1;
+    private static final double ZOOM_MIN_DEFAULT = 0.1;
+    private static final double ZOOM_MAX_DEFAULT = 3.0;
 
-    static {
-        ForgeConfigSpec.Builder builder = new ForgeConfigSpec.Builder();
-        NODE_GAP = builder
-                .comment("同列相邻节点之间的额外行距（像素，分层布局用）。调大更松散。",
-                        "Extra vertical gap between nodes of the same column, in pixels (layered layout).")
-                .defineInRange("nodeGap", 32.0, 0.0, 200.0);
-        EDGE_LENGTH = builder
-                .comment("列与列之间的距离基准（像素）。调大列更分散，连线更长。",
-                        "Base distance between columns, in pixels. Larger spreads the graph out.")
-                .defineInRange("edgeLength", 128.0, 20.0, 400.0);
-        FORCE_IDEAL = builder
-                .comment("弹性布局的理想边长系数（相对 edgeLength）。调小节点更紧凑，调大更松散。",
-                        "Ideal edge length factor for the force layout (relative to edgeLength).")
-                .defineInRange("forceIdeal", 0.3, 0.15, 1.5);
-        MIN_EDGE_LENGTH = builder
-                .comment("弹性布局中相连节点的最小中心距（像素）。太小会让两个节点贴在一起、箭头看不见。",
-                        "Minimum center distance between connected nodes in the force layout (px).")
-                .defineInRange("minEdgeLength", 96.0, 16.0, 200.0);
-        EDGE_SATURATION = builder
-                .comment("连线向灰色混合的强度：0 = 保持物质本色，1 = 完全灰。",
-                        "How much edge colors are desaturated: 0 = full color, 1 = gray.")
-                .defineInRange("edgeSaturation", 0.5, 0.0, 1.0);
-        EDGE_OPACITY = builder
-                .comment("普通连线的基础不透明度（0.1-1）。总线主干与入靶段按比例同步变淡。",
-                        "Base opacity of normal edges (0.1-1). Bus trunks and tips scale with it.")
-                .defineInRange("edgeOpacity", 1.0, 0.1, 1.0);
-        DIM_OPACITY = builder
-                .comment("高亮某个节点时，其余连线被压低到的不透明度（0-1）。",
-                        "Opacity applied to unrelated edges while a node is highlighted.")
-                .defineInRange("dimOpacity", 0.1, 0.0, 1.0);
-        ZOOM_MIN = builder
-                .comment("流程图缩放下限（0.05-1）。自动适配视野与滚轮缩放都不低于它。",
-                        "Minimum zoom of the graph view.")
-                .defineInRange("zoomMin", 0.1, 0.05, 1.0);
-        ZOOM_MAX = builder
-                .comment("流程图缩放上限（0.5-6）。自动适配视野与滚轮缩放都不超过它。",
-                        "Maximum zoom of the graph view.")
-                .defineInRange("zoomMax", 3.0, 0.5, 6.0);
-        SPEC = builder.build();
-    }
+    private static double nodeGap = NODE_GAP_DEFAULT;
+    private static double edgeLength = EDGE_LENGTH_DEFAULT;
+    private static double forceIdeal = FORCE_IDEAL_DEFAULT;
+    private static double minEdgeLength = MIN_EDGE_LENGTH_DEFAULT;
+    private static double edgeSaturation = EDGE_SATURATION_DEFAULT;
+    private static double edgeOpacity = EDGE_OPACITY_DEFAULT;
+    private static double dimOpacity = DIM_OPACITY_DEFAULT;
+    private static double zoomMin = ZOOM_MIN_DEFAULT;
+    private static double zoomMax = ZOOM_MAX_DEFAULT;
 
     private GraphLayoutConfig() {
     }
 
+    /** 读入（或首次生成）配置文件；缺失/解析失败时保留默认值。 */
+    public static synchronized void load(File configFile) {
+        try {
+            Configuration config = new Configuration(configFile);
+            config.load();
+            nodeGap = getDouble(config, "nodeGap", CATEGORY, NODE_GAP_DEFAULT, 0.0, 200.0,
+                    "同列相邻节点之间的额外行距（像素，分层布局用）。调大更松散。\n"
+                            + "Extra vertical gap between nodes of the same column, in pixels.");
+            edgeLength = getDouble(config, "edgeLength", CATEGORY, EDGE_LENGTH_DEFAULT, 20.0, 400.0,
+                    "列与列之间的距离基准（像素）。调大列更分散，连线更长。\n"
+                            + "Base distance between columns, in pixels.");
+            forceIdeal = getDouble(config, "forceIdeal", CATEGORY, FORCE_IDEAL_DEFAULT, 0.15, 1.5,
+                    "弹性布局的理想边长系数（相对 edgeLength）。\n"
+                            + "Ideal edge length factor for the force layout.");
+            minEdgeLength = getDouble(config, "minEdgeLength", CATEGORY, MIN_EDGE_LENGTH_DEFAULT,
+                    16.0, 200.0,
+                    "弹性布局中相连节点的最小中心距（像素）。\n"
+                            + "Minimum center distance between connected nodes in the force layout.");
+            edgeSaturation = getDouble(config, "edgeSaturation", CATEGORY, EDGE_SATURATION_DEFAULT,
+                    0.0, 1.0,
+                    "连线向灰色混合的强度：0 = 保持物质本色，1 = 完全灰。\n"
+                            + "How much edge colors are desaturated.");
+            edgeOpacity = getDouble(config, "edgeOpacity", CATEGORY, EDGE_OPACITY_DEFAULT, 0.1, 1.0,
+                    "普通连线的基础不透明度（0.1-1）。\n"
+                            + "Base opacity of normal edges (0.1-1).");
+            dimOpacity = getDouble(config, "dimOpacity", CATEGORY, DIM_OPACITY_DEFAULT, 0.0, 1.0,
+                    "高亮某个节点时，其余连线被压低到的不透明度（0-1）。\n"
+                            + "Opacity applied to unrelated edges while a node is highlighted.");
+            zoomMin = getDouble(config, "zoomMin", CATEGORY, ZOOM_MIN_DEFAULT, 0.05, 1.0,
+                    "流程图缩放下限（0.05-1）。\n" + "Minimum zoom of the graph view.");
+            zoomMax = getDouble(config, "zoomMax", CATEGORY, ZOOM_MAX_DEFAULT, 0.5, 6.0,
+                    "流程图缩放上限（0.5-6）。\n" + "Maximum zoom of the graph view.");
+            if (config.hasChanged()) {
+                config.save();
+            }
+        } catch (RuntimeException ignored) {
+            // 配置文件损坏时不让界面起不来，沿用默认值
+        }
+    }
+
+    /** 1.12.2 的 Configuration 没有 getDouble：走 get(...) + Property#getDouble。 */
+    private static double getDouble(Configuration config, String key, String category,
+                                    double def, double min, double max, String comment) {
+        return config.get(key, category, def, comment, min, max).getDouble(def);
+    }
+
     /**
-     * @param nodeGap        同列节点间距附加量（像素）
-     * @param edgeLength     列间距基准（像素）
-     * @param forceIdeal     弹性布局理想边长系数（相对 edgeLength）
-     * @param minEdgeLength  弹性布局中相连节点的最小中心距
-     * @param edgeSaturation 连线降饱和强度（0 = 原色，1 = 纯灰）
-     * @param edgeOpacity    连线基础不透明度
-     * @param dimOpacity     高亮节点时其余连线的不透明度
-     * @param zoomMin        缩放下限
-     * @param zoomMax        缩放上限
+     * 流程图配置快照（1.12.2 线是 Java 8，不能写 record）。
      */
-    /** 流程图配置快照（1.16.5 线是 Java 8，不能写 record）。 */
     public static final class Settings {
 
         private final double nodeGap;
@@ -141,10 +149,9 @@ public final class GraphLayoutConfig {
         }
     }
 
-    /** 当前配置快照（每帧取一次，配置界面保存后立即反映）。 */
+    /** 当前配置快照（每帧取一次）。 */
     public static Settings current() {
-        return new Settings(NODE_GAP.get(), EDGE_LENGTH.get(), FORCE_IDEAL.get(),
-                MIN_EDGE_LENGTH.get(), EDGE_SATURATION.get(), EDGE_OPACITY.get(),
-                DIM_OPACITY.get(), ZOOM_MIN.get(), ZOOM_MAX.get());
+        return new Settings(nodeGap, edgeLength, forceIdeal, minEdgeLength, edgeSaturation,
+                edgeOpacity, dimOpacity, zoomMin, zoomMax);
     }
 }
