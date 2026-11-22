@@ -183,9 +183,13 @@ public final class JeiRecipeTime {
                 return -1;
             }
         }
-        // 原版酿造：PotionBrewing$Mix 没有时间字段，时间由酿造台固定，
+        // 原版酿造：配方对象没有时间字段，时间由酿造台固定。
+        // 1.18.2 的 JEI 9.x 传进来的是自己的包装类 JeiBrewingRecipe，
+        // 原版直接暴露 PotionBrewing$Mix，两者都按类名识别。
         // 值取自原版常量 BREWING_TIME_SECONDS（20 秒 = 400 t），不是静态类别表
-        if (recipe.getClass().getName().equals("net.minecraft.world.item.alchemy.PotionBrewing$Mix")) {
+        String name = recipe.getClass().getName();
+        if (name.equals("net.minecraft.world.item.alchemy.PotionBrewing$Mix")
+                || name.endsWith(".BrewingRecipe") || name.contains("BrewingRecipe")) {
             try {
                 return TimeInferenceRules.sanitizeTicks(PotionBrewing.BREWING_TIME_SECONDS * 20L);
             } catch (RuntimeException | LinkageError e) {
@@ -280,22 +284,20 @@ public final class JeiRecipeTime {
     }
 
     private static Optional<Method> findMethod(Class<?> type, String name) {
-        for (Class<?> current = type; current != null && current != Object.class;
-             current = current.getSuperclass()) {
-            for (Method method : current.getDeclaredMethods()) {
-                if (!method.getName().equals(name) || method.getParameterCount() != 0) {
-                    continue;
-                }
-                if (Modifier.isStatic(method.getModifiers()) || !isNumeric(method.getReturnType())) {
-                    continue;
-                }
-                if (!method.trySetAccessible()) {
-                    return Optional.empty();
-                }
-                return Optional.of(method);
+        // 用 Class#getMethod：只找 public（含继承）方法，无需 setAccessible。
+        // getDeclaredMethods + trySetAccessible 在部分模组类上会失败，表现为"方法找不到"，
+        // 是 1.18.2 上 Create 配方读不到耗时的根因。
+        try {
+            Method method = type.getMethod(name);
+            if (method.getParameterCount() != 0
+                    || Modifier.isStatic(method.getModifiers())
+                    || !isNumeric(method.getReturnType())) {
+                return Optional.empty();
             }
+            return Optional.of(method);
+        } catch (NoSuchMethodException | RuntimeException | LinkageError e) {
+            return Optional.empty();
         }
-        return Optional.empty();
     }
 
     private static Optional<Field> findField(Class<?> type, String name) {
