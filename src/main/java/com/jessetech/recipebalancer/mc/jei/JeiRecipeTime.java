@@ -5,6 +5,7 @@ import com.jessetech.recipebalancer.core.time.TimeInferenceRules;
 import com.jessetech.recipebalancer.mc.config.GraphLayoutConfig;
 import mezz.jei.api.recipe.category.IRecipeCategory;
 import net.minecraft.world.item.crafting.AbstractCookingRecipe;
+import net.minecraft.world.item.crafting.RecipeHolder;
 import org.jetbrains.annotations.Nullable;
 
 import java.lang.reflect.Field;
@@ -41,7 +42,9 @@ public final class JeiRecipeTime {
         /** 已知模组 / 通用探测命中的公开方法。 */
         MOD_API,
         /** 通用探测命中的字段。 */
-        MOD_FIELD
+        MOD_FIELD,
+        /** 配方对象上没有时间，按机器的类别基础耗时兜底（Mekanism 这类）。 */
+        CATEGORY_DEFAULT
     }
 
     /** @param ticks 推断出的耗时（tick），保证 {@code 0 < ticks <= MAX_TICKS} */
@@ -68,29 +71,68 @@ public final class JeiRecipeTime {
         if (recipe == null || !GraphLayoutConfig.prefillRecipeTime()) {
             return Optional.empty();
         }
+        // JEI 19 的原版 / Create / Mekanism 类别泛型都是 IRecipeCategory<RecipeHolder<T>>，
+        // 所以 layout.getRecipe() 拿到的是包装对象；不解包就永远认不出配方本体（表现为全部 1t）。
+        Object subject = unwrap(recipe);
+        if (subject == null) {
+            return Optional.empty();
+        }
         try {
-            int vanilla = vanillaTicks(recipe);
+            int vanilla = vanillaTicks(subject);
             if (vanilla > 0) {
                 return Optional.of(new Result(vanilla, Origin.VANILLA_COOKING));
             }
-            int api = modApiTicks(recipe);
+            int api = modApiTicks(subject);
             if (api > 0) {
                 return Optional.of(new Result(api, Origin.MOD_API));
             }
-            if (!GraphLayoutConfig.prefillRecipeTimeReflection()) {
-                return Optional.empty();
+            // 反射探测可以关；类别基础耗时是静态表，不受该开关影响
+            if (GraphLayoutConfig.prefillRecipeTimeReflection()) {
+                int generic = genericTicks(subject);
+                if (generic > 0) {
+                    return Optional.of(new Result(generic, Origin.MOD_API));
+                }
+                int field = fieldTicks(subject);
+                if (field > 0) {
+                    return Optional.of(new Result(field, Origin.MOD_FIELD));
+                }
             }
-            int generic = genericTicks(recipe);
-            if (generic > 0) {
-                return Optional.of(new Result(generic, Origin.MOD_API));
-            }
-            int field = fieldTicks(recipe);
-            return field > 0 ? Optional.of(new Result(field, Origin.MOD_FIELD)) : Optional.empty();
+            // 最后兜底：配方上真的没有时间（Mekanism 的时间在机器上），按类别基础值给一个估算
+            int fallback = TimeInferenceRules.categoryDefault(categoryUid(category));
+            return fallback > 0
+                    ? Optional.of(new Result(fallback, Origin.CATEGORY_DEFAULT))
+                    : Optional.empty();
         } catch (RuntimeException | LinkageError e) {
             RecipeBalancerMod.LOGGER.debug("[RecipeBalancer] 耗时推断失败：{}",
-                    recipe.getClass().getName(), e);
+                    subject.getClass().getName(), e);
             return Optional.empty();
         }
+    }
+
+    /**
+     * 剥掉 {@link RecipeHolder} 包装。
+     *
+     * <p>JEI 的配方类型以 holder 为泛型（需要 recipe id 做书签/转移），所以
+     * {@code IRecipeLayoutDrawable#getRecipe()} 与装饰器回调拿到的通常都是 holder。
+     * 最多剥三层，避免异常结构导致死循环。
+     */
+    /** 配方类型 uid；拿不到时返回空串。 */
+    public static String categoryUid(@Nullable IRecipeCategory<?> category) {
+        try {
+            var uid = category == null ? null : category.getRecipeType().getUid();
+            return uid == null ? "" : uid.toString();
+        } catch (RuntimeException | LinkageError e) {
+            return "";
+        }
+    }
+
+    @Nullable
+    private static Object unwrap(@Nullable Object recipe) {
+        Object current = recipe;
+        for (int depth = 0; depth < 3 && current instanceof RecipeHolder<?> holder; depth++) {
+            current = holder.value();
+        }
+        return current;
     }
 
     private static int vanillaTicks(Object recipe) {

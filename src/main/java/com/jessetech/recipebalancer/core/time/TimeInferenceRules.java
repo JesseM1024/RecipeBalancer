@@ -1,6 +1,7 @@
 package com.jessetech.recipebalancer.core.time;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 配方耗时推断的纯规则表（不依赖 Minecraft / JEI，可直接在 JVM 单测里验证）。
@@ -21,15 +22,21 @@ public final class TimeInferenceRules {
      */
     public static final int MAX_TICKS = 72_000;
 
-    /** 语义明确的通用方法名；刻意不含 {@code getTime}/{@code getDuration}，避免读到世界时间。 */
+    /**
+     * 通用方法名候选，按语义可靠度从高到低排列。
+     *
+     * <p>末位的 {@code getDuration}/{@code getTime} 语义较泛（可能读到世界时间、剩余时长），
+     * 只有前面的明确命名都落空时才会尝试，且仍要过 {@link #sanitizeTicks} 的值域校验。
+     */
     private static final List<String> GENERIC_METHODS = List.of(
             "getProcessingDuration", "getProcessingTime", "getProcessTime",
-            "getTicksRequired", "getTotalProcessTime", "getCookingTime");
+            "getTicksRequired", "getTotalProcessTime", "getCookingTime",
+            "getTotalTime", "getTicks", "getDuration", "getTime");
 
-    /** 字段探测名单，只在用户显式开启"反射猜测"时使用。 */
+    /** 字段探测名单，只在开启"反射猜测"时使用；同样按可靠度排序。 */
     private static final List<String> FIELD_NAMES = List.of(
             "processingTime", "processTime", "processtime", "cookingTime",
-            "barbecuingTime", "duration", "ticks", "time");
+            "barbecuingTime", "ticksRequired", "totalTime", "duration", "ticks", "time");
 
     /** 已知模组：包名前缀 + 方法名候选（按顺序尝试）。 */
     public record ModRule(String packagePrefix, List<String> methods) {
@@ -43,7 +50,32 @@ public final class TimeInferenceRules {
             new ModRule("blusunrize.immersiveengineering",
                     List.of("getTotalProcessTime", "getTime")));
 
+    /**
+     * 配方对象上完全没有耗时、只能按机器基础值兜底的类别（uid → tick）。
+     *
+     * <p>目前只有 Mekanism：1.21.1 的 {@code MekanismRecipe} 不再有 {@code getTicksRequired()}，
+     * 时间定义在机器实体 {@code TileEntityElectricMachine.BASE_TICKS_REQUIRED = 200} 上
+     * （见 Mekanism 10.7.19 的 bytecode）。这里只收录确认继承该基类的机器；
+     * 速度升级会改变实际时间，所以 UI 会标成"估算"。
+     */
+    private static final Map<String, Integer> CATEGORY_DEFAULTS = Map.of(
+            "mekanism:crushing", 200,
+            "mekanism:enriching", 200,
+            "mekanism:smelting", 200,
+            "mekanism:compressing", 200,
+            "mekanism:purifying", 200,
+            "mekanism:injecting", 200);
+
     private TimeInferenceRules() {
+    }
+
+    /** 该类别的机器基础耗时；没有收录时返回 -1。 */
+    public static int categoryDefault(String categoryUid) {
+        if (categoryUid == null || categoryUid.isBlank()) {
+            return -1;
+        }
+        Integer ticks = CATEGORY_DEFAULTS.get(categoryUid);
+        return ticks == null ? -1 : sanitizeTicks(ticks);
     }
 
     public static List<String> genericMethods() {

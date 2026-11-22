@@ -79,11 +79,13 @@ public final class GraphLayoutConfig {
                         "Falls back to 1t when the duration cannot be inferred.")
                 .define("prefillRecipeTime", true);
         PREFILL_RECIPE_TIME_REFLECTION = builder
-                .comment("允许通过方法名/字段名反射猜测其他模组的配方耗时（默认关闭）。",
-                        "Allow guessing other mods' recipe durations by reflected method/field names (off by default).",
+                .comment("允许通过方法名/字段名反射猜测其他模组的配方耗时（默认开启）。",
+                        "Allow guessing other mods' recipe durations by reflected method/field names (on by default).",
                         "只影响没有专门适配的模组；原版烹饪与已知模组始终可读。",
-                        "Only affects mods without a dedicated rule; vanilla cooking and known mods keep working.")
-                .define("prefillRecipeTimeReflection", false);
+                        "Only affects mods without a dedicated rule; vanilla cooking and known mods keep working.",
+                        "读到的值仍要落在 1-72000 tick 内，否则视为没读到。",
+                        "Values outside 1-72000 ticks are discarded.")
+                .define("prefillRecipeTimeReflection", true);
         builder.pop();
 
         SPEC = builder.build();
@@ -124,12 +126,12 @@ public final class GraphLayoutConfig {
         }
     }
 
-    /** 反射猜测开关；配置尚未加载时按默认值（关）处理。 */
+    /** 反射猜测开关；配置尚未加载时按默认值（开）处理。 */
     public static boolean prefillRecipeTimeReflection() {
         try {
             return PREFILL_RECIPE_TIME_REFLECTION.get();
         } catch (RuntimeException | LinkageError e) {
-            return false;
+            return true;
         }
     }
 }

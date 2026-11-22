@@ -239,10 +239,11 @@ public final class RecipePattern {
      * <p>这是"这条数字是从哪抄来的"的说明，不是配方数据：{@link #toRecipe()}
      * 与场景 JSON 都不包含它，用户把耗时改掉之后应当 {@link #clearTimeHint()}。
      *
-     * @param ticks  源配方的耗时（tick），必须为正
-     * @param source 来源标识（通常是 JEI 配方类型的 uid），可为空
+     * @param ticks     源配方的耗时（tick），必须为正
+     * @param source    来源标识（通常是 JEI 配方类型的 uid），可为空
+     * @param estimated 是否是估算值（字段猜测 / 机器类别基础耗时），界面据此换措辞
      */
-    public record TimeHint(double ticks, String source) {
+    public record TimeHint(double ticks, String source, boolean estimated) {
         public TimeHint {
             source = source == null ? "" : source;
         }
@@ -255,8 +256,13 @@ public final class RecipePattern {
 
     /** 记录参考耗时；{@code ticks} 非正时忽略（视为没有参考值）。 */
     public void setTimeHint(double ticks, String source) {
+        setTimeHint(ticks, source, false);
+    }
+
+    /** 记录参考耗时，并标明它是不是估算值。 */
+    public void setTimeHint(double ticks, String source, boolean estimated) {
         if (ticks > 0 && Double.isFinite(ticks)) {
-            this.timeHint = new TimeHint(ticks, source);
+            this.timeHint = new TimeHint(ticks, source, estimated);
         }
     }
 

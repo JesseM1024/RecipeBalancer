@@ -142,7 +142,9 @@ public final class TimeScreen extends Screen implements JeiPanelScreen {
                             TimeExpression.formatTicks(timeHint.ticks())),
                     panelX + 8, panelY + 84, AeStyle.MUTED, false);
             String source = timeHint.source().isBlank() ? Lang.t("未知类型") : timeHint.source();
-            String origin = Lang.t("来自 JEI 原配方 %s，可自行修改", source);
+            String origin = timeHint.estimated()
+                    ? Lang.t("按 %s 类别的基础耗时估算，可自行修改", source)
+                    : Lang.t("来自 JEI 原配方 %s，可自行修改", source);
             graphics.drawString(font, font.plainSubstrByWidth(origin, PANEL_W - 16),
                     panelX + 8, panelY + 96, AeStyle.MUTED, false);
             statusY = panelY + 112;

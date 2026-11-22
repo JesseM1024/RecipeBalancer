@@ -44,11 +44,23 @@ class TimeInferenceRulesTest {
     }
 
     @Test
-    void genericMethodsAvoidAmbiguousGetters() {
-        // getTime / getDuration 语义太泛（世界时间、剩余时长），不参与通用探测
-        assertFalse(TimeInferenceRules.genericMethods().contains("getTime"));
-        assertFalse(TimeInferenceRules.genericMethods().contains("getDuration"));
-        assertTrue(TimeInferenceRules.genericMethods().contains("getCookingTime"));
+    void genericMethodsPutUnambiguousNamesFirst() {
+        List<String> methods = TimeInferenceRules.genericMethods();
+        assertTrue(methods.contains("getCookingTime"));
+        // getTime / getDuration 语义泛（世界时间、剩余时长），但仍参与探测，只是排在最后
+        assertTrue(methods.indexOf("getTime") > methods.indexOf("getCookingTime"));
+        assertTrue(methods.indexOf("getDuration") > methods.indexOf("getCookingTime"));
+        assertEquals(methods.size() - 1, methods.indexOf("getTime"));
+    }
+
+    @Test
+    void categoryDefaultsOnlyCoverKnownMachines() {
+        // Mekanism 1.21.1 的配方对象没有耗时，时间在 TileEntityElectricMachine.BASE_TICKS_REQUIRED
+        assertEquals(200, TimeInferenceRules.categoryDefault("mekanism:crushing"));
+        assertEquals(200, TimeInferenceRules.categoryDefault("mekanism:enriching"));
+        assertEquals(-1, TimeInferenceRules.categoryDefault("mekanism:unknown"));
+        assertEquals(-1, TimeInferenceRules.categoryDefault(""));
+        assertEquals(-1, TimeInferenceRules.categoryDefault(null));
     }
 
     @Test

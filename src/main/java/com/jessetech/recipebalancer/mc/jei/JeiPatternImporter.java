@@ -1,5 +1,6 @@
 package com.jessetech.recipebalancer.mc.jei;
 
+import com.jessetech.recipebalancer.RecipeBalancerMod;
 import com.jessetech.recipebalancer.core.model.RecipePattern;
 import com.jessetech.recipebalancer.mc.itemmap.ItemKeyMapper;
 import com.jessetech.recipebalancer.mc.itemmap.ProductIndex;
@@ -81,11 +82,19 @@ public final class JeiPatternImporter {
         try {
             Optional<JeiRecipeTime.Result> inferred = JeiRecipeTime.infer(recipe, category);
             if (inferred.isEmpty()) {
+                RecipeBalancerMod.LOGGER.debug("[RecipeBalancer] 耗时未推断出来：{}（类别 {}）",
+                        recipe == null ? "null" : recipe.getClass().getName(), categoryUid(category));
                 return;
             }
             int ticks = inferred.get().ticks();
+            JeiRecipeTime.Origin origin = inferred.get().origin();
+            boolean estimated = origin == JeiRecipeTime.Origin.MOD_FIELD
+                    || origin == JeiRecipeTime.Origin.CATEGORY_DEFAULT;
             pattern.setTimeTicks(ticks);
-            pattern.setTimeHint(ticks, categoryUid(category));
+            pattern.setTimeHint(ticks, categoryUid(category), estimated);
+            // 只在用户主动导入时打一行，便于整合包反馈"某模组时间读错了"
+            RecipeBalancerMod.LOGGER.info("[RecipeBalancer] 耗时预填：{} -> {}t（{}，类别 {}）",
+                    recipe.getClass().getSimpleName(), ticks, origin, categoryUid(category));
         } catch (RuntimeException | LinkageError ignored) {
             // 预填只是锦上添花：任何异常都不能影响配方导入
         }
@@ -93,12 +102,7 @@ public final class JeiPatternImporter {
 
     /** 配方类型 uid；拿不到时返回空串（界面会显示"未知类型"）。 */
     private static String categoryUid(IRecipeCategory<?> category) {
-        try {
-            ResourceLocation uid = category == null ? null : category.getRecipeType().getUid();
-            return uid == null ? "" : uid.toString();
-        } catch (RuntimeException | LinkageError e) {
-            return "";
-        }
+        return JeiRecipeTime.categoryUid(category);
     }
 
     /** 只有合成配方保留空格（纯视觉），机器配方等一律按顺序紧排。 */
