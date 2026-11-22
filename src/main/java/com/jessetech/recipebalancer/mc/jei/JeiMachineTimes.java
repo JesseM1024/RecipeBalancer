@@ -210,22 +210,16 @@ public final class JeiMachineTimes {
     }
 
     private static Optional<Method> findMethod(Class<?> type, String name) {
-        for (Class<?> current = type; current != null && current != Object.class;
-             current = current.getSuperclass()) {
-            for (Method method : current.getDeclaredMethods()) {
-                if (!method.getName().equals(name) || method.getParameterCount() != 0) {
-                    continue;
-                }
-                if (Modifier.isStatic(method.getModifiers()) || !isNumeric(method.getReturnType())) {
-                    continue;
-                }
-                if (!method.trySetAccessible()) {
-                    return Optional.empty();
-                }
-                return Optional.of(method);
+        // 同 JeiRecipeTime：public 继承方法用 getMethod 取，绕开 setAccessible 的坑
+        try {
+            Method method = type.getMethod(name);
+            if (method.getParameterCount() != 0 || Modifier.isStatic(method.getModifiers())) {
+                return Optional.empty();
             }
+            return Optional.of(method);
+        } catch (NoSuchMethodException | RuntimeException | LinkageError e) {
+            return Optional.empty();
         }
-        return Optional.empty();
     }
 
     private static int readStaticInt(Class<?> type, String name) {

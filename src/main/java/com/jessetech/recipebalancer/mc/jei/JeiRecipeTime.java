@@ -4,6 +4,7 @@ import com.jessetech.recipebalancer.RecipeBalancerMod;
 import com.jessetech.recipebalancer.core.time.TimeInferenceRules;
 import com.jessetech.recipebalancer.mc.config.GraphLayoutConfig;
 import mezz.jei.api.recipe.category.IRecipeCategory;
+import net.minecraft.world.item.alchemy.PotionBrewing;
 import net.minecraft.world.item.crafting.AbstractCookingRecipe;
 import org.jetbrains.annotations.Nullable;
 
@@ -132,6 +133,18 @@ public final class JeiRecipeTime {
                 return -1;
             }
         }
+        // 原版酿造：配方对象没有时间字段，时间由酿造台固定。
+        // JEI 可能包装成自己的 JeiBrewingRecipe，原版直接暴露 PotionBrewing$Mix，
+        // 两者都按类名识别；值取自原版常量 BREWING_TIME_SECONDS（20 秒 = 400 t）。
+        String name = recipe.getClass().getName();
+        if (name.equals("net.minecraft.world.item.alchemy.PotionBrewing$Mix")
+                || name.contains("BrewingRecipe")) {
+            try {
+                return TimeInferenceRules.sanitizeTicks(PotionBrewing.BREWING_TIME_SECONDS * 20L);
+            } catch (RuntimeException | LinkageError e) {
+                return -1;
+            }
+        }
         return -1;
     }
 
@@ -181,29 +194,19 @@ public final class JeiRecipeTime {
     }
 
     private static Optional<Method> findMethod(Class<?> type, String name) {
-        for (Class<?> current = type; current != null && current != Object.class;
-             current = current.getSuperclass()) {
-            Method method;
-            try {
-                method = current.getDeclaredMethod(name);
-            } catch (NoSuchMethodException ignored) {
-                continue;
-            } catch (RuntimeException | LinkageError e) {
-                return Optional.empty();
-            }
-            int modifiers = method.getModifiers();
-            if (Modifier.isStatic(modifiers) || method.getParameterCount() != 0) {
-                continue;
-            }
-            if (!TimeInferenceRules.isNumeric(method.getReturnType())) {
-                continue;
-            }
-            if (!method.trySetAccessible()) {
+        // 用 Class#getMethod：只找 public（含继承）方法，无需 setAccessible。
+        // getDeclaredMethod + trySetAccessible 在部分模组类上会失败，表现为"方法找不到"。
+        try {
+            Method method = type.getMethod(name);
+            if (method.getParameterCount() != 0
+                    || Modifier.isStatic(method.getModifiers())
+                    || !TimeInferenceRules.isNumeric(method.getReturnType())) {
                 return Optional.empty();
             }
             return Optional.of(method);
+        } catch (NoSuchMethodException | RuntimeException | LinkageError e) {
+            return Optional.empty();
         }
-        return Optional.empty();
     }
 
     private static int fieldTicks(Object recipe) {
