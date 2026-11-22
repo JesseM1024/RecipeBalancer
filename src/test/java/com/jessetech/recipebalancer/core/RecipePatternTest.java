@@ -8,8 +8,6 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -75,27 +73,5 @@ class RecipePatternTest {
         pattern.putOutput(0, "ingot", 1.0);
         // 新配方默认耗时 1 tick = 0.05 秒
         assertEquals(0.05, pattern.toRecipe().time(), 1e-12);
-    }
-
-    @Test
-    void timeHintIsOnlyAHintAndNeverEntersRecipe() {
-        RecipePattern pattern = new RecipePattern();
-        pattern.setEquipmentKey("x");
-        pattern.putOutput(0, "ingot", 1.0);
-        pattern.setTimeHint(200);
-
-        assertEquals(200.0, pattern.timeHint().ticks(), 1e-12);
-        // 参考值不进 core 配方：toRecipe 仍按手动设置的 1t 换算成 0.05 秒
-        assertEquals(0.05, pattern.toRecipe().time(), 1e-12);
-
-        // 整体拷贝会带上参考值（JEI 自动撰写走 copyFrom）
-        RecipePattern copy = new RecipePattern();
-        copy.copyFrom(pattern);
-        assertNotNull(copy.timeHint());
-
-        // 清空/从配方库载入后不再带参考标记
-        copy.clear();
-        assertNull(copy.timeHint());
-        assertEquals(1.0, copy.timeTicks(), 1e-12);
     }
 }

@@ -59,8 +59,7 @@ public final class JeiAutoRecipe implements AutoRecipeHooks.Hook {
             IRecipeLayoutDrawable layout = runtime.getRecipeManager()
                     .createRecipeLayoutDrawable(only.category(), only.recipe(),
                             focus(runtime, key));
-            return layout == null ? null
-                    : JeiPatternImporter.build(only.category(), layout, only.recipe());
+            return layout == null ? null : JeiPatternImporter.build(only.category(), layout);
         } catch (RuntimeException | LinkageError e) {
             return null;
         }

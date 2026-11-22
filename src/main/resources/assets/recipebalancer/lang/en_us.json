@@ -257,13 +257,5 @@
   "recipebalancer.configuration.zoomMax.tooltip": "Upper zoom limit for auto-fit and mouse wheel zooming.",
   "点击后打开配方编码终端": "Click to open the pattern encoding terminal",
   "编码此配方": "Encode Recipe",
-  "参考基准耗时：%s": "Reference base time: %s",
-  "已自动写入 %s 的配方（耗时预填 %s）": "Auto-wrote the recipe for %s (time pre-filled: %s)",
-  "recipebalancer.configuration.jei": "JEI import",
-  "recipebalancer.configuration.jei.tooltip": "Time pre-fill behaviour when importing patterns from JEI.",
-  "recipebalancer.configuration.jei.prefillRecipeTime": "Pre-fill recipe time",
-  "recipebalancer.configuration.jei.prefillRecipeTime.tooltip": "When importing from JEI, pre-fill the time slot with the source recipe's duration. Falls back to 1t when it cannot be inferred.",
-  "recipebalancer.configuration.jei.prefillRecipeTimeReflection": "Reflect other mods' recipe times",
-  "recipebalancer.configuration.jei.prefillRecipeTimeReflection.tooltip": "Allow guessing the durations of mods without a dedicated rule by reflected method/field names. Out-of-range values are discarded.",
   "JEI 未安装，快捷功能不可用": "JEI is not installed; JEI shortcuts are unavailable"
 }

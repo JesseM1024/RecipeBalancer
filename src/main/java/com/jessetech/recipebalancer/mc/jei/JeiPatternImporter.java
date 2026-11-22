@@ -1,6 +1,5 @@
 package com.jessetech.recipebalancer.mc.jei;
 
-import com.jessetech.recipebalancer.RecipeBalancerMod;
 import com.jessetech.recipebalancer.core.model.RecipePattern;
 import com.jessetech.recipebalancer.mc.itemmap.ItemKeyMapper;
 import com.jessetech.recipebalancer.mc.itemmap.ProductIndex;
@@ -46,19 +45,6 @@ public final class JeiPatternImporter {
      */
     public static RecipePattern buildFromSlots(IRecipeCategory<?> category,
                                                List<JeiSlots.Slot> slots) {
-        return buildFromSlots(category, slots, null);
-    }
-
-    /** 带原始配方的版本：在原有输入/输出/设备之外，多一步耗时预填。 */
-    public static RecipePattern buildFromSlots(IRecipeCategory<?> category,
-                                               List<JeiSlots.Slot> slots, Object recipe) {
-        RecipePattern pattern = buildFromSlotsInternal(category, slots);
-        applyTime(category, recipe, pattern);
-        return pattern;
-    }
-
-    private static RecipePattern buildFromSlotsInternal(IRecipeCategory<?> category,
-                                                        List<JeiSlots.Slot> slots) {
         RecipePattern pattern = new RecipePattern();
         if (slots == null || slots.isEmpty()) {
             applyEquipment(category, pattern);
@@ -212,19 +198,6 @@ public final class JeiPatternImporter {
      * 所以类别由调用方一起传进来（催化剂查询要用）。
      */
     public static RecipePattern build(IRecipeCategory<?> category, IRecipeLayoutDrawable layout) {
-        return build(category, layout, null);
-    }
-
-    /** 带原始配方的版本：在原有输入/输出/设备之外，多一步耗时预填。 */
-    public static RecipePattern build(IRecipeCategory<?> category, IRecipeLayoutDrawable layout,
-                                      Object recipe) {
-        RecipePattern pattern = buildInternal(category, layout);
-        applyTime(category, recipe, pattern);
-        return pattern;
-    }
-
-    private static RecipePattern buildInternal(IRecipeCategory<?> category,
-                                               IRecipeLayoutDrawable layout) {
         RecipePattern pattern = new RecipePattern();
         if (layout == null) {
             return pattern;
@@ -288,34 +261,6 @@ public final class JeiPatternImporter {
             // 9.x 没有这个方法，或实现类换了名字：交给下面的分组路径
         }
         return null;
-    }
-
-    /**
-     * 预填源配方的耗时。
-     *
-     * <p>只作为参考值：写入后仍是普通耗时，用户打开耗时编辑屏即可改写；
-     * 推断失败时什么都不做，保持 1t。
-     */
-    private static void applyTime(IRecipeCategory<?> category, Object recipe, RecipePattern pattern) {
-        try {
-            // 通用传递：类别 uid 只在这里取一次，往下作为纯数据传给推断器与结果
-            String categoryUid = JeiRecipeTime.categoryUid(category);
-            Optional<JeiRecipeTime.Result> inferred = JeiRecipeTime.infer(recipe, categoryUid);
-            if (inferred.isEmpty()) {
-                RecipeBalancerMod.LOGGER.info("[RecipeBalancer] 耗时未推断：recipe={}，类别={}",
-                        recipe == null ? "null" : recipe.getClass().getName(), categoryUid);
-                return;
-            }
-            int ticks = inferred.get().ticks();
-            pattern.setTimeTicks(ticks);
-            pattern.setTimeHint(ticks, categoryUid);
-            RecipeBalancerMod.LOGGER.info("[RecipeBalancer] 耗时预填：{} -> {}t（{}，类别 {}）",
-                    recipe == null ? "null" : recipe.getClass().getSimpleName(),
-                    ticks, inferred.get().origin(), categoryUid);
-        } catch (RuntimeException | LinkageError e) {
-            RecipeBalancerMod.LOGGER.warn("[RecipeBalancer] 耗时预填异常：recipe={}",
-                    recipe == null ? "null" : recipe.getClass().getName(), e);
-        }
     }
 
     /** 设备：取该配方类型的第一个催化剂。 */

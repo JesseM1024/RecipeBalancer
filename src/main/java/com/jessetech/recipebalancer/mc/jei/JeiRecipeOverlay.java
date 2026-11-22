@@ -121,8 +121,7 @@ public final class JeiRecipeOverlay {
             if (minecraft == null) {
                 return;
             }
-            RecipePattern pattern = JeiPatternImporter.buildFromSlots(
-                    hit.category(), hit.slots(), hit.recipe());
+            RecipePattern pattern = JeiPatternImporter.buildFromSlots(hit.category(), hit.slots());
             // 正处在 JEI 的输入/渲染调用栈里，切屏排到主线程下一 tick，避免渲染栈错位
             minecraft.execute(() -> minecraft.setScreen(BalancerScreen.withPattern(pattern)));
             event.setCanceled(true);
@@ -141,7 +140,7 @@ public final class JeiRecipeOverlay {
 
     /** 一个可点击的按钮位置 + 该配方的绝对矩形 + 编码数据。 */
     private record Hit(int x, int y, Rect2i layoutRect, IRecipeCategory<?> category,
-                       List<JeiSlots.Slot> slots, Object recipe) {
+                       List<JeiSlots.Slot> slots) {
     }
 
     /**
@@ -220,8 +219,7 @@ public final class JeiRecipeOverlay {
                 }
             }
             if (!duplicated) {
-                hits.add(new Hit(x, y, layoutRect, category, slots,
-                        JeiRecipeTime.recipeOf(layout)));
+                hits.add(new Hit(x, y, layoutRect, category, slots));
             }
         }
         return hits;
@@ -270,7 +268,7 @@ public final class JeiRecipeOverlay {
             if (duplicated(hits, x, y)) {
                 continue;
             }
-            hits.add(new Hit(x, y, rect, category, slots, invoke(layout, "getRecipe")));
+            hits.add(new Hit(x, y, rect, category, slots));
         }
         return hits;
     }
