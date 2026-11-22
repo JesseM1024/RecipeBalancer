@@ -264,7 +264,7 @@
   "recipebalancer.configuration.jei.prefillRecipeTime": "Pre-fill recipe time",
   "recipebalancer.configuration.jei.prefillRecipeTime.tooltip": "When importing from JEI, pre-fill the time slot with the source recipe's duration. Falls back to 1t when it cannot be inferred.",
   "recipebalancer.configuration.jei.prefillRecipeTimeReflection": "Reflect other mods' recipe times",
-  "recipebalancer.configuration.jei.prefillRecipeTimeReflection.tooltip": "Allow guessing the durations of mods without a dedicated rule by reflected method/field names. Off by default so unrelated numbers (e.g. world time) are not mistaken for durations.",
+  "recipebalancer.configuration.jei.prefillRecipeTimeReflection.tooltip": "Allow guessing the durations of mods without a dedicated rule by reflected method/field names. On by default; out-of-range values are discarded.",
   "recipebalancer.configuration.jei.prefillMachineBaseTime": "Read machine base time",
   "recipebalancer.configuration.jei.prefillMachineBaseTime.tooltip": "When the recipe object carries no duration (Mekanism / AE2), instantiate the category's machine at runtime and read its base time. No static lookup table; falls back to 1t on failure.",
   "秒": "s",
