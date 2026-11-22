@@ -24,12 +24,21 @@ public final class RbContainerGuiHandler implements IGuiContainerHandler<Balance
 
     @Override
     public List<Rect2i> getGuiExtraAreas(BalancerScreen screen) {
-        return screen.jeiExtraAreas();
+        try {
+            return screen.jeiExtraAreas();
+        } catch (RuntimeException | LinkageError e) {
+            // 额外区域算错只会让 JEI 面板位置偏，不值得把 JEI 的绘制链带崩
+            return List.of();
+        }
     }
 
     @Override
     public Optional<IClickableIngredient<?>> getClickableIngredientUnderMouse(
             BalancerScreen screen, double mouseX, double mouseY) {
-        return JeiHoverKeys.clickable(screen.jeiHoveredKey(mouseX, mouseY));
+        try {
+            return JeiHoverKeys.clickable(screen.jeiHoveredKey(mouseX, mouseY));
+        } catch (RuntimeException | LinkageError e) {
+            return Optional.empty();
+        }
     }
 }

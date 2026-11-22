@@ -44,10 +44,14 @@ public final class JeiCraftableSlots {
                 continue;
             }
             for (ITypedIngredient<?> ingredient : slot.getAllIngredients().toList()) {
-                JeiIngredientMapper.Mapped mapped = JeiIngredientMapper.of(ingredient);
-                if (mapped != null && index.produces(mapped.key())) {
-                    result.add(slot);
-                    break;
+                try {
+                    JeiIngredientMapper.Mapped mapped = JeiIngredientMapper.of(ingredient);
+                    if (mapped != null && index.produces(mapped.key())) {
+                        result.add(slot);
+                        break;
+                    }
+                } catch (RuntimeException | LinkageError e) {
+                    // 某个配料的模组自定义类型解析失败时跳过它，不能让整页高亮（以及配方页绘制）中断
                 }
             }
         }

@@ -95,12 +95,12 @@ public final class JeiRecipeButtonFactory implements IRecipeButtonControllerFact
         @Override
         public void initState(IButtonState state) {
             state.setIcon(icon);
-            state.setVisible(hasOutput());
+            state.setVisible(hasOutputSafely());
         }
 
         @Override
         public void updateState(IButtonState state) {
-            boolean visible = hasOutput();
+            boolean visible = hasOutputSafely();
             state.setVisible(visible);
             state.setActive(visible);
         }
@@ -108,13 +108,26 @@ public final class JeiRecipeButtonFactory implements IRecipeButtonControllerFact
         @Override
         public void drawExtras(GuiGraphics graphics, Rect2i rect, int mouseX, int mouseY,
                                float partialTick) {
-            if (!rect.contains(mouseX, mouseY)) {
-                return;
+            try {
+                if (!rect.contains(mouseX, mouseY)) {
+                    return;
+                }
+                icon.drawHoverBorder(graphics, rect);
+                // AE 风格：悬停时把配方库里能自产的槽位标蓝
+                for (IRecipeSlotView slot : craftableSlots()) {
+                    drawSlotHighlight(graphics, slot);
+                }
+            } catch (RuntimeException | LinkageError e) {
+                // 单帧高亮异常不能中断 JEI 配方页的渲染（否则表现为「配方查不出来」）
             }
-            icon.drawHoverBorder(graphics, rect);
-            // AE 风格：悬停时把配方库里能自产的槽位标蓝
-            for (IRecipeSlotView slot : craftableSlots()) {
-                drawSlotHighlight(graphics, slot);
+        }
+
+        /** 布局失效/被 JEI 回收时 hasOutput 可能抛异常，按钮按隐藏处理。 */
+        private boolean hasOutputSafely() {
+            try {
+                return hasOutput();
+            } catch (RuntimeException | LinkageError e) {
+                return false;
             }
         }
 
@@ -163,22 +176,32 @@ public final class JeiRecipeButtonFactory implements IRecipeButtonControllerFact
                 return highlighted;
             }
             highlightAt = now;
-            highlighted = JeiCraftableSlots.find(layout.getRecipeSlotsView(), ProductIndex.current());
+            try {
+                highlighted = JeiCraftableSlots.find(layout.getRecipeSlotsView(),
+                        ProductIndex.current());
+            } catch (RuntimeException | LinkageError e) {
+                highlighted = List.of();
+            }
             return highlighted;
         }
 
         @Override
         public boolean onPress(IJeiUserInput input) {
-            if (input.isSimulate() || !hasOutput()) {
+            try {
+                if (input.isSimulate() || !hasOutput()) {
+                    return false;
+                }
+                InputConstants.Key key = input.getKey();
+                if (key.getType() != InputConstants.Type.MOUSE || key.getValue() != 0) {
+                    return false;
+                }
+                RecipePattern pattern = JeiPatternImporter.build(layout);
+                Minecraft.getInstance().setScreen(new BalancerScreen(pattern));
+                return true;
+            } catch (RuntimeException | LinkageError e) {
+                // 导入失败只当作没点按，异常不能冒泡进 JEI 的输入处理
                 return false;
             }
-            InputConstants.Key key = input.getKey();
-            if (key.getType() != InputConstants.Type.MOUSE || key.getValue() != 0) {
-                return false;
-            }
-            RecipePattern pattern = JeiPatternImporter.build(layout);
-            Minecraft.getInstance().setScreen(new BalancerScreen(pattern));
-            return true;
         }
 
         @Override

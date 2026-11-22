@@ -26,6 +26,12 @@ public final class JeiLegacyClickHandler implements IGlobalGuiHandler {
     @Override
     public Optional<IClickableIngredient<?>> getClickableIngredientUnderMouse(double mouseX,
                                                                              double mouseY) {
-        return JeiHoverKeys.clickable(JeiHoverKeys.hovered(mouseX, mouseY));
+        try {
+            return JeiHoverKeys.clickable(JeiHoverKeys.hovered(mouseX, mouseY));
+        } catch (RuntimeException | LinkageError e) {
+            // 这是 JEI 的全局查询链：任何一个处理器抛异常都可能让 R/U 在所有界面失效，
+            // 因此单次查询失败只能返回空，绝不能冒泡。
+            return Optional.empty();
+        }
     }
 }
