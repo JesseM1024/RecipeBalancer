@@ -3,7 +3,10 @@ package com.jessetech.recipebalancer.mc.config;
 import net.neoforged.neoforge.common.ModConfigSpec;
 
 /**
- * 流程图配置（NeoForge {@code ModConfigSpec}，文件 {@code config/recipebalancer-client.toml}）。
+ * 本模组的统一客户端配置（NeoForge {@code ModConfigSpec}，文件 {@code config/recipebalancer-client.toml}）。
+ *
+ * <p>包含流程图视觉参数与 JEI 导入行为。NeoForge 的约定是「一个 spec = 一份配置文件」，
+ * 新增配置项一律加在这里，不要再注册第二份 spec。
  *
  * <p>模组列表里的「Config」按钮由 NeoForge 自带编辑器打开（见 {@code RecipeBalancerMod}
  * 注册的 {@code IConfigScreenFactory -> ConfigurationScreen}），保存后立即生效。
@@ -21,6 +24,11 @@ public final class GraphLayoutConfig {
     public static final ModConfigSpec.DoubleValue DIM_OPACITY;
     public static final ModConfigSpec.DoubleValue ZOOM_MIN;
     public static final ModConfigSpec.DoubleValue ZOOM_MAX;
+
+    /** JEI 导入时是否把源配方耗时预填到耗时格（总开关）。 */
+    public static final ModConfigSpec.BooleanValue PREFILL_RECIPE_TIME;
+    /** 是否允许按方法名/字段名反射猜测没有专门适配的模组耗时（默认关闭）。 */
+    public static final ModConfigSpec.BooleanValue PREFILL_RECIPE_TIME_REFLECTION;
 
     static {
         ModConfigSpec.Builder builder = new ModConfigSpec.Builder();
@@ -60,6 +68,24 @@ public final class GraphLayoutConfig {
                 .comment("流程图缩放上限（0.5-6）。自动适配视野与滚轮缩放都不超过它。",
                         "Maximum zoom of the graph view.")
                 .defineInRange("zoomMax", 3.0, 0.5, 6.0);
+
+        builder.comment("JEI 导入行为。",
+                        "JEI import behaviour.")
+                .push("jei");
+        PREFILL_RECIPE_TIME = builder
+                .comment("从 JEI 写样板时，把源配方的耗时预填到耗时格（可随后手动修改）。",
+                        "Pre-fill the encoding time slot with the source recipe's duration when importing from JEI.",
+                        "推断失败时保持默认 1t，不会阻塞导入。",
+                        "Falls back to 1t when the duration cannot be inferred.")
+                .define("prefillRecipeTime", true);
+        PREFILL_RECIPE_TIME_REFLECTION = builder
+                .comment("允许通过方法名/字段名反射猜测其他模组的配方耗时（默认关闭）。",
+                        "Allow guessing other mods' recipe durations by reflected method/field names (off by default).",
+                        "只影响没有专门适配的模组；原版烹饪与已知模组始终可读。",
+                        "Only affects mods without a dedicated rule; vanilla cooking and known mods keep working.")
+                .define("prefillRecipeTimeReflection", false);
+        builder.pop();
+
         SPEC = builder.build();
     }
 
@@ -87,5 +113,23 @@ public final class GraphLayoutConfig {
         return new Settings(NODE_GAP.get(), EDGE_LENGTH.get(), FORCE_IDEAL.get(),
                 MIN_EDGE_LENGTH.get(), EDGE_SATURATION.get(), EDGE_OPACITY.get(),
                 DIM_OPACITY.get(), ZOOM_MIN.get(), ZOOM_MAX.get());
+    }
+
+    /** 耗时预填总开关；配置尚未加载时按默认值（开）处理，避免功能因配置异常而失效。 */
+    public static boolean prefillRecipeTime() {
+        try {
+            return PREFILL_RECIPE_TIME.get();
+        } catch (RuntimeException | LinkageError e) {
+            return true;
+        }
+    }
+
+    /** 反射猜测开关；配置尚未加载时按默认值（关）处理。 */
+    public static boolean prefillRecipeTimeReflection() {
+        try {
+            return PREFILL_RECIPE_TIME_REFLECTION.get();
+        } catch (RuntimeException | LinkageError e) {
+            return false;
+        }
     }
 }

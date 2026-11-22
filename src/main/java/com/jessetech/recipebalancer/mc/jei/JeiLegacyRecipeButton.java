@@ -105,7 +105,7 @@ public final class JeiLegacyRecipeButton implements IRecipeCategoryDecorator<Obj
             } else if (hoveredArmed && hoveredWasDown) {
                 // 松开时才触发，和 JEI 原生按钮（EXECUTE 阶段）一致，也避免拖拽误触
                 hoveredArmed = false;
-                openTerminal(category, slots);
+                openTerminal(category, slots, recipe);
             }
             hoveredWasDown = down;
         } catch (RuntimeException e) {
@@ -279,12 +279,14 @@ public final class JeiLegacyRecipeButton implements IRecipeCategoryDecorator<Obj
     }
 
     /** 转成编码样板并打开配方编码终端（与高版本按钮同一路径）。 */
-    private static void openTerminal(IRecipeCategory<?> category, IRecipeSlotsView slots) {
+    private static void openTerminal(IRecipeCategory<?> category, IRecipeSlotsView slots,
+                                     Object recipe) {
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft == null) {
             return;
         }
-        RecipePattern pattern = JeiPatternImporter.build(category, slots);
+        // recipe 用于预填源配方耗时；拿不到或推断失败时内部保持默认 1t
+        RecipePattern pattern = JeiPatternImporter.build(category, recipe, slots);
         RecipeBalancerMod.LOGGER.info("[RecipeBalancer] JEI 配方页按钮：{} → 打开配方编码终端",
                 category.getRecipeType().getUid());
         // 正在渲染 JEI 配方页时直接切屏会让渲染栈错位，排到主线程下一 tick 再切

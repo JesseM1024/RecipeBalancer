@@ -14,6 +14,7 @@ import mezz.jei.api.runtime.IJeiRuntime;
 import net.minecraft.client.renderer.Rect2i;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -39,11 +40,22 @@ public final class JeiPatternImporter {
     }
 
     public static RecipePattern build(IRecipeLayoutDrawable<?> layout) {
-        return build(layout.getRecipeCategory(), layout.getRecipeSlotsView());
+        return build(layout.getRecipeCategory(), layout.getRecipe(), layout.getRecipeSlotsView());
     }
 
-    /** 装饰器路径：只有类别与槽位视图（低版本 JEI 的配方页按钮走这里）。 */
+    /** 装饰器/旧调用路径：没有 recipe 对象，耗时保持默认（不预填）。 */
     public static RecipePattern build(IRecipeCategory<?> category, IRecipeSlotsView slots) {
+        return build(category, null, slots);
+    }
+
+    /**
+     * 完整入口：类别 + 原始配方 + 槽位视图。
+     *
+     * <p>{@code recipe} 只用于推断源配方耗时（预填到耗时格，可随后手改）；
+     * 为 null、推断失败或读取抛异常时，耗时保持 {@link RecipePattern} 的默认 1t。
+     */
+    public static RecipePattern build(IRecipeCategory<?> category, @Nullable Object recipe,
+                                      IRecipeSlotsView slots) {
         RecipePattern pattern = new RecipePattern();
         applyInputs(category, slots, pattern);
         int outputIndex = 0;
@@ -55,7 +67,38 @@ public final class JeiPatternImporter {
             }
         }
         applyEquipment(category, slots, pattern);
+        applyTime(category, recipe, pattern);
         return pattern;
+    }
+
+    /**
+     * 预填源配方的耗时。
+     *
+     * <p>只作为参考值：{@link RecipePattern#setTimeTicks} 写入后仍是普通耗时，
+     * 用户打开耗时编辑屏即可改写；推断失败时什么都不做，保持 1t。
+     */
+    private static void applyTime(IRecipeCategory<?> category, Object recipe, RecipePattern pattern) {
+        try {
+            Optional<JeiRecipeTime.Result> inferred = JeiRecipeTime.infer(recipe, category);
+            if (inferred.isEmpty()) {
+                return;
+            }
+            int ticks = inferred.get().ticks();
+            pattern.setTimeTicks(ticks);
+            pattern.setTimeHint(ticks, categoryUid(category));
+        } catch (RuntimeException | LinkageError ignored) {
+            // 预填只是锦上添花：任何异常都不能影响配方导入
+        }
+    }
+
+    /** 配方类型 uid；拿不到时返回空串（界面会显示"未知类型"）。 */
+    private static String categoryUid(IRecipeCategory<?> category) {
+        try {
+            ResourceLocation uid = category == null ? null : category.getRecipeType().getUid();
+            return uid == null ? "" : uid.toString();
+        } catch (RuntimeException | LinkageError e) {
+            return "";
+        }
     }
 
     /** 只有合成配方保留空格（纯视觉），机器配方等一律按顺序紧排。 */

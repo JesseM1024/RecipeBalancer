@@ -32,6 +32,7 @@ public final class RecipeBalancerMod {
         modBus.addListener(RegisterKeyMappingsEvent.class, RbKeyMappings::register);
         NeoForge.EVENT_BUS.addListener(ClientTickEvent.Post.class, RbKeyMappings::onClientTick);
         // 配置：ModConfigSpec + NeoForge 自带编辑器（模组列表里的「Config」按钮）
+        // 全部客户端配置都在同一个 spec 里（NeoForge 一个 spec 对应一份 toml）
         container.registerConfig(ModConfig.Type.CLIENT, GraphLayoutConfig.SPEC);
         container.registerExtensionPoint(IConfigScreenFactory.class, ConfigurationScreen::new);
         LOGGER.info("[RecipeBalancer] M2 初始化：快捷键 K 打开原生主界面");

@@ -222,5 +222,15 @@
   "recipebalancer.configuration.zoomMax.tooltip": "自动适配视野与滚轮缩放的缩放上限。",
   "点击后打开配方编码终端":  "点击后打开配方编码终端",
   "编码此配方":  "编码此配方",
+  "参考耗时：%s":  "参考耗时：%s",
+  "来自 JEI 原配方 %s，可自行修改":  "来自 JEI 原配方 %s，可自行修改",
+  "未知类型":  "未知类型",
+  "已自动写入 %s 的配方（耗时预填 %s）":  "已自动写入 %s 的配方（耗时预填 %s）",
+  "recipebalancer.configuration.jei":  "JEI 导入",
+  "recipebalancer.configuration.jei.tooltip":  "从 JEI 写样板时的耗时预填行为。",
+  "recipebalancer.configuration.jei.prefillRecipeTime":  "预填配方耗时",
+  "recipebalancer.configuration.jei.prefillRecipeTime.tooltip":  "从 JEI 导入配方时，把源配方的耗时预填到耗时格，可随后手动修改。推断失败时保持默认 1t。",
+  "recipebalancer.configuration.jei.prefillRecipeTimeReflection":  "反射猜测其他模组耗时",
+  "recipebalancer.configuration.jei.prefillRecipeTimeReflection.tooltip":  "允许按方法名/字段名反射猜测没有专门适配的模组耗时；默认关闭，避免把世界时间等无关数字误当成耗时。",
   "JEI 未安装，快捷功能不可用":  "JEI 未安装，快捷功能不可用"
 }
