@@ -104,20 +104,23 @@ public final class JeiRecipeTime {
             return Optional.empty();
         }
         try {
-            int vanilla = vanillaTicks(recipe);
+            // JEI 4.x 传的是自己的包装类（MachineRecipeWrapper 等），
+            // 真实配方在内部 recipe 字段里；先解包再探测
+            Object target = unwrap(recipe);
+            int vanilla = vanillaTicks(target);
             if (vanilla > 0) {
                 return Optional.of(new Result(vanilla, Origin.VANILLA_COOKING));
             }
-            int api = modApiTicks(recipe);
+            int api = modApiTicks(target);
             if (api > 0) {
                 return Optional.of(new Result(api, Origin.MOD_API));
             }
             if (GraphLayoutConfig.prefillRecipeTimeReflection()) {
-                int generic = genericTicks(recipe);
+                int generic = genericTicks(target);
                 if (generic > 0) {
                     return Optional.of(new Result(generic, Origin.MOD_API));
                 }
-                int field = fieldTicks(recipe);
+                int field = fieldTicks(target);
                 if (field > 0) {
                     return Optional.of(new Result(field, Origin.MOD_FIELD));
                 }
@@ -191,7 +194,29 @@ public final class JeiRecipeTime {
         }
     }
 
+    /**
+     * JEI 的包装类内部通常还有一层真实配方（字段名 {@code recipe}）。
+     *
+     * <p>1.12.2 的 Mekanism PRC 走 {@code DoubleMachineRecipeWrapper}，
+     * 配方时间在内部 {@code PressurizedRecipe.ticks} 字段上，
+     * 不解包的话字段探测永远命中不了。
+     */
     @Nullable
+    private static Object unwrap(@Nullable Object recipe) {
+        if (recipe == null) {
+            return null;
+        }
+        String name = recipe.getClass().getName();
+        // 只解 JEI 自己的包装类，避免误读模组配方里同名的 recipe 字段
+        if (name.contains("RecipeWrapper") || name.startsWith("mezz.jei.")) {
+            Object inner = readField(recipe, "recipe");
+            if (inner != null) {
+                return inner;
+            }
+        }
+        return recipe;
+    }
+
     private static Object readField(@Nullable Object target, String name) {
         if (target == null) {
             return null;

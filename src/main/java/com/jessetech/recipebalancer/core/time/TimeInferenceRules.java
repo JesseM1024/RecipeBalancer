@@ -62,7 +62,9 @@ public final class TimeInferenceRules {
             new ModRule("com.simibubi.create",
                     Arrays.asList("getProcessingDuration", "getProcessingTime")),
             new ModRule("mekanism",
-                    Arrays.asList("getTicksRequired")),
+                    // getTicksRequired：普通机器配方（粉碎/富集）；
+                    // getDuration：加压反应室（PressurizedReactionRecipe，配方 JSON 里的 duration）
+                    Arrays.asList("getTicksRequired", "getDuration")),
             new ModRule("blusunrize.immersiveengineering",
                     Arrays.asList("getTotalProcessTime", "getTime")));
 
