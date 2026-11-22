@@ -4,6 +4,7 @@ import com.jessetech.recipebalancer.RecipeBalancerMod;
 import com.jessetech.recipebalancer.core.time.TimeInferenceRules;
 import com.jessetech.recipebalancer.mc.config.GraphLayoutConfig;
 import mezz.jei.api.recipe.category.IRecipeCategory;
+import net.minecraft.world.item.alchemy.PotionBrewing;
 import net.minecraft.world.item.crafting.AbstractCookingRecipe;
 import org.jetbrains.annotations.Nullable;
 
@@ -178,6 +179,15 @@ public final class JeiRecipeTime {
         if (recipe instanceof AbstractCookingRecipe cooking) {
             try {
                 return TimeInferenceRules.sanitizeTicks(cooking.getCookingTime());
+            } catch (RuntimeException | LinkageError e) {
+                return -1;
+            }
+        }
+        // 原版酿造：PotionBrewing$Mix 没有时间字段，时间由酿造台固定，
+        // 值取自原版常量 BREWING_TIME_SECONDS（20 秒 = 400 t），不是静态类别表
+        if (recipe.getClass().getName().equals("net.minecraft.world.item.alchemy.PotionBrewing$Mix")) {
+            try {
+                return TimeInferenceRules.sanitizeTicks(PotionBrewing.BREWING_TIME_SECONDS * 20L);
             } catch (RuntimeException | LinkageError e) {
                 return -1;
             }
