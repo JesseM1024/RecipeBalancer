@@ -1,8 +1,7 @@
 package com.jessetech.recipebalancer.core.matrix;
 
-import com.jessetech.recipebalancer.core.util.J8;
-
 import com.jessetech.recipebalancer.core.model.Recipe;
+import com.jessetech.recipebalancer.core.util.J8;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -71,7 +70,7 @@ public final class MaterialMatrix {
     private static int row(Map<String, Integer> index, String item) {
         Integer row = index.get(item);
         if (row == null) {
-            throw new IllegalArgumentException("物品未在索引中: " + item);
+            throw new IllegalArgumentException("物品未在索引中");
         }
         return row;
     }

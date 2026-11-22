@@ -1,5 +1,6 @@
 package com.jessetech.recipebalancer.mc.jei;
 
+import com.jessetech.recipebalancer.RecipeBalancerMod;
 import com.jessetech.recipebalancer.core.model.RecipePattern;
 import com.jessetech.recipebalancer.mc.itemmap.ItemKeyMapper;
 import com.jessetech.recipebalancer.mc.itemmap.ProductIndex;
@@ -14,6 +15,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * 把 JEI 的配方转成我们的编码样板（输入 / 输出 / 设备），1.16.5 / JEI 7.x 版。
@@ -32,7 +34,8 @@ public final class JeiPatternImporter {
     /** 统一入口：槽位视图 → 编码样板（不带配方原始量，数量按槽位显示值）。 */
     public static RecipePattern buildFromSlots(IRecipeCategory<?> category,
                                                List<JeiSlots.Slot> slots) {
-        return buildFromSlots(category, slots, Collections.<String, Double>emptyMap());
+        return buildFromSlotsWithRecipe(category, slots,
+                Collections.<String, Double>emptyMap(), null);
     }
 
     /**
@@ -43,6 +46,22 @@ public final class JeiPatternImporter {
     public static RecipePattern buildFromSlots(IRecipeCategory<?> category,
                                                List<JeiSlots.Slot> slots,
                                                Map<String, Double> fluidOriginals) {
+        return buildFromSlotsWithRecipe(category, slots, fluidOriginals, null);
+    }
+
+    /** 带原始配方的版本：在原有输入/输出/设备之外，多一步耗时预填。 */
+    public static RecipePattern buildFromSlotsWithRecipe(IRecipeCategory<?> category,
+                                                         List<JeiSlots.Slot> slots,
+                                                         Map<String, Double> fluidOriginals,
+                                                         Object recipe) {
+        RecipePattern pattern = buildFromSlotsInternal(category, slots, fluidOriginals);
+        applyTime(category, recipe, pattern);
+        return pattern;
+    }
+
+    private static RecipePattern buildFromSlotsInternal(IRecipeCategory<?> category,
+                                                        List<JeiSlots.Slot> slots,
+                                                        Map<String, Double> fluidOriginals) {
         RecipePattern pattern = new RecipePattern();
         if (slots == null || slots.isEmpty()) {
             applyEquipment(category, pattern);
@@ -113,8 +132,13 @@ public final class JeiPatternImporter {
 
     /** 一份 JEI 配方布局 → 编码样板（7.x 的布局对象是 {@code RecipeLayout}）。 */
     public static RecipePattern build(IRecipeCategory<?> category, Object layout) {
+        return build(category, layout, null);
+    }
+
+    /** 带原始配方的版本：多一步耗时预填。 */
+    public static RecipePattern build(IRecipeCategory<?> category, Object layout, Object recipe) {
         List<JeiSlots.Slot> slots = JeiSlots.fromLayout(layout);
-        return buildFromSlots(category, slots, fluidOriginals(layout));
+        return buildFromSlotsWithRecipe(category, slots, fluidOriginals(layout), recipe);
     }
 
     /**
@@ -317,6 +341,36 @@ public final class JeiPatternImporter {
     }
 
     /** 设备：取该配方类型的第一个催化剂。 */
+    /**
+     * 预填源配方的耗时。
+     *
+     * <p>只作为参考值：写入后仍是普通耗时，用户打开耗时编辑屏即可改写；
+     * 推断失败时什么都不做，保持 1t。
+     */
+    private static void applyTime(IRecipeCategory<?> category, Object recipe, RecipePattern pattern) {
+        try {
+            // 类别 uid 只在这里取一次，用于结果标注与日志
+            String categoryUid = JeiRecipeTime.categoryUid(category);
+            Optional<JeiRecipeTime.Result> inferred = JeiRecipeTime.infer(recipe, category);
+            if (!inferred.isPresent()) {
+                RecipeBalancerMod.LOGGER.info("[RecipeBalancer] 耗时未推断：recipe={}，类别={}",
+                        recipe == null ? "null" : recipe.getClass().getName(), categoryUid);
+                return;
+            }
+            int ticks = inferred.get().ticks();
+            pattern.setTimeTicks(ticks);
+            pattern.setTimeHint(ticks, categoryUid);
+            RecipeBalancerMod.LOGGER.info("[RecipeBalancer] 耗时预填：{} -> {}t（{}，类别 {}）",
+                    recipe == null ? "null" : recipe.getClass().getSimpleName(),
+                    Integer.valueOf(ticks), inferred.get().origin(), categoryUid);
+        } catch (RuntimeException e) {
+            RecipeBalancerMod.LOGGER.warn("[RecipeBalancer] 耗时预填异常：recipe={}",
+                    recipe == null ? "null" : recipe.getClass().getName(), e);
+        } catch (LinkageError e) {
+            // 兼容模组缺失/版本错配：静默保持 1t
+        }
+    }
+
     private static void applyEquipment(IRecipeCategory<?> category, RecipePattern pattern) {
         IJeiRuntime runtime = JeiIngredientMapper.runtime();
         if (runtime == null || category == null) {

@@ -1,7 +1,5 @@
 package com.jessetech.recipebalancer.core.model;
 
-import com.jessetech.recipebalancer.core.util.J8;
-
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -26,6 +24,8 @@ public final class RecipePattern {
     private String equipmentKey = "";
     private double timeTicks = 1.0;
     private boolean truncated;
+    /** JEI 原配方的参考耗时；只用于界面提示，不进入 {@link #toRecipe()} 与场景 JSON。 */
+    private TimeHint timeHint;
 
     /** 用另一份样板整体覆盖当前内容（JEI 自动撰写用）。 */
     public void copyFrom(RecipePattern other) {
@@ -44,6 +44,7 @@ public final class RecipePattern {
         }
         equipmentKey = other.equipmentKey;
         timeTicks = other.timeTicks;
+        timeHint = other.timeHint;
         truncated = other.truncated;
     }
 
@@ -52,6 +53,7 @@ public final class RecipePattern {
         clear(outputKeys, outputAmounts);
         equipmentKey = "";
         timeTicks = 1.0;
+        timeHint = null;
         truncated = false;
     }
 
@@ -113,7 +115,7 @@ public final class RecipePattern {
     }
 
     private static void put(String[] keys, double[] amounts, int index, String key, double amount) {
-        if (index < 0 || index >= keys.length || key == null || J8.isBlank(key) || !(amount > 0)) {
+        if (index < 0 || index >= keys.length || key == null || key.trim().isEmpty() || !(amount > 0)) {
             return;
         }
         if (key.equals(keys[index])) {
@@ -231,12 +233,61 @@ public final class RecipePattern {
         }
     }
 
+    /**
+     * JEI 原配方的参考耗时（tick）。
+     *
+     * <p>这是"参考基准"，不是配方数据：{@link #toRecipe()} 与场景 JSON 都不包含它，
+     * 用户把耗时改掉之后应当 {@link #clearTimeHint()}。
+     *
+     * @param ticks  源配方的耗时（tick），必须为正
+     * @param source 来源类别 uid（由 JEI 类别通用传入），可为空
+     */
+    public static final class TimeHint {
+        private final double ticks;
+        private final String source;
+
+        public TimeHint(double ticks, String source) {
+            this.ticks = ticks;
+            this.source = source == null ? "" : source;
+        }
+
+        public double ticks() {
+            return ticks;
+        }
+
+        public String source() {
+            return source;
+        }
+    }
+
+    /** 参考耗时；没有从 JEI 推断出来时为 {@code null}。 */
+    public TimeHint timeHint() {
+        return timeHint;
+    }
+
+    /** 记录参考耗时（不带来源）；{@code ticks} 非正时忽略。 */
+    public void setTimeHint(double ticks) {
+        setTimeHint(ticks, "");
+    }
+
+    /** 记录参考耗时与来源 uid；{@code ticks} 非正时忽略（视为没有参考值）。 */
+    public void setTimeHint(double ticks, String source) {
+        if (ticks > 0 && Double.isFinite(ticks)) {
+            this.timeHint = new TimeHint(ticks, source);
+        }
+    }
+
+    /** 用户改过耗时后清掉参考值标记。 */
+    public void clearTimeHint() {
+        this.timeHint = null;
+    }
+
     public boolean truncated() {
         return truncated;
     }
 
     public boolean hasContent() {
-        if (!J8.isBlank(equipmentKey)) {
+        if (!equipmentKey.trim().isEmpty()) {
             return true;
         }
         return maxInputIndex() >= 0 || maxOutputIndex() >= 0;
@@ -244,7 +295,7 @@ public final class RecipePattern {
 
     /** 生成 core 配方；时间从 tick 转回秒。 */
     public Recipe toRecipe() {
-        if (J8.isBlank(equipmentKey)) {
+        if (equipmentKey.trim().isEmpty()) {
             throw new IllegalArgumentException("请先标记设备");
         }
         if (!(timeTicks > 0)) {

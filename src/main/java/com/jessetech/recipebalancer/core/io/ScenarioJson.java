@@ -49,7 +49,7 @@ public final class ScenarioJson {
         try {
             return load(new String(Files.readAllBytes(path), StandardCharsets.UTF_8));
         } catch (IOException e) {
-            throw new UncheckedIOException("读取场景失败: " + path, e);
+            throw new UncheckedIOException("读取场景失败", e);
         }
     }
 
@@ -65,7 +65,7 @@ public final class ScenarioJson {
         try {
             return loadDraft(new String(Files.readAllBytes(path), StandardCharsets.UTF_8));
         } catch (IOException e) {
-            throw new UncheckedIOException("读取草稿失败: " + path, e);
+            throw new UncheckedIOException("读取草稿失败", e);
         }
     }
 
@@ -144,29 +144,29 @@ public final class ScenarioJson {
         List<Recipe> recipes = new ArrayList<>(array.size());
         for (int index = 0; index < array.size(); index++) {
             if (!array.get(index).isJsonObject()) {
-                throw new SchemaException("配方 [" + index + "] 必须为 dict");
+                throw new SchemaException("配方条目必须为对象");
             }
             JsonObject recipe = array.get(index).getAsJsonObject();
             for (String key : REQUIRED_RECIPE_KEYS) {
                 if (!recipe.has(key)) {
-                    throw new SchemaException("配方 [" + index + "] 缺少键: " + key);
+                    throw new SchemaException("配方缺少必需键");
                 }
             }
 
             Map<String, Double> sources = parseAmounts(recipe.get("sourceList"), index, "sourceList");
             Map<String, Double> products = parseAmounts(recipe.get("productList"), index, "productList");
             if (products.isEmpty()) {
-                throw new SchemaException("配方 [" + index + "].productList 不能为空");
+                throw new SchemaException("配方 productList 不能为空");
             }
 
             JsonElement time = recipe.get("time");
             double timeSeconds = time != null && isNumber(time) ? time.getAsDouble() : Double.NaN;
             if (!Double.isFinite(timeSeconds) || timeSeconds <= 0) {
-                throw new SchemaException("配方 [" + index + "].time 必须为正数");
+                throw new SchemaException("配方 time 必须为正数");
             }
             JsonElement equType = recipe.get("equType");
             if (!isString(equType) || equType.getAsString().isEmpty()) {
-                throw new SchemaException("配方 [" + index + "].equType 必须为非空字符串");
+                throw new SchemaException("配方 equType 必须为非空字符串");
             }
 
             recipes.add(new Recipe(sources, products, timeSeconds, equType.getAsString()));
@@ -176,18 +176,18 @@ public final class ScenarioJson {
 
     private static Map<String, Double> parseAmounts(JsonElement element, int index, String key) {
         if (element == null || !element.isJsonObject()) {
-            throw new SchemaException("配方 [" + index + "]." + key + " 必须为 dict（物品名 -> 数量）");
+            throw new SchemaException("配方的物品表必须为对象");
         }
         Map<String, Double> amounts = new LinkedHashMap<>();
         for (Map.Entry<String, JsonElement> entry : element.getAsJsonObject().entrySet()) {
             String item = entry.getKey();
             if (item.isEmpty()) {
-                throw new SchemaException("配方 [" + index + "]." + key + " 存在非法物品名: " + item);
+                throw new SchemaException("配方存在非法物品名");
             }
             double amount = isNumber(entry.getValue())
                     ? entry.getValue().getAsDouble() : Double.NaN;
             if (!Double.isFinite(amount) || amount <= 0) {
-                throw new SchemaException("配方 [" + index + "]." + key + "[" + item + "] 数量必须为正数");
+                throw new SchemaException("配方数量必须为正数");
             }
             amounts.put(item, amount);
         }
@@ -202,7 +202,7 @@ public final class ScenarioJson {
         }
         unknown.removeAll(KNOWN_OPTIONS);
         if (!unknown.isEmpty()) {
-            throw new SchemaException("未知 options 键: " + unknown);
+            throw new SchemaException("未知 options 键");
         }
 
         Set<String> rawMaterials = readStringSet(options, "raw_materials");
@@ -239,12 +239,12 @@ public final class ScenarioJson {
         }
         JsonElement element = options.get(key);
         if (!element.isJsonArray()) {
-            throw new SchemaException("options." + key + " 必须为数组");
+            throw new SchemaException("options 字段必须为数组");
         }
         Set<String> values = new LinkedHashSet<>();
         for (JsonElement value : element.getAsJsonArray()) {
             if (!isString(value)) {
-                throw new SchemaException("options." + key + " 必须为字符串数组");
+                throw new SchemaException("options 字段必须为字符串数组");
             }
             values.add(value.getAsString());
         }
@@ -257,12 +257,12 @@ public final class ScenarioJson {
         }
         JsonElement element = options.get(key);
         if (!element.isJsonArray()) {
-            throw new SchemaException("options." + key + " 必须为数组");
+            throw new SchemaException("options 字段必须为数组");
         }
         Set<Integer> values = new LinkedHashSet<>();
         for (JsonElement value : element.getAsJsonArray()) {
             if (!isNumber(value)) {
-                throw new SchemaException("options." + key + " 必须为整数数组");
+                throw new SchemaException("options 字段必须为整数数组");
             }
             values.add(value.getAsInt());
         }
@@ -275,7 +275,7 @@ public final class ScenarioJson {
         }
         JsonElement element = options.get(key);
         if (!element.isJsonPrimitive() || !element.getAsJsonPrimitive().isBoolean()) {
-            throw new SchemaException("options." + key + " 必须为布尔值");
+            throw new SchemaException("options 字段必须为布尔值");
         }
         return element.getAsBoolean();
     }
@@ -284,11 +284,11 @@ public final class ScenarioJson {
         Map<String, Double> values = new LinkedHashMap<>();
         for (Map.Entry<String, JsonElement> entry : object.entrySet()) {
             if (!isNumber(entry.getValue())) {
-                throw new SchemaException(field + "[" + entry.getKey() + "] 必须为数字");
+                throw new SchemaException("options 数值必须为数字");
             }
             double value = entry.getValue().getAsDouble();
             if (!Double.isFinite(value)) {
-                throw new SchemaException(field + "[" + entry.getKey() + "] 必须为有限双精度数");
+                throw new SchemaException("options 数值必须为有限双精度数");
             }
             values.put(entry.getKey(), value);
         }

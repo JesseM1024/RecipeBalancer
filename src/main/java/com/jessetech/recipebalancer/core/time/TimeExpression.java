@@ -1,7 +1,5 @@
 package com.jessetech.recipebalancer.core.time;
 
-import com.jessetech.recipebalancer.core.util.J8;
-
 import java.math.BigDecimal;
 import java.util.Locale;
 
@@ -19,7 +17,7 @@ public final class TimeExpression {
     }
 
     public static double evaluate(String expression) {
-        if (expression == null || J8.isBlank(expression)) {
+        if (expression == null || expression.trim().isEmpty()) {
             throw new IllegalArgumentException("表达式不能为空");
         }
         if (expression.length() > MAX_LENGTH) {
@@ -29,7 +27,7 @@ public final class TimeExpression {
         double value = parser.parseExpression();
         parser.skipWhitespace();
         if (!parser.atEnd()) {
-            throw new IllegalArgumentException("表达式存在多余字符: " + parser.rest());
+            throw new IllegalArgumentException("表达式存在多余字符");
         }
         if (!Double.isFinite(value)) {
             throw new IllegalArgumentException("表达式结果不是有限数");
@@ -252,7 +250,7 @@ public final class TimeExpression {
             try {
                 return Double.parseDouble(text);
             } catch (NumberFormatException e) {
-                throw new IllegalArgumentException("非法数字: " + text);
+                throw new IllegalArgumentException("非法数字");
             }
         }
     }
