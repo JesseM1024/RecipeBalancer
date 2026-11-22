@@ -34,6 +34,13 @@ public final class GraphLayoutConfig {
     private static double zoomMin = ZOOM_MIN_DEFAULT;
     private static double zoomMax = ZOOM_MAX_DEFAULT;
 
+    /** JEI 导入时是否把源配方耗时预填到耗时格（总开关）。 */
+    private static boolean prefillRecipeTime = true;
+    /** 是否允许按方法名/字段名反射猜测没有专门适配的模组耗时。 */
+    private static boolean prefillRecipeTimeReflection = true;
+    /** 配方对象上没有时间时，是否运行时读机器实体的基础耗时。 */
+    private static boolean prefillMachineBaseTime = true;
+
     private GraphLayoutConfig() {
     }
 
@@ -69,6 +76,15 @@ public final class GraphLayoutConfig {
                     "流程图缩放下限（0.05-1）。\n" + "Minimum zoom of the graph view.");
             zoomMax = getDouble(config, "zoomMax", CATEGORY, ZOOM_MAX_DEFAULT, 0.5, 6.0,
                     "流程图缩放上限（0.5-6）。\n" + "Maximum zoom of the graph view.");
+            prefillRecipeTime = getBoolean(config, "prefillRecipeTime", CATEGORY, true,
+                    "从 JEI 写样板时，把源配方的耗时预填到耗时格（可随后手动修改）。\n"
+                            + "Pre-fill the encoding time slot with the source recipe's duration when importing from JEI.");
+            prefillRecipeTimeReflection = getBoolean(config, "prefillRecipeTimeReflection", CATEGORY, true,
+                    "允许通过方法名/字段名反射猜测其他模组的配方耗时（默认开启）。\n"
+                            + "Allow guessing other mods' recipe durations by reflected method/field names.");
+            prefillMachineBaseTime = getBoolean(config, "prefillMachineBaseTime", CATEGORY, true,
+                    "配方对象上没有耗时字段时，运行时实例化该类别的机器实体并读它的基础耗时。\n"
+                            + "When the recipe object carries no duration, instantiate the category's machine and read its base time at runtime.");
             if (config.hasChanged()) {
                 config.save();
             }
@@ -81,6 +97,27 @@ public final class GraphLayoutConfig {
     private static double getDouble(Configuration config, String key, String category,
                                     double def, double min, double max, String comment) {
         return config.get(key, category, def, comment, min, max).getDouble(def);
+    }
+
+    /** 布尔项：走 get(...) + Property#getBoolean。 */
+    private static boolean getBoolean(Configuration config, String key, String category,
+                                      boolean def, String comment) {
+        return config.get(key, category, def, comment).getBoolean(def);
+    }
+
+    /** 耗时预填总开关。 */
+    public static boolean prefillRecipeTime() {
+        return prefillRecipeTime;
+    }
+
+    /** 反射猜测开关。 */
+    public static boolean prefillRecipeTimeReflection() {
+        return prefillRecipeTimeReflection;
+    }
+
+    /** 机器基准耗时开关。 */
+    public static boolean prefillMachineBaseTime() {
+        return prefillMachineBaseTime;
     }
 
     /**

@@ -53,7 +53,7 @@ public final class TimeExpression {
     /** 展示：自动选单位，最多六位小数（去掉末尾 0），保留 0.001t 这类小值。 */
     public static String formatTicks(double ticks) {
         TimeUnit unit = TimeUnit.bestFor(ticks);
-        return formatNumber(unit.fromTicks(ticks)) + " " + unit.label();
+        return formatNumber(unit.fromTicks(ticks)) + " " + unit.symbol();
     }
 
     /** 精确 tick 展示（tooltip / 二级预览用）：保留 double 的完整十进制，不量化。 */

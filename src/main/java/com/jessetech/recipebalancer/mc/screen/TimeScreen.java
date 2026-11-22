@@ -1,5 +1,6 @@
 package com.jessetech.recipebalancer.mc.screen;
 
+import com.jessetech.recipebalancer.core.model.RecipePattern;
 import com.jessetech.recipebalancer.core.time.TimeExpression;
 import com.jessetech.recipebalancer.core.time.TimeUnit;
 import com.jessetech.recipebalancer.mc.i18n.Lang;
@@ -16,11 +17,14 @@ import net.minecraft.util.text.ITextComponent;
 
 import java.util.function.DoubleConsumer;
 
-/** 配方耗时编辑：表达式 + 单位（t/秒/分/时），确定后统一转 tick。 */
+/** 配方耗时编辑：表达式 + 单位（t/s/m/h），确定后统一转 tick。 */
 public final class TimeScreen extends RbScreen implements JeiPanelScreen {
 
     private final GuiScreen parent;
     private final DoubleConsumer callback;
+    /** JEI 原配方的参考耗时；为 null 时界面与原来完全一致。 */
+    private final RecipePattern.TimeHint timeHint;
+    private final int panelHeight;
     private double ticks;
     private TimeUnit unit;
     private GuiTextField expressionBox;
@@ -31,12 +35,24 @@ public final class TimeScreen extends RbScreen implements JeiPanelScreen {
     private int panelY = 40;
     private static final int PANEL_W = 236;
     private static final int PANEL_H = 132;
+    /** 多出一行参考基准耗时后的高度。 */
+    private static final int PANEL_H_WITH_HINT = 140;
 
     public TimeScreen(GuiScreen parent, double ticks, DoubleConsumer callback) {
+        this(parent, ticks, null, callback);
+    }
+
+    /**
+     * @param timeHint JEI 导入时记录的参考基准耗时；仅用于显示，不改变输入框初值
+     */
+    public TimeScreen(GuiScreen parent, double ticks, RecipePattern.TimeHint timeHint,
+                      DoubleConsumer callback) {
         super(Lang.c("配方耗时"));
         this.parent = parent;
         this.ticks = ticks > 0 ? ticks : 1.0;
         this.callback = callback;
+        this.timeHint = timeHint;
+        this.panelHeight = timeHint == null ? PANEL_H : PANEL_H_WITH_HINT;
         // 优先使用上次选择；没有记录才自动选单位
         this.unit = UnitPreferences.timeUnit(TimeUnit.bestFor(this.ticks));
     }
@@ -44,7 +60,7 @@ public final class TimeScreen extends RbScreen implements JeiPanelScreen {
     @Override
     protected void init() {
         panelX = (width - PANEL_W) / 2;
-        panelY = (height - PANEL_H) / 2;
+        panelY = (height - panelHeight) / 2;
 
         expressionBox = new RbTextField(font, panelX + 8, panelY + 28, 150, 18,
                 Lang.c("耗时表达式"));
@@ -52,14 +68,14 @@ public final class TimeScreen extends RbScreen implements JeiPanelScreen {
         expressionBox.setText(TimeExpression.formatEditableNumber(unit.fromTicks(ticks)));
         addButton(expressionBox);
 
-        unitButton = addButton(Buttons.builder(Chat.literal(Lang.t(unit.label())), b -> cycleUnit())
+        unitButton = addButton(Buttons.builder(Chat.literal(Lang.t(unit.zhLabel())), b -> cycleUnit())
                 .bounds(panelX + 164, panelY + 27, 64, 20).build());
 
         // 取消左、确定右
         addButton(Buttons.builder(Lang.c("取消"), b -> cancel())
-                .bounds(panelX + 8, panelY + PANEL_H - 28, 104, 20).build());
+                .bounds(panelX + 8, panelY + panelHeight - 28, 104, 20).build());
         addButton(Buttons.builder(Lang.c("确定"), b -> confirm())
-                .bounds(panelX + PANEL_W - 112, panelY + PANEL_H - 28, 104, 20).build());
+                .bounds(panelX + PANEL_W - 112, panelY + panelHeight - 28, 104, 20).build());
 
         setListener(expressionBox);
     }
@@ -77,7 +93,7 @@ public final class TimeScreen extends RbScreen implements JeiPanelScreen {
             ticks = preserved;
             expressionBox.setText(TimeExpression.formatEditableNumber(unit.fromTicks(ticks)));
         }
-        unitButton.setMessage(Chat.literal(Lang.t(unit.label())));
+        unitButton.setMessage(Chat.literal(Lang.t(unit.zhLabel())));
     }
 
     private void confirm() {
@@ -100,7 +116,7 @@ public final class TimeScreen extends RbScreen implements JeiPanelScreen {
     public void drawBackground(int tint) {
         Draw graphics = new Draw(this);
         graphics.fill(0, 0, width, height, 0xB0101010);
-        AeStyle.panel(graphics, panelX, panelY, PANEL_W, PANEL_H);
+        AeStyle.panel(graphics, panelX, panelY, PANEL_W, panelHeight);
         AeStyle.header(graphics, panelX, panelY, PANEL_W, 20);
         graphics.drawString(font, Lang.t("配方耗时（支持 + - * / ^ 和括号）"),
                 panelX + 8, panelY + 6, AeStyle.TEXT, false);
@@ -123,8 +139,16 @@ public final class TimeScreen extends RbScreen implements JeiPanelScreen {
         graphics.drawString(font, Lang.t("各配方可独立选单位；内部统一按 t 保存"),
                 panelX + 8, panelY + 68, AeStyle.MUTED, false);
 
+        int statusY = panelY + 84;
+        if (timeHint != null) {
+            graphics.drawString(font, Lang.t("参考基准耗时：%s",
+                            TimeExpression.formatTicks(timeHint.ticks())),
+                    panelX + 8, panelY + 84, AeStyle.MUTED, false);
+            statusY = panelY + 96;
+        }
+
         if (!status.isEmpty()) {
-            graphics.drawString(font, status, panelX + 8, panelY + 84, AeStyle.WARN, false);
+            graphics.drawString(font, status, panelX + 8, statusY, AeStyle.WARN, false);
         }
     }
 
@@ -172,6 +196,6 @@ public final class TimeScreen extends RbScreen implements JeiPanelScreen {
 
     @Override
     public int jeiGuiHeight() {
-        return PANEL_H;
+        return panelHeight;
     }
 }

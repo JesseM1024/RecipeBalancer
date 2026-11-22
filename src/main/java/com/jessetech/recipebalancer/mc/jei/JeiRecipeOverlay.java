@@ -181,7 +181,7 @@ public final class JeiRecipeOverlay {
                 if (!inside(mouseX, mouseY, hit.x, hit.y)) {
                     continue;
                 }
-                RecipePattern pattern = JeiPatternImporter.build(hit.category, hit.layout);
+                RecipePattern pattern = JeiPatternImporter.build(hit.category, hit.layout, hit.recipe);
                 minecraft.displayGuiScreen(BalancerScreen.withPattern(pattern));
                 return;
             }
@@ -237,7 +237,8 @@ public final class JeiRecipeOverlay {
             if (at == null) {
                 continue;
             }
-            result.add(new Hit(at[0], at[1], layout, layout.getRecipeCategory(), slots));
+            result.add(new Hit(at[0], at[1], layout, layout.getRecipeCategory(), slots,
+                    JeiRecipeTime.recipeOf(layout)));
         }
         return result;
     }
@@ -371,14 +372,17 @@ public final class JeiRecipeOverlay {
         private final RecipeLayout layout;
         private final IRecipeCategory<?> category;
         private final List<JeiSlots.Slot> slots;
+        /** 原始配方包装对象；4.x 的布局没有 getRecipe，构造时反射 recipeWrapper。 */
+        private final Object recipe;
 
         Hit(int x, int y, RecipeLayout layout, IRecipeCategory<?> category,
-            List<JeiSlots.Slot> slots) {
+            List<JeiSlots.Slot> slots, Object recipe) {
             this.x = x;
             this.y = y;
             this.layout = layout;
             this.category = category;
             this.slots = slots;
+            this.recipe = recipe;
         }
     }
 }

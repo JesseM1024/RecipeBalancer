@@ -53,7 +53,7 @@ public final class ScenarioStore {
                     .filter(name -> !"autosave".equals(name))
                     .forEach(names::add);
         } catch (IOException e) {
-            throw new UncheckedIOException("列举场景失败: " + directory, e);
+            throw new UncheckedIOException("列举场景失败", e);
         }
         names.sort(Comparator.naturalOrder());
         return names;
@@ -69,7 +69,7 @@ public final class ScenarioStore {
             Files.createDirectories(directory);
             Files.write(path, ScenarioJson.dump(scenario).getBytes(StandardCharsets.UTF_8));
         } catch (IOException e) {
-            throw new UncheckedIOException("保存场景失败: " + path, e);
+            throw new UncheckedIOException("保存场景失败", e);
         }
         return path;
     }
@@ -77,7 +77,7 @@ public final class ScenarioStore {
     public Scenario load(String rawName) {
         Path path = pathFor(rawName);
         if (!Files.isRegularFile(path)) {
-            throw new IllegalArgumentException("场景不存在: " + sanitize(rawName));
+            throw new IllegalArgumentException("场景不存在");
         }
         return ScenarioJson.load(path);
     }
@@ -86,7 +86,7 @@ public final class ScenarioStore {
     public Scenario loadDraft(String rawName) {
         Path path = pathFor(rawName);
         if (!Files.isRegularFile(path)) {
-            throw new IllegalArgumentException("场景不存在: " + sanitize(rawName));
+            throw new IllegalArgumentException("场景不存在");
         }
         return ScenarioJson.loadDraft(path);
     }
@@ -95,7 +95,7 @@ public final class ScenarioStore {
         try {
             return Files.deleteIfExists(pathFor(rawName));
         } catch (IOException e) {
-            throw new UncheckedIOException("删除场景失败: " + pathFor(rawName), e);
+            throw new UncheckedIOException("删除场景失败", e);
         }
     }
 
