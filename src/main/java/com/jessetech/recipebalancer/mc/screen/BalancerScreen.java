@@ -987,8 +987,10 @@ public final class BalancerScreen extends RbContainerScreen {
         graphics.drawString(font, Lang.t("耗时"), equipmentX + SLOT + 2, timeY + 5,
                 AeStyle.MUTED, false);
 
-        // 一级耗时也用紧凑后缀（μ/m/k/M/G/T/P/E），并抬高 z 防止被槽位盖住
-        String time = TimeExpression.formatCompact(pattern.timeTicks()) + "t";
+        // 一级耗时也用紧凑后缀（μ/m/k/M/G/T/P/E），并抬高 z 防止被槽位盖住；
+        // 带 * 表示这个数字是从 JEI 原配方预填的参考基准，用户改过之后标记会消失
+        String time = TimeExpression.formatCompact(pattern.timeTicks()) + "t"
+                + (pattern.timeHint() == null ? "" : "*");
         int textWidth = font.width(time);
         PoseStack pose = graphics.pose();
         pose.pushPose();
@@ -1551,7 +1553,12 @@ public final class BalancerScreen extends RbContainerScreen {
         newPattern();
         pattern.copyFrom(built);
         if (commitPattern(true)) {
-            status = Lang.t("已自动写入 %s 的配方", ItemKeyMapper.displayName(key));
+            RecipePattern.TimeHint hint = pattern.timeHint();
+            status = hint == null
+                    ? Lang.t("已自动写入 %s 的配方", ItemKeyMapper.displayName(key))
+                    : Lang.t("已自动写入 %s 的配方（耗时预填 %s）",
+                            ItemKeyMapper.displayName(key),
+                            TimeExpression.formatTicks(hint.ticks()));
             // 写入成功给一次按钮点击音，和点「写入」的反馈一致
             playClickSound();
         }
@@ -1615,8 +1622,13 @@ public final class BalancerScreen extends RbContainerScreen {
     }
 
     private void openTimeEditor() {
-        minecraft.setScreen(new TimeScreen(this, pattern.timeTicks(), ticks -> {
+        minecraft.setScreen(new TimeScreen(this, pattern.timeTicks(), pattern.timeHint(), ticks -> {
+            // 值被改动过就说明用户自己在定时间，参考值标记随之失效；回车接受预填值则保留
+            boolean changed = Math.abs(ticks - pattern.timeTicks()) > 1.0E-9;
             pattern.setTimeTicks(ticks);
+            if (changed) {
+                pattern.clearTimeHint();
+            }
             status = Lang.t("耗时: %s", TimeExpression.formatTicks(ticks));
         }));
     }

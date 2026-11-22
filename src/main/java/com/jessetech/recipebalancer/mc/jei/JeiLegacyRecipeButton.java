@@ -97,7 +97,7 @@ public final class JeiLegacyRecipeButton implements IRecipeCategoryDecorator<Obj
             } else if (hoveredArmed && hoveredWasDown) {
                 // 松开时才触发，和 JEI 原生按钮一致，也避免拖拽误触
                 hoveredArmed = false;
-                openTerminal(category, slots);
+                openTerminal(category, slots, recipe);
             }
             hoveredWasDown = down;
         } catch (Throwable t) {
@@ -288,14 +288,16 @@ public final class JeiLegacyRecipeButton implements IRecipeCategoryDecorator<Obj
      * 直接做重活/切屏容易把渲染栈和 GUI 状态搅乱；同时任何解析异常（含类加载失败）
      * 都在 try/catch 里收口，不能让它冒到渲染线程。
      */
-    private static void openTerminal(IRecipeCategory<?> category, IRecipeSlotsView slots) {
+    private static void openTerminal(IRecipeCategory<?> category, IRecipeSlotsView slots,
+                                     Object recipe) {
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft == null) {
             return;
         }
+        // recipe 用于预填源配方耗时（15.21 这类没有按钮工厂的版本走装饰器，靠这里的回调参数）
         minecraft.execute(() -> {
             try {
-                RecipePattern pattern = JeiPatternImporter.build(category, slots);
+                RecipePattern pattern = JeiPatternImporter.build(category, recipe, slots);
                 RecipeBalancerMod.LOGGER.info("[RecipeBalancer] JEI 配方页按钮：{} → 打开配方编码终端",
                         category.getRecipeType().getUid());
                 minecraft.setScreen(new BalancerScreen(pattern));

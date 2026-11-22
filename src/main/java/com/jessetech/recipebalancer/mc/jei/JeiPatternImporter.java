@@ -1,5 +1,6 @@
 package com.jessetech.recipebalancer.mc.jei;
 
+import com.jessetech.recipebalancer.RecipeBalancerMod;
 import com.jessetech.recipebalancer.core.model.RecipePattern;
 import com.jessetech.recipebalancer.mc.itemmap.ItemKeyMapper;
 import com.jessetech.recipebalancer.mc.itemmap.ProductIndex;
@@ -35,11 +36,22 @@ public final class JeiPatternImporter {
     }
 
     public static RecipePattern build(IRecipeLayoutDrawable<?> layout) {
-        return build(layout.getRecipeCategory(), layout.getRecipeSlotsView());
+        return build(layout.getRecipeCategory(), layout.getRecipe(), layout.getRecipeSlotsView());
     }
 
-    /** 装饰器路径：只有类别与槽位视图（老版本 JEI 的配方页按钮走这里）。 */
+    /** 无 recipe 的旧路径：耗时保持默认（不预填）。 */
     public static RecipePattern build(IRecipeCategory<?> category, IRecipeSlotsView slots) {
+        return build(category, null, slots);
+    }
+
+    /**
+     * 完整入口：类别 + 原始配方 + 槽位视图。
+     *
+     * <p>{@code recipe} 只用于推断源配方耗时（预填到耗时格，可随后手改）；
+     * 为 null、推断失败或读取抛异常时，耗时保持 {@link RecipePattern} 的默认 1t。
+     */
+    public static RecipePattern build(IRecipeCategory<?> category, Object recipe,
+                                      IRecipeSlotsView slots) {
         RecipePattern pattern = new RecipePattern();
         applyInputs(category, slots, pattern);
         int outputIndex = 0;
@@ -51,7 +63,37 @@ public final class JeiPatternImporter {
             }
         }
         applyEquipment(category, slots, pattern);
+        applyTime(category, recipe, pattern);
         return pattern;
+    }
+
+    /**
+     * 预填源配方的耗时。
+     *
+     * <p>只作为参考值：写入后仍是普通耗时，用户打开耗时编辑屏即可改写；
+     * 推断失败时什么都不做，保持 1t。
+     */
+    private static void applyTime(IRecipeCategory<?> category, Object recipe, RecipePattern pattern) {
+        try {
+            // 通用传递：类别 uid 只在这里取一次，往下作为纯数据传给推断器与结果
+            String categoryUid = JeiRecipeTime.categoryUid(category);
+            Optional<JeiRecipeTime.Result> inferred = JeiRecipeTime.infer(recipe, categoryUid);
+            if (inferred.isEmpty()) {
+                RecipeBalancerMod.LOGGER.info("[RecipeBalancer] 耗时未推断：recipe={}，类别={}",
+                        recipe == null ? "null" : recipe.getClass().getName(), categoryUid);
+                return;
+            }
+            int ticks = inferred.get().ticks();
+            pattern.setTimeTicks(ticks);
+            pattern.setTimeHint(ticks, categoryUid);
+            RecipeBalancerMod.LOGGER.info("[RecipeBalancer] 耗时预填：{} -> {}t（{}，类别 {}）",
+                    recipe == null ? "null" : recipe.getClass().getSimpleName(),
+                    ticks, inferred.get().origin(), categoryUid);
+        } catch (RuntimeException | LinkageError e) {
+            // 预填只是锦上添花：任何异常都不能影响配方导入，但要留下排查线索
+            RecipeBalancerMod.LOGGER.warn("[RecipeBalancer] 耗时预填异常：recipe={}",
+                    recipe == null ? "null" : recipe.getClass().getName(), e);
+        }
     }
 
     /**
