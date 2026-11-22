@@ -124,10 +124,11 @@ public final class RbRecipeButtonController implements IIconButtonController {
         try {
             // 10.x 直接读槽位视图（带矩形，能保留合成配方的九宫格形状）；
             // 槽位视图拿不到内容时再走旧的布局分组路径兜底。
+            Object recipe = JeiRecipeTime.recipeOf(layout);
             pattern = JeiPatternImporter.buildFromSlots(layout.getRecipeCategory(),
-                    JeiSlots.fromView(layout.getRecipeSlotsView()));
+                    JeiSlots.fromView(layout.getRecipeSlotsView()), recipe);
             if (!pattern.hasContent()) {
-                pattern = JeiPatternImporter.build(layout.getRecipeCategory(), layout);
+                pattern = JeiPatternImporter.build(layout.getRecipeCategory(), layout, recipe);
             }
         } catch (RuntimeException | LinkageError e) {
             return false;
