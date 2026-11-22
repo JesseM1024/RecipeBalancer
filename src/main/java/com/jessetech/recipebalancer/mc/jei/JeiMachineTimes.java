@@ -208,7 +208,9 @@ public final class JeiMachineTimes {
                 if (!method.getName().equals(name) || method.getParameterCount() != 0) {
                     continue;
                 }
-                if (Modifier.isStatic(method.getModifiers()) || !isNumeric(method.getReturnType())) {
+                // 不按返回类型过滤：getRecipeType() 返回对象，call() 也要用；
+                // 数值判断统一交给 invoke() 里的 Number instanceof
+                if (Modifier.isStatic(method.getModifiers())) {
                     continue;
                 }
                 if (!method.trySetAccessible()) {

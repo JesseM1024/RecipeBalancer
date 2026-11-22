@@ -143,7 +143,9 @@ public final class JeiRecipeTime {
             return null;
         }
         try {
-            Optional<Method> method = findMethod(target.getClass(), name);
+            // 注意：不能复用 findMethod——那是判耗时用的，只接受数值返回；
+            // getRecipe() 返回泛型对象，会被数值过滤直接跳过（1.18.2 全部 1t 的根因）
+            Optional<Method> method = findAnyMethod(target.getClass(), name);
             return method.isPresent() ? method.get().invoke(target) : null;
         } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
             return null;
@@ -245,6 +247,26 @@ public final class JeiRecipeTime {
         } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
             return -1;
         }
+    }
+
+    /** 任意返回类型的方法（取配方对象用），不参与耗时数值判断。 */
+    private static Optional<Method> findAnyMethod(Class<?> type, String name) {
+        for (Class<?> current = type; current != null && current != Object.class;
+             current = current.getSuperclass()) {
+            for (Method method : current.getDeclaredMethods()) {
+                if (!method.getName().equals(name) || method.getParameterCount() != 0) {
+                    continue;
+                }
+                if (Modifier.isStatic(method.getModifiers())) {
+                    continue;
+                }
+                if (!method.trySetAccessible()) {
+                    return Optional.empty();
+                }
+                return Optional.of(method);
+            }
+        }
+        return Optional.empty();
     }
 
     private static Optional<Method> findMethod(Class<?> type, String name) {
