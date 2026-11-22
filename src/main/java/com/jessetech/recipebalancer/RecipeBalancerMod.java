@@ -69,6 +69,8 @@ public final class RecipeBalancerMod {
         RbKeyMappings.register();
         MinecraftForge.EVENT_BUS.register(new RbKeyMappings.Handler());
         MinecraftForge.EVENT_BUS.register(new JeiVersionNotice());
+        // tooltip 延迟到 JEI 物品面板之后：否则配方库的悬停提示会被右侧面板盖住
+        com.jessetech.recipebalancer.mc.jei.JeiTooltipOverlay.register();
 
         LOGGER.info("[RecipeBalancer] 初始化：快捷键 K 打开主界面");
         checkRuntimeDependencies();

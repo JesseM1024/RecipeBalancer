@@ -93,6 +93,10 @@ public final class BalancerScreen extends RbContainerScreen implements JeiPanelS
     private final boolean[] libFilterFields = {true, true, true};
     private final List<Integer> libraryView = new ArrayList<>();
     private String libraryQuery = "";
+    /** 延迟到 DrawScreenEvent.Post 绘制的 tooltip 参数（在 JEI 物品面板之后）。 */
+    private int deferredMouseX;
+    private int deferredMouseY;
+    private boolean deferredTooltips;
     private static final long DELETE_WINDOW_MS = 500L;
 
     private static final ScenarioStore STORE = WorkspaceSession.store();
@@ -960,13 +964,26 @@ public final class BalancerScreen extends RbContainerScreen implements JeiPanelS
         // 顺序：背景+内容（super.render 内部先调 drawGuiContainerBackgroundLayer）→ 控件
         // → 拖拽高亮 → 手持物品 → tooltip，与原来自绘顺序一致。
         updateOptionStates();
+        // tooltip 不在 super 之前画：1.12.2 的 JEI 在 DrawScreenEvent.Post 里画右侧物品面板，
+        // 这里只记录参数，由 JeiTooltipOverlay（LOWEST 优先级）在同一事件里后画
+        deferredMouseX = mouseX;
+        deferredMouseY = mouseY;
+        deferredTooltips = true;
         super.drawScreen(mouseX, mouseY, partialTicks);
         drawGhostHighlights(graphics, mouseX, mouseY);
 
         if (!carriedKey.isEmpty()) {
             ItemKeyMapper.renderIcon(graphics, font, carriedKey, mouseX - 8, mouseY - 8, null);
         }
-        drawTooltips(graphics, mouseX, mouseY);
+    }
+
+    /** 由 {@code JeiTooltipOverlay} 在 JEI 面板之后调用，保证 tooltip 在最上层。 */
+    public void drawDeferredTooltips() {
+        if (!deferredTooltips) {
+            return;
+        }
+        deferredTooltips = false;
+        drawTooltips(new Draw(this), deferredMouseX, deferredMouseY);
     }
 
     /**
