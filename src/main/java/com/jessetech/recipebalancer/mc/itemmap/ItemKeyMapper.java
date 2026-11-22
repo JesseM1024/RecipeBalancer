@@ -605,7 +605,7 @@ public final class ItemKeyMapper {
             lines.add(Chat.literal(ingredientDisplayName(id)));
             lines.add(Chat.styled(IngredientKey.describe(id),
                     new Style().setColor(TextFormatting.GRAY)));
-            lines.add(Chat.styled(Lang.t("非物品 ingredient；数量单位 B（500 mB = 0.5）"),
+            lines.add(Chat.styled(Lang.t("非物品 ingredient；数量单位 B（500 mB 记作 0.5）"),
                     new Style().setColor(TextFormatting.DARK_GRAY)));
         } else {
             lines.add(Chat.styled(shortLabel(id), new Style().setColor(TextFormatting.GOLD)));

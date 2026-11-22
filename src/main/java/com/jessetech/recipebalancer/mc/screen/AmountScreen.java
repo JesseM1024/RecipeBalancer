@@ -154,7 +154,7 @@ public final class AmountScreen extends RbScreen implements JeiPanelScreen {
     }
 
     private String rateLabel() {
-        return (nonItem ? "B" : "") + rateUnit.label();
+        return (nonItem ? "B" : "") + Lang.t(rateUnit.label());
     }
 
     private void adjust(double delta) {
@@ -193,7 +193,7 @@ public final class AmountScreen extends RbScreen implements JeiPanelScreen {
             try {
                 value = TimeExpression.evaluate(amountBox.getText().trim());
             } catch (RuntimeException e) {
-                status = Lang.t("表达式无效: %s", Lang.t(String.valueOf(e.getMessage())));
+                status = Lang.t("表达式无效: %s", Lang.err(String.valueOf(e.getMessage())));
                 return;
             }
             if (!(value > 0) || !Double.isFinite(value)) {

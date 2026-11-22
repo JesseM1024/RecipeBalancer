@@ -157,7 +157,7 @@ public final class ScenarioListScreen extends RbScreen implements JeiPanelScreen
             openInFileManager(directory.toFile());
             status = Lang.t("已打开配方集文件夹");
         } catch (Exception e) {
-            status = Lang.t("打开文件夹失败: %s", e.getMessage());
+            status = Lang.t("打开文件夹失败: %s", Lang.err(e.getMessage()));
         }
     }
 

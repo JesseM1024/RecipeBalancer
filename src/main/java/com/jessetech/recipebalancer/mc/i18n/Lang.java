@@ -32,10 +32,53 @@ public final class Lang {
         if (isChinese()) {
             return format(key, args);
         }
-        if (I18n.hasKey(key)) {
-            return I18n.format(key, args);
+        String text = I18n.hasKey(key) ? I18n.format(key, args) : format(key, args);
+        return localizeUnits(text);
+    }
+
+    /**
+     * 翻译「由 core 抛出的消息」。
+     *
+     * <p>core 是零 MC 依赖的纯 Java 层，消息里带动态片段（例如 {@code 配方 [0] 缺少键: time}），
+     * 没法整串命中语言文件。这里按两层处理：整串命中就整串翻；否则只翻冒号前的标签，
+     * 冒号后的动态内容原样保留。
+     */
+    public static String err(String message) {
+        if (message == null || isChinese()) {
+            return message;
         }
-        return format(key, args);
+        if (I18n.hasKey(message)) {
+            return I18n.format(message);
+        }
+        int colon = message.indexOf(':');
+        if (colon > 0) {
+            String label = message.substring(0, colon);
+            if (I18n.hasKey(label)) {
+                return I18n.format(label) + message.substring(colon);
+            }
+        }
+        // 形如 "options.foo 必须为数组"：只翻最后一个空格后的固定短语
+        int space = message.lastIndexOf(' ');
+        if (space > 0 && space < message.length() - 1) {
+            String tail = message.substring(space + 1);
+            if (I18n.hasKey(tail)) {
+                return message.substring(0, space + 1) + I18n.format(tail);
+            }
+        }
+        return localizeUnits(message);
+    }
+
+    /**
+     * 时间单位后缀本地化：core 的 {@code TimeUnit} 只懂「秒/分/时」，
+     * 英文界面下换成 s / min / h（只匹配「数字 + 空格 + 单位」，不碰正文里的其它中文）。
+     */
+    public static String localizeUnits(String text) {
+        if (text == null || isChinese()) {
+            return text;
+        }
+        return text.replaceAll("([0-9]) ?秒", "$1 s")
+                .replaceAll("([0-9]) ?分", "$1 min")
+                .replaceAll("([0-9]) ?时", "$1 h");
     }
 
     /** 文本报告的静态段落/字段翻译；物品名保持原样。 */
@@ -67,7 +110,7 @@ public final class Lang {
         if (body.isEmpty()) {
             return line;
         }
-        String translated = translateBody(body);
+        String translated = localizeUnits(translateBody(body));
         return indent == 0 ? translated : J8.repeat(" ", indent) + translated;
     }
 

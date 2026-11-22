@@ -52,7 +52,7 @@ public final class TimeScreen extends RbScreen implements JeiPanelScreen {
         expressionBox.setText(TimeExpression.formatEditableNumber(unit.fromTicks(ticks)));
         addButton(expressionBox);
 
-        unitButton = addButton(Buttons.builder(Chat.literal(unit.label()), b -> cycleUnit())
+        unitButton = addButton(Buttons.builder(Chat.literal(Lang.t(unit.label())), b -> cycleUnit())
                 .bounds(panelX + 164, panelY + 27, 64, 20).build());
 
         // 取消左、确定右
@@ -77,7 +77,7 @@ public final class TimeScreen extends RbScreen implements JeiPanelScreen {
             ticks = preserved;
             expressionBox.setText(TimeExpression.formatEditableNumber(unit.fromTicks(ticks)));
         }
-        unitButton.setMessage(Chat.literal(unit.label()));
+        unitButton.setMessage(Chat.literal(Lang.t(unit.label())));
     }
 
     private void confirm() {

@@ -59,9 +59,16 @@ public final class SolveScreen extends RbScreen implements JeiPanelScreen {
     /** 显示名口径的报告，切到显示名时惰性生成后缓存。 */
     private String displayReport;
 
-    /** 报告里的注册名 token：{@code namespace:path}；只可能是整合包里真实存在的物品/机器。 */
+    /**
+     * 报告里的注册名 token：{@code namespace:path}，**必须带上 metadata**。
+     *
+     * <p>1.12.2 的物品变体靠 metadata 区分（{@code thermalexpansion:augment#273}）。
+     * 旧正则只吃到 {@code namespace:path} 就停了，于是把 meta 273 的升级件换成 meta 0 的名字
+     * （热力学的「无效物品，请即刻销毁之」），后面再原样拼上 {@code #273} —— 文本输出里那句怪名字
+     * 就是这么来的；图流程走的是完整 key，所以显示正常。
+     */
     private static final Pattern REGISTRY_ID =
-            Pattern.compile("[a-z0-9_.\\-]+:[a-z0-9_./\\-]+");
+            Pattern.compile("[a-z0-9_.\\-]+:[a-z0-9_./\\-]+(?:#[0-9]+|:[0-9]+)?");
 
     // ---- 文本页段落标题配色（只作用于本页渲染，报告文本本身不变） ----
     /** 深绿：外部原料 / 循环亏损 / 亏损环 / 原料输入。 */
@@ -170,8 +177,8 @@ public final class SolveScreen extends RbScreen implements JeiPanelScreen {
         Matcher matcher = REGISTRY_ID.matcher(text);
         StringBuffer output = new StringBuffer(text.length() + 64);
         while (matcher.find()) {
-            String id = matcher.group();
-            String name = ItemKeyMapper.exists(id) ? ItemKeyMapper.reportName(id) : id;
+            String key = matcher.group();
+            String name = ItemKeyMapper.exists(key) ? ItemKeyMapper.reportName(key) : key;
             matcher.appendReplacement(output, Matcher.quoteReplacement(name));
         }
         matcher.appendTail(output);

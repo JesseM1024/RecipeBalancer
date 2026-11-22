@@ -429,7 +429,7 @@ public final class BalancerScreen extends RbContainerScreen implements JeiPanelS
             STORE.save("autosave", ScenarioKeyNormalizer.normalize(draft.toScenario()));
             return true;
         } catch (RuntimeException e) {
-            status = Lang.t("自动保存失败: %s", e.getMessage());
+            status = Lang.t("自动保存失败: %s", Lang.err(e.getMessage()));
             return false;
         }
     }
@@ -1544,7 +1544,7 @@ public final class BalancerScreen extends RbContainerScreen implements JeiPanelS
             return true;
         } catch (RuntimeException e) {
             if (showStatus) {
-                status = Lang.t("写入失败: %s", Lang.t(String.valueOf(e.getMessage())));
+                status = Lang.t("写入失败: %s", Lang.err(String.valueOf(e.getMessage())));
             }
             // 界面只显示一行文字，完整堆栈留给日志（化学品/自定义物质写入失败时排查看）
             com.jessetech.recipebalancer.RecipeBalancerMod.LOGGER.warn(
@@ -1599,7 +1599,7 @@ public final class BalancerScreen extends RbContainerScreen implements JeiPanelS
                     draft.options().autoBootstrap(), result.success()));
         } catch (RuntimeException | LinkageError e) {
             RecipeBalancerMod.LOGGER.error("[RecipeBalancer] 求解失败", e);
-            status = Lang.t("求解失败: %s", e);
+            status = Lang.t("求解失败: %s", Lang.err(String.valueOf(e)));
         }
     }
 
@@ -1634,7 +1634,7 @@ public final class BalancerScreen extends RbContainerScreen implements JeiPanelS
             persistDraft();
             status = Lang.t("已保存工作区: %s", scenarioName);
         } catch (RuntimeException e) {
-            status = Lang.t("保存失败: %s", e.getMessage());
+            status = Lang.t("保存失败: %s", Lang.err(e.getMessage()));
         }
     }
 
