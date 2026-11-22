@@ -26,6 +26,6 @@ public enum Objective {
                 return objective;
             }
         }
-        throw new IllegalArgumentException("未知 objective: " + value);
+        throw new IllegalArgumentException("未知 objective");
     }
 }

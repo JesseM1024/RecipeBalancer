@@ -65,7 +65,7 @@ public final class TimeScreen extends Screen implements JeiPanelScreen {
         expressionBox.setValue(TimeExpression.formatEditableNumber(unit.fromTicks(ticks)));
         addRenderableWidget(expressionBox);
 
-        unitButton = addRenderableWidget(Button.builder(Component.literal(unit.label()), b -> cycleUnit())
+        unitButton = addRenderableWidget(Button.builder(Component.literal(Lang.t(unit.zhLabel())), b -> cycleUnit())
                 .bounds(panelX + 164, panelY + 27, 64, 20).build());
 
         // 取消左、确定右
@@ -91,7 +91,7 @@ public final class TimeScreen extends Screen implements JeiPanelScreen {
             ticks = preserved;
             expressionBox.setValue(TimeExpression.formatEditableNumber(unit.fromTicks(ticks)));
         }
-        unitButton.setMessage(Component.literal(unit.label()));
+        unitButton.setMessage(Component.literal(Lang.t(unit.zhLabel())));
     }
 
     private void confirm() {

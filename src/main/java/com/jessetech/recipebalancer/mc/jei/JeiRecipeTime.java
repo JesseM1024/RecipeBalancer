@@ -19,12 +19,14 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * 从 JEI 的原始配方对象里推断「配方原始耗时」（tick），仅供编码区预填参考。
  *
- * <p>三级策略，任一命中即返回：
+ * <p>四级策略，任一命中即返回：
  * <ol>
  *   <li><b>原版烹饪</b>：{@link AbstractCookingRecipe#getCookingTime()}（熔炉 200 / 高炉 100 / 烟熏 100）；</li>
  *   <li><b>已知模组公开方法</b>：按「包名前缀 → 方法名」表反射调用，不链接源模组类，
  *       因此不需要编译期依赖，模组缺失时也不会走到这里；</li>
- *   <li><b>通用探测</b>（需要配置开启）：先按语义明确的方法名，再按字段名反射读取。</li>
+ *   <li><b>通用探测</b>（需要配置开启）：先按语义明确的方法名，再按字段名反射读取；</li>
+ *   <li><b>机器基础耗时</b>（需要配置开启）：{@link JeiMachineTimes} 现场找该类别的催化剂机器，
+ *       实例化后读它自己的耗时方法——不维护任何静态类别数值表。</li>
  * </ol>
  *
  * <p>本类只读：不修改配方、不缓存配方实例，只缓存「类 → 方法/字段」的解析结果。
@@ -43,8 +45,8 @@ public final class JeiRecipeTime {
         MOD_API,
         /** 通用探测命中的字段。 */
         MOD_FIELD,
-        /** 配方对象上没有时间，按机器的类别基础耗时兜底（Mekanism 这类）。 */
-        CATEGORY_DEFAULT
+        /** 配方对象上没有时间，运行时读机器实体的基础耗时（Mekanism / AE2 这类）。 */
+        MACHINE_BASE
     }
 
     /** @param ticks 推断出的耗时（tick），保证 {@code 0 < ticks <= MAX_TICKS} */
@@ -97,11 +99,15 @@ public final class JeiRecipeTime {
                     return Optional.of(new Result(field, Origin.MOD_FIELD));
                 }
             }
-            // 最后兜底：配方上真的没有时间（Mekanism 的时间在机器上），按类别基础值给一个估算
-            int fallback = TimeInferenceRules.categoryDefault(categoryUid(category));
-            return fallback > 0
-                    ? Optional.of(new Result(fallback, Origin.CATEGORY_DEFAULT))
-                    : Optional.empty();
+            // 最后一步：配方上确实没有时间（Mekanism / AE2 这类），
+            // 运行时找到该类别的机器实体并读它自己的基础耗时；仍然读不到就放弃
+            if (GraphLayoutConfig.prefillMachineBaseTime()) {
+                int machine = JeiMachineTimes.ticksFor(category, categoryUid(category));
+                if (machine > 0) {
+                    return Optional.of(new Result(machine, Origin.MACHINE_BASE));
+                }
+            }
+            return Optional.empty();
         } catch (RuntimeException | LinkageError e) {
             RecipeBalancerMod.LOGGER.debug("[RecipeBalancer] 耗时推断失败：{}",
                     subject.getClass().getName(), e);

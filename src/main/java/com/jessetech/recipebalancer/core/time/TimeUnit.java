@@ -1,22 +1,41 @@
 package com.jessetech.recipebalancer.core.time;
 
-/** 配方耗时单位：内部统一用 tick（1 秒 = 20 t）。 */
+/**
+ * 配方耗时单位：内部统一用 tick（1 秒 = 20 t）。
+ *
+ * <p>{@link #label()} 返回语言无关的符号（t/s/m/h），用于拼装"200 t"这类展示文本；
+ * 界面按钮上的可读名称用 {@link #zhLabel()} 作为语言键，交给 {@code Lang} 翻译，
+ * 这样英文环境下不会漏出中文"秒/分/时"。
+ */
 public enum TimeUnit {
-    TICK("t", 1.0),
-    SECOND("秒", 20.0),
-    MINUTE("分", 1200.0),
-    HOUR("时", 72000.0);
+    TICK("t", "t", 1.0),
+    SECOND("s", "秒", 20.0),
+    MINUTE("m", "分", 1200.0),
+    HOUR("h", "时", 72000.0);
 
-    private final String label;
+    private final String symbol;
+    /** 中文源文本，同时充当语言文件的键。 */
+    private final String zhLabel;
     private final double ticksPerUnit;
 
-    TimeUnit(String label, double ticksPerUnit) {
-        this.label = label;
+    TimeUnit(String symbol, String zhLabel, double ticksPerUnit) {
+        this.symbol = symbol;
+        this.zhLabel = zhLabel;
         this.ticksPerUnit = ticksPerUnit;
     }
 
+    /** 语言无关符号，用于格式化后的数字后缀。 */
     public String label() {
-        return label;
+        return symbol;
+    }
+
+    public String symbol() {
+        return symbol;
+    }
+
+    /** 界面按钮用的中文源文本（语言键）。 */
+    public String zhLabel() {
+        return zhLabel;
     }
 
     public double ticksPerUnit() {

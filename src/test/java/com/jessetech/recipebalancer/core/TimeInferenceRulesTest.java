@@ -54,16 +54,6 @@ class TimeInferenceRulesTest {
     }
 
     @Test
-    void categoryDefaultsOnlyCoverKnownMachines() {
-        // Mekanism 1.21.1 的配方对象没有耗时，时间在 TileEntityElectricMachine.BASE_TICKS_REQUIRED
-        assertEquals(200, TimeInferenceRules.categoryDefault("mekanism:crushing"));
-        assertEquals(200, TimeInferenceRules.categoryDefault("mekanism:enriching"));
-        assertEquals(-1, TimeInferenceRules.categoryDefault("mekanism:unknown"));
-        assertEquals(-1, TimeInferenceRules.categoryDefault(""));
-        assertEquals(-1, TimeInferenceRules.categoryDefault(null));
-    }
-
-    @Test
     void acceptsPrimitiveAndBoxedNumbersOnly() {
         assertTrue(TimeInferenceRules.isNumeric(int.class));
         assertTrue(TimeInferenceRules.isNumeric(long.class));

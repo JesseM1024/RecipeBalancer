@@ -1,7 +1,6 @@
 package com.jessetech.recipebalancer.core.time;
 
 import java.util.List;
-import java.util.Map;
 
 /**
  * 配方耗时推断的纯规则表（不依赖 Minecraft / JEI，可直接在 JVM 单测里验证）。
@@ -50,32 +49,7 @@ public final class TimeInferenceRules {
             new ModRule("blusunrize.immersiveengineering",
                     List.of("getTotalProcessTime", "getTime")));
 
-    /**
-     * 配方对象上完全没有耗时、只能按机器基础值兜底的类别（uid → tick）。
-     *
-     * <p>目前只有 Mekanism：1.21.1 的 {@code MekanismRecipe} 不再有 {@code getTicksRequired()}，
-     * 时间定义在机器实体 {@code TileEntityElectricMachine.BASE_TICKS_REQUIRED = 200} 上
-     * （见 Mekanism 10.7.19 的 bytecode）。这里只收录确认继承该基类的机器；
-     * 速度升级会改变实际时间，因此这个值只作参考基准。
-     */
-    private static final Map<String, Integer> CATEGORY_DEFAULTS = Map.of(
-            "mekanism:crushing", 200,
-            "mekanism:enriching", 200,
-            "mekanism:smelting", 200,
-            "mekanism:compressing", 200,
-            "mekanism:purifying", 200,
-            "mekanism:injecting", 200);
-
     private TimeInferenceRules() {
-    }
-
-    /** 该类别的机器基础耗时；没有收录时返回 -1。 */
-    public static int categoryDefault(String categoryUid) {
-        if (categoryUid == null || categoryUid.isBlank()) {
-            return -1;
-        }
-        Integer ticks = CATEGORY_DEFAULTS.get(categoryUid);
-        return ticks == null ? -1 : sanitizeTicks(ticks);
     }
 
     public static List<String> genericMethods() {

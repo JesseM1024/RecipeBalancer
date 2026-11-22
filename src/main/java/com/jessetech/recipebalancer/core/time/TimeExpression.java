@@ -27,7 +27,7 @@ public final class TimeExpression {
         double value = parser.parseExpression();
         parser.skipWhitespace();
         if (!parser.atEnd()) {
-            throw new IllegalArgumentException("表达式存在多余字符: " + parser.rest());
+            throw new IllegalArgumentException("表达式存在多余字符");
         }
         if (!Double.isFinite(value)) {
             throw new IllegalArgumentException("表达式结果不是有限数");
@@ -250,7 +250,7 @@ public final class TimeExpression {
             try {
                 return Double.parseDouble(text);
             } catch (NumberFormatException e) {
-                throw new IllegalArgumentException("非法数字: " + text);
+                throw new IllegalArgumentException("非法数字");
             }
         }
     }

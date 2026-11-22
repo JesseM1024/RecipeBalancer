@@ -52,10 +52,11 @@ class TimeExpressionTest {
     @Test
     void formatsBestUnit() {
         assertEquals("10 t", TimeExpression.formatTicks(10));
-        assertEquals("1 秒", TimeExpression.formatTicks(20));
-        assertEquals("1 分", TimeExpression.formatTicks(1200));
-        assertEquals("1 时", TimeExpression.formatTicks(72000));
-        assertEquals("1.5 秒", TimeExpression.formatTicks(30));
+        // 单位用语言无关符号，避免英文环境漏出中文"秒/分/时"
+        assertEquals("1 s", TimeExpression.formatTicks(20));
+        assertEquals("1 m", TimeExpression.formatTicks(1200));
+        assertEquals("1 h", TimeExpression.formatTicks(72000));
+        assertEquals("1.5 s", TimeExpression.formatTicks(30));
         // 一级展示 3 位；编辑值保留 double 的完整十进制
         assertEquals("0.001 t", TimeExpression.formatTicks(0.001));
         assertEquals("0.001", TimeExpression.formatNumber(0.001));
