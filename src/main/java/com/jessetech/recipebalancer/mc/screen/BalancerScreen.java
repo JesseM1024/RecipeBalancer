@@ -675,7 +675,9 @@ public final class BalancerScreen extends RbContainerScreen implements JeiPanelS
                     if (equipment.isEmpty()) {
                         ItemKeyMapper.renderIcon(graphics, font, recipe.equType(), 0, 0, null);
                     } else {
-                        graphics.renderItem(equipment, 1, 1);
+                        // 1.16.5 的 renderItem 是绝对 GUI 坐标，会忽略这里的 translate/scale，
+                        // 设备图标因此被画到左上角不可见；必须用跟随位姿的 renderItemPosed
+                        graphics.renderItemPosed(equipment, 0, 0);
                     }
                     pose.pop();
                 }
