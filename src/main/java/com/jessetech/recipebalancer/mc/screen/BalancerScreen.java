@@ -667,10 +667,12 @@ public final class BalancerScreen extends RbContainerScreen implements JeiPanelS
                 }
                 if (!J8.isBlank(recipe.equType())) {
                     ItemStack equipment = ItemKeyMapper.stack(recipe.equType());
-                    // 设备标记统一按 translate(x+10,y+10) + scale(0.5) 的变换画在右下角
+                    // 设备标记统一按 translate(x+10,y+10) + scale(0.5) 的变换画在右下角。
+                    // z 抬到 200：产物图标走 renderItemAndEffectIntoGUI（内部 z=100），
+                    // 同一深度层会被先画的产物挡住；抬高层级只影响深度，不改 2D 位置
                     MatrixStack pose = graphics.pose();
                     pose.push();
-                    pose.translate(x + 10, y + 10, 0);
+                    pose.translate(x + 10, y + 10, 200);
                     pose.scale(0.5f, 0.5f, 1.0f);
                     if (equipment.isEmpty()) {
                         ItemKeyMapper.renderIcon(graphics, font, recipe.equType(), 0, 0, null);
