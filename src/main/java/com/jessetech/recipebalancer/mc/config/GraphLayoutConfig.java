@@ -26,6 +26,8 @@ public final class GraphLayoutConfig {
     public static final ForgeConfigSpec.BooleanValue PREFILL_RECIPE_TIME;
     /** 是否允许按方法名/字段名反射猜测没有专门适配的模组耗时（默认开启）。 */
     public static final ForgeConfigSpec.BooleanValue PREFILL_RECIPE_TIME_REFLECTION;
+    /** 配方对象上没有时间时，是否运行时实例化机器实体读取基础耗时（默认开启）。 */
+    public static final ForgeConfigSpec.BooleanValue PREFILL_MACHINE_BASE_TIME;
 
     static {
         ForgeConfigSpec.Builder builder = new ForgeConfigSpec.Builder();
@@ -81,6 +83,12 @@ public final class GraphLayoutConfig {
                         "只影响没有专门适配的模组；原版烹饪与已知模组始终可读。",
                         "Only affects mods without a dedicated rule; vanilla cooking and known mods keep working.")
                 .define("prefillRecipeTimeReflection", true);
+        PREFILL_MACHINE_BASE_TIME = builder
+                .comment("配方对象上没有耗时字段时（Mekanism / AE2 这类），运行时实例化该类别的机器实体并读它的基础耗时。",
+                        "When the recipe object carries no duration (Mekanism / AE2), instantiate the category's machine and read its base time at runtime.",
+                        "不维护任何静态数值表；失败时保持 1t。",
+                        "No static lookup table is kept; falls back to 1t on failure.")
+                .define("prefillMachineBaseTime", true);
         builder.pop();
 
         SPEC = builder.build();
@@ -125,6 +133,15 @@ public final class GraphLayoutConfig {
     public static boolean prefillRecipeTimeReflection() {
         try {
             return PREFILL_RECIPE_TIME_REFLECTION.get();
+        } catch (RuntimeException | LinkageError e) {
+            return true;
+        }
+    }
+
+    /** 机器基准耗时开关；配置尚未加载时按默认值（开）处理。 */
+    public static boolean prefillMachineBaseTime() {
+        try {
+            return PREFILL_MACHINE_BASE_TIME.get();
         } catch (RuntimeException | LinkageError e) {
             return true;
         }

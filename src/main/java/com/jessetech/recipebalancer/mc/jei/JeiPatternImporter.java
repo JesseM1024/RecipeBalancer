@@ -75,9 +75,9 @@ public final class JeiPatternImporter {
      */
     private static void applyTime(IRecipeCategory<?> category, Object recipe, RecipePattern pattern) {
         try {
-            // 通用传递：类别 uid 只在这里取一次，往下作为纯数据传给推断器与结果
+            // 类别 uid 只在这里取一次，用于结果标注与日志
             String categoryUid = JeiRecipeTime.categoryUid(category);
-            Optional<JeiRecipeTime.Result> inferred = JeiRecipeTime.infer(recipe, categoryUid);
+            Optional<JeiRecipeTime.Result> inferred = JeiRecipeTime.infer(recipe, category);
             if (inferred.isEmpty()) {
                 RecipeBalancerMod.LOGGER.info("[RecipeBalancer] 耗时未推断：recipe={}，类别={}",
                         recipe == null ? "null" : recipe.getClass().getName(), categoryUid);

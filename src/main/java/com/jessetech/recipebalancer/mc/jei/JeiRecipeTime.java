@@ -41,7 +41,9 @@ public final class JeiRecipeTime {
         /** 已知模组 / 通用探测命中的公开方法。 */
         MOD_API,
         /** 通用探测命中的字段。 */
-        MOD_FIELD
+        MOD_FIELD,
+        /** 配方对象上没有时间，运行时读机器实体的基础耗时（Mekanism / AE2 这类）。 */
+        MACHINE_BASE
     }
 
     /** @param ticks 推断出的耗时（tick），保证 {@code 0 < ticks <= MAX_TICKS} */
@@ -61,14 +63,14 @@ public final class JeiRecipeTime {
     /**
      * 推断耗时。永远不会抛异常，读不到返回 {@link Optional#empty()}。
      *
-     * <p>只接收「配方对象 + 类别 uid」两样数据：uid 由调用方从 JEI 类别取好后传进来，
-     * 本类不持有任何模组/类别的白名单。uid 目前只用于日志与结果标注，
-     * 不参与"按类别给值"的猜测。
+     * <p>前三步只读配方对象本身；最后一步（{@link Origin#MACHINE_BASE}）按类别 uid 找
+     * 该类别的催化剂机器，实例化后读机器自己的耗时方法——不维护任何静态数值表。
      *
-     * @param recipe      JEI 当前展示的原始配方对象，可为 null
-     * @param categoryUid 配方类别 uid（`namespace:path`），可为 null
+     * @param recipe   JEI 当前展示的原始配方对象，可为 null
+     * @param category 配方类别，可为 null；用于取 uid 与查询催化剂机器
      */
-    public static Optional<Result> infer(@Nullable Object recipe, @Nullable String categoryUid) {
+    public static Optional<Result> infer(@Nullable Object recipe, @Nullable IRecipeCategory<?> category) {
+        String categoryUid = categoryUid(category);
         if (recipe == null || !GraphLayoutConfig.prefillRecipeTime()) {
             return Optional.empty();
         }
@@ -96,7 +98,14 @@ public final class JeiRecipeTime {
                     return Optional.of(new Result(field, Origin.MOD_FIELD));
                 }
             }
-            // 只读取配方对象上的真实数据，不做任何按类别的猜测
+            // 最后一步：配方对象上确实没有时间（Mekanism / AE2 这类），
+            // 运行时找到该类别的机器实体并读它自己的基础耗时；仍然读不到就放弃
+            if (GraphLayoutConfig.prefillMachineBaseTime()) {
+                int machine = JeiMachineTimes.ticksFor(category, categoryUid);
+                if (machine > 0) {
+                    return Optional.of(new Result(machine, Origin.MACHINE_BASE));
+                }
+            }
             return Optional.empty();
         } catch (RuntimeException | LinkageError e) {
             RecipeBalancerMod.LOGGER.debug("[RecipeBalancer] 耗时推断失败：{}",
