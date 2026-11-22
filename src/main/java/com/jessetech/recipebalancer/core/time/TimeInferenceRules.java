@@ -56,7 +56,7 @@ public final class TimeInferenceRules {
      * <p>目前只有 Mekanism：1.21.1 的 {@code MekanismRecipe} 不再有 {@code getTicksRequired()}，
      * 时间定义在机器实体 {@code TileEntityElectricMachine.BASE_TICKS_REQUIRED = 200} 上
      * （见 Mekanism 10.7.19 的 bytecode）。这里只收录确认继承该基类的机器；
-     * 速度升级会改变实际时间，所以 UI 会标成"估算"。
+     * 速度升级会改变实际时间，因此这个值只作参考基准。
      */
     private static final Map<String, Integer> CATEGORY_DEFAULTS = Map.of(
             "mekanism:crushing", 200,

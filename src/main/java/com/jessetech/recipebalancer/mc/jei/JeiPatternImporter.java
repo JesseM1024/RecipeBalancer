@@ -88,10 +88,8 @@ public final class JeiPatternImporter {
             }
             int ticks = inferred.get().ticks();
             JeiRecipeTime.Origin origin = inferred.get().origin();
-            boolean estimated = origin == JeiRecipeTime.Origin.MOD_FIELD
-                    || origin == JeiRecipeTime.Origin.CATEGORY_DEFAULT;
             pattern.setTimeTicks(ticks);
-            pattern.setTimeHint(ticks, categoryUid(category), estimated);
+            pattern.setTimeHint(ticks);
             // 只在用户主动导入时打一行，便于整合包反馈"某模组时间读错了"
             RecipeBalancerMod.LOGGER.info("[RecipeBalancer] 耗时预填：{} -> {}t（{}，类别 {}）",
                     recipe.getClass().getSimpleName(), ticks, origin, categoryUid(category));
@@ -100,7 +98,7 @@ public final class JeiPatternImporter {
         }
     }
 
-    /** 配方类型 uid；拿不到时返回空串（界面会显示"未知类型"）。 */
+    /** 配方类型 uid；拿不到时返回空串（仅用于日志与类别兜底查表）。 */
     private static String categoryUid(IRecipeCategory<?> category) {
         return JeiRecipeTime.categoryUid(category);
     }

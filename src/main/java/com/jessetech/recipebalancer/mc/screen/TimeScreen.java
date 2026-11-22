@@ -32,15 +32,15 @@ public final class TimeScreen extends Screen implements JeiPanelScreen {
     private int panelY = 40;
     private static final int PANEL_W = 236;
     private static final int PANEL_H = 132;
-    /** 多出两行参考耗时说明后的高度。 */
-    private static final int PANEL_H_WITH_HINT = 158;
+    /** 多出一行参考基准耗时后的高度。 */
+    private static final int PANEL_H_WITH_HINT = 140;
 
     public TimeScreen(Screen parent, double ticks, DoubleConsumer callback) {
         this(parent, ticks, null, callback);
     }
 
     /**
-     * @param timeHint JEI 导入时记录的源配方耗时；仅用于显示，不改变输入框初值
+     * @param timeHint JEI 导入时记录的参考基准耗时；仅用于显示，不改变输入框初值
      */
     public TimeScreen(Screen parent, double ticks, RecipePattern.TimeHint timeHint,
                       DoubleConsumer callback) {
@@ -137,17 +137,10 @@ public final class TimeScreen extends Screen implements JeiPanelScreen {
 
         int statusY = panelY + 84;
         if (timeHint != null) {
-            // 两行说明：数值 + 来源，超宽按像素截断，避免溢出面板
-            graphics.drawString(font, Lang.t("参考耗时：%s",
+            graphics.drawString(font, Lang.t("参考基准耗时：%s",
                             TimeExpression.formatTicks(timeHint.ticks())),
                     panelX + 8, panelY + 84, AeStyle.MUTED, false);
-            String source = timeHint.source().isBlank() ? Lang.t("未知类型") : timeHint.source();
-            String origin = timeHint.estimated()
-                    ? Lang.t("按 %s 类别的基础耗时估算，可自行修改", source)
-                    : Lang.t("来自 JEI 原配方 %s，可自行修改", source);
-            graphics.drawString(font, font.plainSubstrByWidth(origin, PANEL_W - 16),
-                    panelX + 8, panelY + 96, AeStyle.MUTED, false);
-            statusY = panelY + 112;
+            statusY = panelY + 96;
         }
 
         if (!status.isEmpty()) {

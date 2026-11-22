@@ -82,10 +82,9 @@ class RecipePatternTest {
         RecipePattern pattern = new RecipePattern();
         pattern.setEquipmentKey("x");
         pattern.putOutput(0, "ingot", 1.0);
-        pattern.setTimeHint(200, "minecraft:smelting");
+        pattern.setTimeHint(200);
 
         assertEquals(200.0, pattern.timeHint().ticks(), 1e-12);
-        assertEquals("minecraft:smelting", pattern.timeHint().source());
         // 参考值不进 core 配方：toRecipe 仍按手动设置的 1t 换算成 0.05 秒
         assertEquals(0.05, pattern.toRecipe().time(), 1e-12);
 
