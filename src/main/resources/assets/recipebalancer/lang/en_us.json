@@ -142,8 +142,6 @@
   "配方耗时": "Recipe Time",
   "耗时表达式": "Time expression",
   "配方耗时（支持 + - * / ^ 和括号）": "Recipe time (+ - * / ^ and parentheses)",
-  "已应用系数 ×%s": "Factor applied: time × %s",
-  "已应用系数 ÷%s": "Factor applied: time ÷ %s",
   "物品 / 注册名": "Item / ID",
   "物品注册名": "Item ID",
   "物品注册名不能为空": "Item ID cannot be empty",

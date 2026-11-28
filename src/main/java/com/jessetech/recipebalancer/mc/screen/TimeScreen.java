@@ -26,8 +26,6 @@ public final class TimeScreen extends Screen implements JeiPanelScreen {
     private TimeUnit unit;
     private EditBox expressionBox;
     private Button unitButton;
-    private String status = "";
-    private boolean statusIsError;
 
     private int panelX = 40;
     private int panelY = 40;
@@ -40,7 +38,8 @@ public final class TimeScreen extends Screen implements JeiPanelScreen {
     private static final int FACTOR_COUNT = FactorPreferences.COUNT;
     private static final int FACTOR_COL_W = 108;
     private static final int FACTOR_COL_GAP = 2;
-    private static final int FACTOR_ROW_H = 28;
+    /** 输入框 18 + 浮点值 9 + 间距 4。 */
+    private static final int FACTOR_ROW_H = 31;
     private final EditBox[] factorBoxes = new EditBox[FACTOR_COUNT];
 
     public TimeScreen(Screen parent, double ticks, DoubleConsumer callback) {
@@ -127,19 +126,23 @@ public final class TimeScreen extends Screen implements JeiPanelScreen {
     }
 
     private void confirm() {
+        double result;
         try {
-            double result = TimeExpression.toTicks(expressionBox.getValue(), unit);
-            UnitPreferences.setTimeUnit(unit);
-            callback.accept(result);
-            minecraft.setScreen(parent);
+            result = TimeExpression.toTicks(expressionBox.getValue(), unit);
         } catch (RuntimeException e) {
-            // 内层消息也走语言文件（core 抛出的固定文案同时也是语言键）
-            setStatus(Lang.t("表达式无效: %s", Lang.t(String.valueOf(e.getMessage()))), true);
+            // 不另设提示：主预览行本身就是 "表达式无效: …"
+            return;
         }
+        UnitPreferences.setTimeUnit(unit);
+        callback.accept(result);
+        minecraft.setScreen(parent);
     }
 
     /**
      * 应用快捷系数：左键乘、右键除。
+     *
+     * <p>非法表达式或结果不可用时静默跳过：系数框下方已经实时显示 "= ?"，
+     * 不再额外弹提示。
      *
      * @param multiply true 时把当前耗时乘以系数，false 时除以系数
      */
@@ -149,45 +152,21 @@ public final class TimeScreen extends Screen implements JeiPanelScreen {
         double current;
         try {
             factor = TimeExpression.evaluate(raw);
+            current = TimeExpression.toTicks(expressionBox.getValue(), unit);
         } catch (RuntimeException e) {
-            setStatus(Lang.t("系数无效"), true);
             return;
         }
         if (!Double.isFinite(factor) || factor <= 0) {
-            setStatus(Lang.t("系数无效"), true);
-            return;
-        }
-        try {
-            current = TimeExpression.toTicks(expressionBox.getValue(), unit);
-        } catch (RuntimeException e) {
-            setStatus(Lang.t("表达式无效: %s", Lang.t(String.valueOf(e.getMessage()))), true);
             return;
         }
         double result = multiply ? current * factor : current / factor;
         if (!Double.isFinite(result) || result <= 0) {
-            setStatus(Lang.t("耗时超出范围"), true);
             return;
         }
         ticks = result;
         expressionBox.setValue(TimeExpression.formatEditableNumber(unit.fromTicks(result)));
         FactorPreferences.put(index, raw);
         FactorPreferences.save();
-        setStatus(Lang.t(multiply ? "已应用系数 ×%s" : "已应用系数 ÷%s",
-                TimeExpression.formatNumber(factor)), false);
-    }
-
-    private int focusedFactorIndex() {
-        for (int i = 0; i < FACTOR_COUNT; i++) {
-            if (factorBoxes[i] != null && factorBoxes[i].isFocused()) {
-                return i;
-            }
-        }
-        return -1;
-    }
-
-    private void setStatus(String text, boolean error) {
-        status = text;
-        statusIsError = error;
     }
 
     private void cancel() {
@@ -223,22 +202,29 @@ public final class TimeScreen extends Screen implements JeiPanelScreen {
                     panelX + 8, panelY + 68, AeStyle.MUTED, false);
         }
 
-        if (!status.isEmpty()) {
-            graphics.drawString(font, status, panelX + 8, factorTop + 52,
-                    statusIsError ? AeStyle.WARN : AeStyle.MUTED, false);
+        // 系数框下方实时显示解析后的浮点值，非法表达式显示 "= ?"
+        for (int i = 0; i < FACTOR_COUNT; i++) {
+            EditBox box = factorBoxes[i];
+            if (box == null) {
+                continue;
+            }
+            String value;
+            try {
+                double parsed = TimeExpression.evaluate(box.getValue().trim());
+                value = Double.isFinite(parsed) && parsed > 0
+                        ? "= " + TimeExpression.formatNumber(parsed)
+                        : "= ?";
+            } catch (RuntimeException e) {
+                value = "= ?";
+            }
+            graphics.drawString(font, value, box.getX(), box.getY() + 20, AeStyle.MUTED, false);
         }
     }
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         if (keyCode == 257 || keyCode == 335) {
-            // 焦点在系数框里时回车＝应用系数（乘），否则才是确认整个对话框
-            int focusedFactor = focusedFactorIndex();
-            if (focusedFactor >= 0) {
-                applyFactor(focusedFactor, true);
-            } else {
-                confirm();
-            }
+            confirm();
             return true;
         }
         if (keyCode == 256) {
