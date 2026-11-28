@@ -27,13 +27,21 @@ public final class TimeScreen extends Screen implements JeiPanelScreen {
     private EditBox expressionBox;
     private Button unitButton;
     private String status = "";
+    private boolean statusIsError;
 
     private int panelX = 40;
     private int panelY = 40;
+    private int factorTop = 72;
     private static final int PANEL_W = 236;
-    private static final int PANEL_H = 132;
+    private static final int PANEL_H = 164;
     /** 多出一行参考基准耗时后的高度。 */
-    private static final int PANEL_H_WITH_HINT = 140;
+    private static final int PANEL_H_WITH_HINT = 176;
+    /** 快捷系数：两列两行，整个游戏实例共用。 */
+    private static final int FACTOR_COUNT = FactorPreferences.COUNT;
+    private static final int FACTOR_COL_W = 108;
+    private static final int FACTOR_COL_GAP = 2;
+    private static final int FACTOR_ROW_H = 28;
+    private final EditBox[] factorBoxes = new EditBox[FACTOR_COUNT];
 
     public TimeScreen(Screen parent, double ticks, DoubleConsumer callback) {
         this(parent, ticks, null, callback);
@@ -59,6 +67,13 @@ public final class TimeScreen extends Screen implements JeiPanelScreen {
         panelX = (width - PANEL_W) / 2;
         panelY = (height - panelHeight) / 2;
 
+        // 窗口 resize 会重建控件，先把当前输入收回偏好里，避免回到上次保存值
+        for (int i = 0; i < FACTOR_COUNT; i++) {
+            if (factorBoxes[i] != null) {
+                FactorPreferences.put(i, factorBoxes[i].getValue());
+            }
+        }
+
         expressionBox = new EditBox(font, panelX + 8, panelY + 28, 150, 18,
                 Lang.c("耗时表达式"));
         expressionBox.setMaxLength(128);
@@ -67,6 +82,23 @@ public final class TimeScreen extends Screen implements JeiPanelScreen {
 
         unitButton = addRenderableWidget(Button.builder(Component.literal(Lang.t(unit.zhLabel())), b -> cycleUnit())
                 .bounds(panelX + 164, panelY + 27, 64, 20).build());
+
+        factorTop = panelY + (timeHint == null ? 72 : 84);
+        for (int i = 0; i < FACTOR_COUNT; i++) {
+            int column = i % 2;
+            int row = i / 2;
+            int x = panelX + 8 + column * (FACTOR_COL_W + FACTOR_COL_GAP);
+            int y = factorTop + row * FACTOR_ROW_H;
+            EditBox box = new EditBox(font, x, y, 58, 18, Lang.c("系数"));
+            box.setMaxLength(64);
+            box.setValue(FactorPreferences.get(i));
+            factorBoxes[i] = addRenderableWidget(box);
+            int index = i;
+            addRenderableWidget(Button.builder(Component.literal("×"), b -> applyFactor(index, true))
+                    .bounds(x + 62, y - 1, 20, 20).build());
+            addRenderableWidget(Button.builder(Component.literal("÷"), b -> applyFactor(index, false))
+                    .bounds(x + 84, y - 1, 20, 20).build());
+        }
 
         // 取消左、确定右
         addRenderableWidget(Button.builder(Lang.c("取消"), b -> cancel())
@@ -102,8 +134,60 @@ public final class TimeScreen extends Screen implements JeiPanelScreen {
             minecraft.setScreen(parent);
         } catch (RuntimeException e) {
             // 内层消息也走语言文件（core 抛出的固定文案同时也是语言键）
-            status = Lang.t("表达式无效: %s", Lang.t(String.valueOf(e.getMessage())));
+            setStatus(Lang.t("表达式无效: %s", Lang.t(String.valueOf(e.getMessage()))), true);
         }
+    }
+
+    /**
+     * 应用快捷系数：左键乘、右键除。
+     *
+     * @param multiply true 时把当前耗时乘以系数，false 时除以系数
+     */
+    private void applyFactor(int index, boolean multiply) {
+        String raw = factorBoxes[index] == null ? "" : factorBoxes[index].getValue().trim();
+        double factor;
+        double current;
+        try {
+            factor = TimeExpression.evaluate(raw);
+        } catch (RuntimeException e) {
+            setStatus(Lang.t("系数无效"), true);
+            return;
+        }
+        if (!Double.isFinite(factor) || factor <= 0) {
+            setStatus(Lang.t("系数无效"), true);
+            return;
+        }
+        try {
+            current = TimeExpression.toTicks(expressionBox.getValue(), unit);
+        } catch (RuntimeException e) {
+            setStatus(Lang.t("表达式无效: %s", Lang.t(String.valueOf(e.getMessage()))), true);
+            return;
+        }
+        double result = multiply ? current * factor : current / factor;
+        if (!Double.isFinite(result) || result <= 0) {
+            setStatus(Lang.t("耗时超出范围"), true);
+            return;
+        }
+        ticks = result;
+        expressionBox.setValue(TimeExpression.formatEditableNumber(unit.fromTicks(result)));
+        FactorPreferences.put(index, raw);
+        FactorPreferences.save();
+        setStatus(Lang.t(multiply ? "已应用系数 ×%s" : "已应用系数 ÷%s",
+                TimeExpression.formatNumber(factor)), false);
+    }
+
+    private int focusedFactorIndex() {
+        for (int i = 0; i < FACTOR_COUNT; i++) {
+            if (factorBoxes[i] != null && factorBoxes[i].isFocused()) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private void setStatus(String text, boolean error) {
+        status = text;
+        statusIsError = error;
     }
 
     private void cancel() {
@@ -132,26 +216,29 @@ public final class TimeScreen extends Screen implements JeiPanelScreen {
             preview = Lang.t("表达式无效: %s", Lang.t(String.valueOf(e.getMessage())));
         }
         graphics.drawString(font, preview, panelX + 8, panelY + 52, AeStyle.MUTED, false);
-        graphics.drawString(font, Lang.t("各配方可独立选单位；内部统一按 t 保存"),
-                panelX + 8, panelY + 68, AeStyle.MUTED, false);
 
-        int statusY = panelY + 84;
         if (timeHint != null) {
             graphics.drawString(font, Lang.t("参考基准耗时：%s",
                             TimeExpression.formatTicks(timeHint.ticks())),
-                    panelX + 8, panelY + 84, AeStyle.MUTED, false);
-            statusY = panelY + 96;
+                    panelX + 8, panelY + 68, AeStyle.MUTED, false);
         }
 
         if (!status.isEmpty()) {
-            graphics.drawString(font, status, panelX + 8, statusY, AeStyle.WARN, false);
+            graphics.drawString(font, status, panelX + 8, factorTop + 52,
+                    statusIsError ? AeStyle.WARN : AeStyle.MUTED, false);
         }
     }
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         if (keyCode == 257 || keyCode == 335) {
-            confirm();
+            // 焦点在系数框里时回车＝应用系数（乘），否则才是确认整个对话框
+            int focusedFactor = focusedFactorIndex();
+            if (focusedFactor >= 0) {
+                applyFactor(focusedFactor, true);
+            } else {
+                confirm();
+            }
             return true;
         }
         if (keyCode == 256) {
@@ -159,6 +246,18 @@ public final class TimeScreen extends Screen implements JeiPanelScreen {
             return true;
         }
         return super.keyPressed(keyCode, scanCode, modifiers);
+    }
+
+    /** 关界面（含确定/取消）时把四个槽位的原始表达式写回实例配置。 */
+    @Override
+    public void removed() {
+        super.removed();
+        for (int i = 0; i < FACTOR_COUNT; i++) {
+            if (factorBoxes[i] != null) {
+                FactorPreferences.put(i, factorBoxes[i].getValue());
+            }
+        }
+        FactorPreferences.save();
     }
 
     @Override
